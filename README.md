@@ -17,7 +17,7 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 | **Findings** | 응답·JS에서 탐지한 시크릿/민감정보(AWS·Google·GitHub·Slack 키, JWT, private key, S3 버킷, 이메일, 내부 IP 등), 심각도 정렬 |
 | **JS Assets** | 수집한 JS를 SHA-256 해시로 dedup 저장, JS 내 엔드포인트·시크릿 추출. 출처 JS 파일 기록 |
 | **Tech** | 헤더/쿠키/JS 라이브러리 기반 호스트별 기술 식별 + 보안 헤더 누락 체크리스트 |
-| **Settings** | 스코프 모드, JS 저장 폴더, 라이브 캡처/시크릿 스캔 토글, Ingest Site Map, Clear, Export JSON/HTML |
+| **Settings** | 스코프 모드, JS 저장 폴더, 라이브 캡처/시크릿 스캔 토글, Ingest Site Map, Clear, Export JSON/HTML, **State Export/Import(백업·복원)** |
 
 ## 사용법
 
@@ -43,6 +43,12 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 1.2.0
+- **상태(State) Export/Import 추가**: 수집한 전체 데이터(엔드포인트·파라미터·Findings·JS·기술·카운터)를 재적재 가능한 JSON 백업 파일로 저장/복원. 프로젝트 이동·백업 용도.
+  - 옵션 **원본 request/response 포함**(기본 on): 포함 시 임포트 후에도 뷰어·본문 검색 동작(파일 커짐), 해제 시 분석 데이터만 저장.
+  - Import 시 **교체(replace)/병합(merge)** 선택. 병합은 dedup 키로 중복 처리.
+  - 리포트용 `Export JSON/HTML`과 별개 기능(상태 파일 형식: `reconhub-state`).
 
 ### 1.1.1
 - **본문 한글 검색 수정**: 검색용 본문을 Content-Type charset(기본 UTF-8, EUC-KR 등 지원)으로 디코딩하도록 변경. 기존에는 바이트 매핑으로 한글이 깨져 영어만 검색되던 문제 해결.

@@ -41,6 +41,11 @@ public final class Finding {
         this.timesSeen++;
     }
 
+    /** Restore setter (used by state import). */
+    public void setTimesSeen(int n) {
+        this.timesSeen = n;
+    }
+
     private static String mask(String s) {
         if (s == null) {
             return "";

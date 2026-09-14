@@ -6,6 +6,7 @@ import com.reconhub.core.Settings;
 import com.reconhub.core.TrafficIngestor;
 import com.reconhub.export.HtmlReporter;
 import com.reconhub.export.JsonExporter;
+import com.reconhub.export.StateSerializer;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -37,6 +38,8 @@ public final class SettingsPanel extends JPanel {
     private final JLabel status = new JLabel(" ");
     private final JTextField jsDir = new JTextField(36);
     private final JButton ingestButton = new JButton("Ingest Site Map");
+    private final JCheckBox includeMessages =
+            new JCheckBox("Include raw request/response (larger file, keeps viewer/body-search)", true);
 
     public SettingsPanel(MontoyaApi api, DataStore store, Settings settings,
                          TrafficIngestor ingestor) {
@@ -71,6 +74,12 @@ public final class SettingsPanel extends JPanel {
 
         add(section("Actions"));
         add(actionsRow());
+        add(gap());
+
+        add(section("Backup / State"));
+        includeMessages.setAlignmentX(Component.LEFT_ALIGNMENT);
+        add(includeMessages);
+        add(stateRow());
         add(gap());
 
         status.setForeground(new java.awt.Color(0x9aa4b2));
@@ -122,6 +131,19 @@ public final class SettingsPanel extends JPanel {
         p.add(Box.createHorizontalStrut(16));
         p.add(json);
         p.add(html);
+        return p;
+    }
+
+    private JPanel stateRow() {
+        JPanel p = leftFlow();
+        JButton exp = new JButton("Export State…");
+        exp.setToolTipText("Save all collected data to a re-importable backup file");
+        exp.addActionListener(e -> exportState());
+        JButton imp = new JButton("Import State…");
+        imp.setToolTipText("Load data from a previously exported backup file");
+        imp.addActionListener(e -> importState());
+        p.add(exp);
+        p.add(imp);
         return p;
     }
 
@@ -185,6 +207,56 @@ public final class SettingsPanel extends JPanel {
         runExport(() -> HtmlReporter.export(store, f.toPath()), f);
     }
 
+    private void exportState() {
+        File f = chooseSaveFile("reconhub-state.json");
+        if (f == null) {
+            return;
+        }
+        boolean withMsgs = includeMessages.isSelected();
+        runExport(() -> StateSerializer.export(store, f.toPath(), withMsgs), f);
+    }
+
+    private void importState() {
+        File f = chooseOpenFile();
+        if (f == null) {
+            return;
+        }
+        int choice = JOptionPane.showConfirmDialog(this,
+                "Clear current data before importing?\n"
+                        + "Yes = replace, No = merge into existing data.",
+                "Import State", JOptionPane.YES_NO_CANCEL_OPTION);
+        if (choice == JOptionPane.CANCEL_OPTION || choice == JOptionPane.CLOSED_OPTION) {
+            return;
+        }
+        boolean clearFirst = choice == JOptionPane.YES_OPTION;
+        setStatus("Importing…");
+        new javax.swing.SwingWorker<String, Void>() {
+            private Exception error;
+            @Override protected String doInBackground() {
+                try {
+                    return StateSerializer.importInto(store, f.toPath(), clearFirst);
+                } catch (Exception e) {
+                    error = e;
+                    return null;
+                }
+            }
+            @Override protected void done() {
+                if (error != null) {
+                    setStatus("Import failed: " + error.getMessage());
+                    api.logging().logToError("ReconHub import failed: " + error);
+                } else {
+                    String summary = null;
+                    try {
+                        summary = get();
+                    } catch (Exception ignored) {
+                        // fall through
+                    }
+                    setStatus(summary != null ? summary : "Import complete.");
+                }
+            }
+        }.execute();
+    }
+
     private interface ExportTask {
         void run() throws Exception;
     }
@@ -216,6 +288,12 @@ public final class SettingsPanel extends JPanel {
         JFileChooser fc = new JFileChooser();
         fc.setSelectedFile(new File(System.getProperty("user.home"), suggestedName));
         return fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION
+                ? fc.getSelectedFile() : null;
+    }
+
+    private File chooseOpenFile() {
+        JFileChooser fc = new JFileChooser(System.getProperty("user.home"));
+        return fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION
                 ? fc.getSelectedFile() : null;
     }
 

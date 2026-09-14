@@ -51,6 +51,13 @@ public final class ParameterInfo {
         }
     }
 
+    // ---- Restore setters (used by state import) -------------------------
+
+    public void setExampleValue(String v) { this.exampleValue = v == null ? "" : v; }
+    public void setReflected(boolean b) { this.reflected = b; }
+    public void setSeen(int n) { this.seen = n; }
+    public void setMessages(HttpRequestResponse m) { this.messages = m; }
+
     public Location getLocation() { return location; }
     public String getName() { return name; }
     public String getEndpointKey() { return endpointKey; }

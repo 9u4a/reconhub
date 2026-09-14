@@ -31,11 +31,17 @@ public final class Endpoint {
     private volatile HttpRequestResponse messages;   // representative request/response (latest, if any)
 
     public Endpoint(String method, String host, String path, String normalizedUrl) {
+        this(method, host, path, normalizedUrl, System.currentTimeMillis());
+    }
+
+    /** Restore constructor: preserves the original first-seen timestamp on import. */
+    public Endpoint(String method, String host, String path, String normalizedUrl,
+                    long firstSeenEpochMs) {
         this.method = method;
         this.host = host;
         this.path = path;
         this.normalizedUrl = normalizedUrl;
-        this.firstSeenEpochMs = System.currentTimeMillis();
+        this.firstSeenEpochMs = firstSeenEpochMs;
     }
 
     /** Stable dedup key for a (method, normalizedUrl) pair. */
@@ -75,6 +81,19 @@ public final class Endpoint {
             origins.addAll(jsUrls);
         }
     }
+
+    // ---- Restore setters (used by state import) -------------------------
+
+    public void addSources(Set<String> s) {
+        if (s != null) {
+            sources.addAll(s);
+        }
+    }
+
+    public void setLastStatusCode(int code) { this.lastStatusCode = code; }
+    public void setContentType(String ct) { this.contentType = ct == null ? "" : ct; }
+    public void setObservations(int n) { this.observations = n; }
+    public void setMessages(HttpRequestResponse m) { this.messages = m; }
 
     public String getMethod() { return method; }
     public String getHost() { return host; }

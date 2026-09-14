@@ -129,6 +129,31 @@ public final class DataStore {
         }
     }
 
+    // ---- Restore (state import) -----------------------------------------
+
+    public void restoreEndpoint(Endpoint e) { endpoints.put(e.key(), e); }
+    public void restoreParameter(ParameterInfo p) { parameters.put(p.key(), p); }
+    public void restoreFinding(Finding f) { findings.put(f.key(), f); }
+    public void restoreJsAsset(JsAsset a) { jsAssets.put(a.key(), a); }
+    public void restoreTech(TechInfo t) { techByHost.put(t.key(), t); }
+
+    public void restoreCounters(int requests, Map<Integer, Integer> status,
+                                Map<String, Integer> hosts, Map<String, Integer> ctypes) {
+        requestsProcessed.set(requests);
+        putCounts(statusCodeCounts, status);
+        putCounts(hostCounts, hosts);
+        putCounts(contentTypeCounts, ctypes);
+    }
+
+    private static <K> void putCounts(Map<K, AtomicInteger> target, Map<K, Integer> src) {
+        if (src == null) {
+            return;
+        }
+        for (Map.Entry<K, Integer> e : src.entrySet()) {
+            target.computeIfAbsent(e.getKey(), k -> new AtomicInteger()).set(e.getValue());
+        }
+    }
+
     // ---- Snapshots (for UI / export) ------------------------------------
 
     public List<Endpoint> snapshotEndpoints() {
