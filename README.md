@@ -12,7 +12,6 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 | 탭 | 설명 |
 |----|------|
 | **Dashboard** | 요청·엔드포인트·파라미터·Findings·JS·호스트 카운트, 심각도별 요약, 상위 호스트/상태코드/콘텐츠타입 막대 차트 |
-| **Site Map** | Burp 사이트맵 방식 3분할(좌: host→경로 트리 / 우상: 선택 노드 하위 항목 테이블 Method·Path·Params·Status·Length·MIME / 우하: 원본 Request/Response) |
 | **Endpoints** | method + 정규화 URL로 dedup한 엔드포인트 인벤토리. 행 선택 시 하단에 Request/Response 표시, 우클릭 → **Send to Repeater** |
 | **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie) — 경로·유형·예시값·반사 여부·Seen. 행 선택 시 매칭 Request/Response 표시 |
 | **Findings** | 시크릿/민감정보(AWS·Google·GitHub·Slack 키, JWT, private key, S3, 이메일, 내부 IP) + 흥미로운 응답(스택트레이스·SQL 에러·디버그·디렉터리 리스팅) + 보안 미스컨피그(CORS·쿠키 플래그) + 권한 값(role/admin/permissions 등) + HTML/JS 주석, 심각도 정렬. 행 우클릭으로 Repeater/Intruder 전송 |
@@ -45,17 +44,10 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
 
-### 1.5.3
-- **Site Map 트리를 Burp 사이트맵 형태로**: host 노드를 `host:port`로 표기하고 scheme별 **자물쇠 아이콘**(https 초록 / http 빨강 / 미상 회색) 표시, 폴더·파일 항목에 트리 아이콘 적용, 루트 경로를 `/` 파일 노드로 표시. 과한 큰 볼드 대신 콤팩트한 간격으로 정리.
-
-### 1.5.2
-- **Site Map 트리 정리**: 좌측 host(도메인) 노드를 굵게·크게·행 간격을 넓혀 가독성 향상. JS에서 발견한 절대 URL 링크가 host 노드 안쪽에 도메인을 다시 폴더로 만들어 같은 도메인이 중복돼 보이던 문제 수정(host/path 정규화로 같은 도메인 항목을 하나의 host 아래로 통합).
-
-### 1.5.1
-- **Site Map 가시성 개선**: Burp 사이트맵과 동일한 3분할 레이아웃으로 재구성. 좌측 host→경로 트리에서 노드 선택 시, 우상단 테이블에 해당 브랜치의 항목(Method·Path·Params·Status·Length·MIME)이 정렬 가능한 목록으로 표시되고, 행 선택 시 우하단에 원본 Request/Response 표시. (기존 트리 리프에 요청이 흩어져 읽기 어렵던 문제 해소.)
+### 1.6.0
+- **Site Map 탭 제거**: 트리 UI 가독성이 Burp 기본 사이트맵에 못 미쳐 기능을 롤백. 엔드포인트 열람은 **Endpoints** 탭(+행 선택 시 원문 Request/Response)으로 대체. 1.5.x에서 추가·조정하던 Site Map 관련 변경 일체 제거.
 
 ### 1.5.0
-- **Site Map 트리 탭 추가**: 수집 엔드포인트를 host → 경로 계층 트리로 시각화, 노드 선택 시 원본 Request/Response.
 - **Findings 상세**: 행 선택 시 하단에 필드 요약 + 원본 Request/Response 뷰어(시크릿이 어디서 나왔는지 확인), 우클릭 Repeater/Intruder 전송. 백업(State)에도 finding 원문 포함.
 - **JS Assets 상세**: URL·해시·크기·저장경로 + 저장 파일 열기 + 해당 JS에서 나온 엔드포인트/Findings 목록.
 - **Tech 가시성 개선**: 선택 호스트의 기술·누락 보안헤더를 칩 목록으로 세로 표시(콤마 나열 해소).
