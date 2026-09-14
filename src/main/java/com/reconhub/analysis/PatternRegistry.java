@@ -57,6 +57,7 @@ public final class PatternRegistry {
 
     private final List<SecretRule> secretRules = new ArrayList<>();
     private final List<SecretRule> signatureRules = new ArrayList<>();   // interesting-response signatures
+    private final List<SecretRule> authzRules = new ArrayList<>();       // authorization/privilege values
     private final List<JsLinkRule> jsLinkRules = new ArrayList<>();
     private final List<TechRule> techRules = new ArrayList<>();
     private final List<String> securityHeaders = new ArrayList<>();
@@ -64,6 +65,7 @@ public final class PatternRegistry {
 
     public List<SecretRule> secretRules() { return secretRules; }
     public List<SecretRule> signatureRules() { return signatureRules; }
+    public List<SecretRule> authzRules() { return authzRules; }
     public List<JsLinkRule> jsLinkRules() { return jsLinkRules; }
     public List<TechRule> techRules() { return techRules; }
     public List<String> securityHeaders() { return securityHeaders; }
@@ -75,6 +77,7 @@ public final class PatternRegistry {
         Gson gson = new Gson();
         r.loadSecrets(gson);
         r.loadSignatures(gson);
+        r.loadAuthz(gson);
         r.loadJsLinks(gson);
         r.loadTech(gson);
         return r;
@@ -126,6 +129,21 @@ public final class PatternRegistry {
                 signatureRules.add(new SecretRule(raw.name, sev, Pattern.compile(raw.regex)));
             } catch (PatternSyntaxException e) {
                 loadErrors.add("interesting[" + raw.name + "]: " + e.getMessage());
+            }
+        }
+    }
+
+    private void loadAuthz(Gson gson) {
+        SecretsFile f = read(gson, "/patterns/authz.json", SecretsFile.class);
+        if (f == null || f.patterns == null) {
+            return;
+        }
+        for (SecretsFile.Raw raw : f.patterns) {
+            try {
+                Finding.Severity sev = parseSeverity(raw.severity);
+                authzRules.add(new SecretRule(raw.name, sev, Pattern.compile(raw.regex)));
+            } catch (PatternSyntaxException e) {
+                loadErrors.add("authz[" + raw.name + "]: " + e.getMessage());
             }
         }
     }

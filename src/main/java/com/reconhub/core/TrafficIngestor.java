@@ -39,6 +39,7 @@ public final class TrafficIngestor implements HttpHandler {
     private final ParameterExtractor parameterExtractor;
     private final SecretScanner secretScanner;
     private final SecretScanner signatureScanner;
+    private final SecretScanner authzScanner;
     private final JsAnalyzer jsAnalyzer;
     private final TechFingerprinter techFingerprinter;
     private final MisconfigInspector misconfigInspector;
@@ -61,6 +62,7 @@ public final class TrafficIngestor implements HttpHandler {
         this.parameterExtractor = new ParameterExtractor(store);
         this.secretScanner = new SecretScanner(store, patterns.secretRules(), true);
         this.signatureScanner = new SecretScanner(store, patterns.signatureRules(), false);
+        this.authzScanner = new SecretScanner(store, patterns.authzRules(), false);
         this.commentExtractor = new CommentExtractor(store);
         this.jsAnalyzer = new JsAnalyzer(store, patterns, secretScanner, commentExtractor, settings);
         this.techFingerprinter = new TechFingerprinter(store, patterns);
@@ -193,6 +195,7 @@ public final class TrafficIngestor implements HttpHandler {
             }
             if (settings.isRunPassiveChecks()) {
                 signatureScanner.scan(responseBody, url);
+                authzScanner.scan(responseBody, url);
                 misconfigInspector.inspect(ep.host(), request, response, url);
                 if (isHtml(contentType)) {
                     commentExtractor.extractHtml(responseBody, url);

@@ -1,0 +1,10 @@
+{
+  "comment": "Authorization / privilege related values (roles, admin flags, permissions). Scanned against response bodies (JS/JSON/HTML). Same shape as secrets.json; reported as non-sensitive findings (evidence shown).",
+  "patterns": [
+    { "name": "Privileged role value", "severity": "MEDIUM", "regex": "(?i)[\"']?(?:role|user_?role|account_?type|acct_?type|user_?type|group|grade|tier|level|authority)[\"']?\\s*[:=]\\s*[\"']?(?:admin|administrator|superuser|super_?admin|root|owner|manager|moderator|staff|operator|sysadmin|developer)\\b" },
+    { "name": "Admin/privilege flag enabled", "severity": "MEDIUM", "regex": "(?i)[\"']?(?:is_?admin|is_?superuser|is_?staff|is_?root|is_?owner|has_?admin|can_?admin|admin|superuser|superadmin)[\"']?\\s*[:=]\\s*(?:true|1|\"true\"|'true'|yes)\\b" },
+    { "name": "Roles/permissions field", "severity": "LOW", "regex": "(?i)[\"']?(?:roles|permissions?|scopes?|authorities|grants?|privileges?|acl|capabilities|claims)[\"']?\\s*[:=]\\s*[\\[{\"']" },
+    { "name": "Access level field", "severity": "LOW", "regex": "(?i)[\"']?(?:access_?level|auth_?level|user_?level|priv_?level|permission_?level|clearance)[\"']?\\s*[:=]\\s*[\"']?[\\w.-]{1,32}" },
+    { "name": "Role value (generic)", "severity": "LOW", "regex": "(?i)[\"']role[\"']\\s*[:=]\\s*[\"'][a-z_][a-z0-9_.-]{1,40}[\"']" }
+  ]
+}

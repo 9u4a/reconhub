@@ -14,7 +14,7 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 | **Dashboard** | 요청·엔드포인트·파라미터·Findings·JS·호스트 카운트, 심각도별 요약, 상위 호스트/상태코드/콘텐츠타입 막대 차트 |
 | **Endpoints** | method + 정규화 URL로 dedup한 엔드포인트 인벤토리. 행 선택 시 하단에 Request/Response 표시, 우클릭 → **Send to Repeater** |
 | **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie) — 경로·유형·예시값·반사 여부·Seen. 행 선택 시 매칭 Request/Response 표시 |
-| **Findings** | 시크릿/민감정보(AWS·Google·GitHub·Slack 키, JWT, private key, S3, 이메일, 내부 IP) + 흥미로운 응답(스택트레이스·SQL 에러·디버그·디렉터리 리스팅) + 보안 미스컨피그(CORS·쿠키 플래그) + HTML/JS 주석, 심각도 정렬. 행 우클릭으로 Repeater/Intruder 전송 |
+| **Findings** | 시크릿/민감정보(AWS·Google·GitHub·Slack 키, JWT, private key, S3, 이메일, 내부 IP) + 흥미로운 응답(스택트레이스·SQL 에러·디버그·디렉터리 리스팅) + 보안 미스컨피그(CORS·쿠키 플래그) + 권한 값(role/admin/permissions 등) + HTML/JS 주석, 심각도 정렬. 행 우클릭으로 Repeater/Intruder 전송 |
 | **JS Assets** | 수집한 JS를 SHA-256 해시로 dedup 저장, JS 내 엔드포인트·시크릿 추출. 출처 JS 파일 기록 |
 | **Tech** | 헤더/쿠키/JS 라이브러리 기반 호스트별 기술 식별 + 보안 헤더 누락 체크리스트 |
 | **Settings** | 스코프 모드/정규식, 패시브 검사·정적자산 제외·자동 Ingest 토글, JS 저장 폴더, 라이브 캡처/시크릿 스캔, Ingest Site Map, Clear, Export JSON/HTML, State Export/Import(백업·복원) |
@@ -43,6 +43,9 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 1.4.0
+- **권한(Authorization) 값 탐지 추가**: 응답·JS·JSON에서 `role: admin`, `isAdmin: true`, `permissions/scopes/authorities`, `access_level` 등 권한/역할 관련 값을 Findings에 별도 표시(`Run passive checks` 토글). 인가 테스트 단서용.
 
 ### 1.3.0
 - **탐지 강화**: 흥미로운 응답(스택트레이스·SQL 에러·디버그·디렉터리 리스팅) 시그니처, 보안 미스컨피그(CORS 와일드카드/반사 + credentials, 쿠키 HttpOnly/Secure/SameSite 누락), HTML/JS 주석 추출을 Findings에 추가. `Analysis → Run passive checks` 토글.
