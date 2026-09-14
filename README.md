@@ -45,6 +45,9 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
 
+### 1.5.2
+- **Site Map 트리 정리**: 좌측 host(도메인) 노드를 굵게·크게·행 간격을 넓혀 가독성 향상. JS에서 발견한 절대 URL 링크가 host 노드 안쪽에 도메인을 다시 폴더로 만들어 같은 도메인이 중복돼 보이던 문제 수정(host/path 정규화로 같은 도메인 항목을 하나의 host 아래로 통합).
+
 ### 1.5.1
 - **Site Map 가시성 개선**: Burp 사이트맵과 동일한 3분할 레이아웃으로 재구성. 좌측 host→경로 트리에서 노드 선택 시, 우상단 테이블에 해당 브랜치의 항목(Method·Path·Params·Status·Length·MIME)이 정렬 가능한 목록으로 표시되고, 행 선택 시 우하단에 원본 Request/Response 표시. (기존 트리 리프에 요청이 흩어져 읽기 어렵던 문제 해소.)
 

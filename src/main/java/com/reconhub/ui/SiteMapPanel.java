@@ -6,6 +6,7 @@ import burp.api.montoya.http.message.responses.HttpResponse;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Endpoint;
 
+import javax.swing.BorderFactory;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JPanel;
@@ -15,10 +16,14 @@ import javax.swing.ListSelectionModel;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableRowSorter;
 import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.Font;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashSet;
@@ -60,6 +65,8 @@ public final class SiteMapPanel extends JPanel implements Refreshable {
         tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         tree.setRootVisible(false);
         tree.setShowsRootHandles(true);
+        tree.setRowHeight(0);   // let each row size to its renderer (host rows are taller)
+        tree.setCellRenderer(new HostEmphasisRenderer(root, tree.getFont()));
         tree.addTreeSelectionListener(e -> onTreeSelect());
 
         items.setRowSorter(sorter);
@@ -138,10 +145,8 @@ public final class SiteMapPanel extends JPanel implements Refreshable {
 
         root.removeAllChildren();
         for (Endpoint e : store.snapshotEndpoints()) {
-            String host = e.getHost() == null || e.getHost().isBlank()
-                    ? "(relative / JS)" : e.getHost();
-            DefaultMutableTreeNode cur = childDir(root, host);
-            for (String seg : splitPath(e.getPath())) {
+            DefaultMutableTreeNode cur = childDir(root, hostOf(e));
+            for (String seg : splitPath(pathOf(e))) {
                 cur = childDir(cur, seg);
             }
             ((Dir) cur.getUserObject()).endpoints.add(e);
@@ -149,6 +154,62 @@ public final class SiteMapPanel extends JPanel implements Refreshable {
         treeModel.reload();
         restoreExpanded(expanded);
         restoreSelection(selectedPath);
+    }
+
+    /**
+     * Host bucket for the tree. Uses the endpoint's own host; for JS-discovered endpoints whose
+     * "path" is an absolute URL, recovers the host from it so same-domain items don't fragment.
+     */
+    private static String hostOf(Endpoint e) {
+        String h = e.getHost();
+        if (h != null && !h.isBlank()) {
+            return h;
+        }
+        String p = e.getPath();
+        if (p != null && (p.startsWith("http://") || p.startsWith("https://"))) {
+            try {
+                URI u = URI.create(p);
+                if (u.getHost() != null) {
+                    return u.getHost();
+                }
+            } catch (RuntimeException ignored) {
+                // fall through
+            }
+        }
+        return "(relative / JS)";
+    }
+
+    /**
+     * Clean path for tree grouping: strips scheme+authority from absolute-URL "paths" (JS links) and
+     * drops any query/fragment, so an item lands under its host rather than re-nesting the domain.
+     */
+    private static String pathOf(Endpoint e) {
+        String p = e.getPath();
+        if (p == null || p.isBlank()) {
+            return "/";
+        }
+        if (p.startsWith("http://") || p.startsWith("https://")) {
+            try {
+                String path = URI.create(p).getPath();
+                p = (path == null || path.isEmpty()) ? "/" : path;
+            } catch (RuntimeException ignored) {
+                // leave p as-is
+            }
+        } else if (p.startsWith("//")) {
+            int slash = p.indexOf('/', 2);
+            p = slash >= 0 ? p.substring(slash) : "/";
+        }
+        int cut = p.length();
+        int q = p.indexOf('?');
+        if (q >= 0) {
+            cut = q;
+        }
+        int hash = p.indexOf('#');
+        if (hash >= 0 && hash < cut) {
+            cut = hash;
+        }
+        p = p.substring(0, cut);
+        return p.isEmpty() ? "/" : p;
     }
 
     private static List<String> splitPath(String path) {
@@ -278,18 +339,13 @@ public final class SiteMapPanel extends JPanel implements Refreshable {
             Endpoint e = rows.get(r);
             return switch (c) {
                 case 0 -> e.getMethod();
-                case 1 -> displayPath(e);
+                case 1 -> pathOf(e);
                 case 2 -> e.getParamCount();
                 case 3 -> e.getLastStatusCode();
                 case 4 -> bodyLength(e.getMessages());
                 case 5 -> shortMime(e.getContentType());
                 default -> "";
             };
-        }
-
-        private static String displayPath(Endpoint e) {
-            String p = e.getPath();
-            return p == null || p.isBlank() ? "/" : p;
         }
 
         private static int bodyLength(HttpRequestResponse rr) {
@@ -310,6 +366,31 @@ public final class SiteMapPanel extends JPanel implements Refreshable {
                 ct = ct.substring(0, semi);
             }
             return ct.trim();
+        }
+    }
+
+    // ---- Tree cell renderer: host (top-level) rows bold, larger, roomier -
+
+    private static final class HostEmphasisRenderer extends DefaultTreeCellRenderer {
+        private final DefaultMutableTreeNode root;
+        private final Font baseFont;
+        private final Font hostFont;
+
+        HostEmphasisRenderer(DefaultMutableTreeNode root, Font base) {
+            this.root = root;
+            this.baseFont = base != null ? base : new Font(Font.SANS_SERIF, Font.PLAIN, 12);
+            this.hostFont = baseFont.deriveFont(Font.BOLD, baseFont.getSize2D() + 3f);
+        }
+
+        @Override
+        public Component getTreeCellRendererComponent(JTree t, Object value, boolean selected,
+                boolean expanded, boolean leaf, int row, boolean hasFocus) {
+            super.getTreeCellRendererComponent(t, value, selected, expanded, leaf, row, hasFocus);
+            boolean isHost = value instanceof DefaultMutableTreeNode n && n.getParent() == root;
+            setFont(isHost ? hostFont : baseFont);
+            // Extra vertical breathing room, more for host rows.
+            setBorder(BorderFactory.createEmptyBorder(isHost ? 5 : 2, 2, isHost ? 5 : 2, 6));
+            return this;
         }
     }
 }
