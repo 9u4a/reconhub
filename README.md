@@ -12,7 +12,7 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 | 탭 | 설명 |
 |----|------|
 | **Dashboard** | 요청·엔드포인트·파라미터·Findings·JS·호스트 카운트, 심각도별 요약, 상위 호스트/상태코드/콘텐츠타입 막대 차트 |
-| **Site Map** | 수집 엔드포인트를 host → 경로 계층 트리로 시각화, 노드 선택 시 원본 Request/Response |
+| **Site Map** | Burp 사이트맵 방식 3분할(좌: host→경로 트리 / 우상: 선택 노드 하위 항목 테이블 Method·Path·Params·Status·Length·MIME / 우하: 원본 Request/Response) |
 | **Endpoints** | method + 정규화 URL로 dedup한 엔드포인트 인벤토리. 행 선택 시 하단에 Request/Response 표시, 우클릭 → **Send to Repeater** |
 | **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie) — 경로·유형·예시값·반사 여부·Seen. 행 선택 시 매칭 Request/Response 표시 |
 | **Findings** | 시크릿/민감정보(AWS·Google·GitHub·Slack 키, JWT, private key, S3, 이메일, 내부 IP) + 흥미로운 응답(스택트레이스·SQL 에러·디버그·디렉터리 리스팅) + 보안 미스컨피그(CORS·쿠키 플래그) + 권한 값(role/admin/permissions 등) + HTML/JS 주석, 심각도 정렬. 행 우클릭으로 Repeater/Intruder 전송 |
@@ -44,6 +44,9 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 1.5.1
+- **Site Map 가시성 개선**: Burp 사이트맵과 동일한 3분할 레이아웃으로 재구성. 좌측 host→경로 트리에서 노드 선택 시, 우상단 테이블에 해당 브랜치의 항목(Method·Path·Params·Status·Length·MIME)이 정렬 가능한 목록으로 표시되고, 행 선택 시 우하단에 원본 Request/Response 표시. (기존 트리 리프에 요청이 흩어져 읽기 어렵던 문제 해소.)
 
 ### 1.5.0
 - **Site Map 트리 탭 추가**: 수집 엔드포인트를 host → 경로 계층 트리로 시각화, 노드 선택 시 원본 Request/Response.
