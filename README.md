@@ -44,6 +44,10 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
 
+### 1.6.1
+- **HTML 리포트 표 깨짐 수정**: 긴 URL·시크릿·경로 값이 셀 안에서 줄바꿈되도록 처리(`overflow-wrap`/`word-break`)해, 칸이 눌려 글자가 겹쳐 보이던 문제 해결. 본문 폭도 소폭 확대.
+- **정렬 3단계 순환**: 모든 탭에서 컬럼 헤더 클릭 시 **오름차순 → 내림차순 → 기본(정렬 해제)** 순으로 순환.
+
 ### 1.6.0
 - **Site Map 탭 제거**: 트리 UI 가독성이 Burp 기본 사이트맵에 못 미쳐 기능을 롤백. 엔드포인트 열람은 **Endpoints** 탭(+행 선택 시 원문 Request/Response)으로 대체. 1.5.x에서 추가·조정하던 Site Map 관련 변경 일체 제거.
 

@@ -17,6 +17,8 @@ import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.RowFilter;
+import javax.swing.RowSorter;
+import javax.swing.SortOrder;
 import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -58,7 +60,25 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
     private List<T> rows = new ArrayList<>();
     private final Model model = new Model();
     protected final JTable table = new JTable(model);
-    private final TableRowSorter<Model> sorter = new TableRowSorter<>(model);
+    // Sorting cycles ascending -> descending -> unsorted (default order) on repeated header clicks.
+    private final TableRowSorter<Model> sorter = new TableRowSorter<>(model) {
+        @Override
+        public void toggleSortOrder(int column) {
+            List<? extends SortKey> keys = getSortKeys();
+            if (!keys.isEmpty() && keys.get(0).getColumn() == column) {
+                SortOrder cur = keys.get(0).getSortOrder();
+                if (cur == SortOrder.ASCENDING) {
+                    setSortKeys(List.of(new RowSorter.SortKey(column, SortOrder.DESCENDING)));
+                    return;
+                }
+                if (cur == SortOrder.DESCENDING) {
+                    setSortKeys(null);   // third click: back to unsorted
+                    return;
+                }
+            }
+            setSortKeys(List.of(new RowSorter.SortKey(column, SortOrder.ASCENDING)));
+        }
+    };
 
     private final JTextField searchField = new JTextField(30);
     private final JComboBox<String> fieldBox = new JComboBox<>();
