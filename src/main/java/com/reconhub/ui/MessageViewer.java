@@ -14,6 +14,10 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
 import java.awt.BorderLayout;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * A read-only Request | Response viewer built from Burp's own message editors, plus a header line
@@ -62,10 +66,17 @@ public final class MessageViewer extends JPanel {
         responseEditor.setResponse(resp != null ? resp : emptyResponse);
     }
 
+    private static final Pattern CHARSET_PARAM =
+            Pattern.compile("(?i)charset\\s*=\\s*\"?([A-Za-z0-9_\\-:.]+)");
+
     /**
      * Flattens a request/response into searchable text (URL, headers, and both bodies) so a "Body"
      * search can match content that never appears in the table columns. Returns null when there is
      * nothing to search.
+     *
+     * <p>Bodies are decoded from their raw bytes using the {@code Content-Type} charset (default
+     * UTF-8) rather than {@code bodyToString()}, which byte-maps multibyte text and would break
+     * Korean/other non-ASCII search.
      */
     public static String toSearchText(HttpRequestResponse rr) {
         if (rr == null) {
@@ -78,15 +89,36 @@ public final class MessageViewer extends JPanel {
             for (HttpHeader h : req.headers()) {
                 sb.append(h.name()).append(": ").append(h.value()).append('\n');
             }
-            sb.append(req.bodyToString()).append('\n');
+            sb.append(decodeBody(req.body().getBytes(), req.headerValue("Content-Type"))).append('\n');
         }
         HttpResponse resp = rr.response();
         if (resp != null) {
             for (HttpHeader h : resp.headers()) {
                 sb.append(h.name()).append(": ").append(h.value()).append('\n');
             }
-            sb.append(resp.bodyToString());
+            sb.append(decodeBody(resp.body().getBytes(), resp.headerValue("Content-Type")));
         }
         return sb.length() == 0 ? null : sb.toString();
+    }
+
+    private static String decodeBody(byte[] bytes, String contentType) {
+        if (bytes == null || bytes.length == 0) {
+            return "";
+        }
+        return new String(bytes, charsetOf(contentType));
+    }
+
+    private static Charset charsetOf(String contentType) {
+        if (contentType != null) {
+            Matcher m = CHARSET_PARAM.matcher(contentType);
+            if (m.find()) {
+                try {
+                    return Charset.forName(m.group(1).trim());
+                } catch (RuntimeException ignored) {
+                    // unknown/unsupported charset name -> fall through to UTF-8
+                }
+            }
+        }
+        return StandardCharsets.UTF_8;
     }
 }
