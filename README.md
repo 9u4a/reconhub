@@ -44,6 +44,9 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
 
+### 1.6.2
+- **Findings 값 전체 표시·복사**: Value 컬럼을 마스킹 없이 **원본 값 전체**로 표시하고, 셀이 좁아 잘리면 마우스오버 툴팁으로 전체 값을 확인. 우클릭 **Copy cell**로 값 전체 복사 가능(Location/Evidence도 툴팁 제공). ※ JSON/HTML 리포트 export의 값은 기존대로 마스킹 유지.
+
 ### 1.6.1
 - **HTML 리포트 표 깨짐 수정**: 긴 URL·시크릿·경로 값이 셀 안에서 줄바꿈되도록 처리(`overflow-wrap`/`word-break`)해, 칸이 눌려 글자가 겹쳐 보이던 문제 해결. 본문 폭도 소폭 확대.
 - **정렬 3단계 순환**: 모든 탭에서 컬럼 헤더 클릭 시 **오름차순 → 내림차순 → 기본(정렬 해제)** 순으로 순환.

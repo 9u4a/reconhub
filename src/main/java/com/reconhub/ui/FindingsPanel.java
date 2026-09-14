@@ -5,6 +5,7 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Finding;
 
+import javax.swing.JComponent;
 import java.awt.Component;
 import java.awt.Font;
 import java.util.List;
@@ -35,8 +36,9 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         viewer.show(f.getMessages());
         StringBuilder sb = new StringBuilder();
         sb.append('[').append(f.getSeverity().name()).append("] ").append(f.getType());
-        if (!f.getMasked().isEmpty()) {
-            sb.append("  —  ").append(f.getMasked());
+        String value = fullValue(f);
+        if (!value.isEmpty()) {
+            sb.append("  —  ").append(value);
         }
         sb.append("   |   ").append(f.getLocationUrl())
                 .append("   |   seen ").append(f.getTimesSeen());
@@ -67,6 +69,21 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         }
         // Emphasize the Severity column in bold.
         comp.setFont(comp.getFont().deriveFont(viewColumn == 0 ? Font.BOLD : Font.PLAIN));
+        // Hover tooltip carries the full, untruncated text so a narrow column hides nothing.
+        if (comp instanceof JComponent jc) {
+            String tip = switch (viewColumn) {
+                case 2 -> fullValue(f);
+                case 3 -> f.getLocationUrl();
+                case 4 -> f.getEvidence();
+                default -> null;
+            };
+            jc.setToolTipText(tip == null || tip.isBlank() ? null : tip);
+        }
+    }
+
+    /** Full (unmasked) matched value for display/copy; empty for non-secret findings. */
+    private static String fullValue(Finding f) {
+        return f.isSensitive() && f.getRawMatch() != null ? f.getRawMatch() : "";
     }
 
     @Override protected List<Finding> supplyRows() { return store.snapshotFindings(); }
@@ -74,14 +91,14 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     @Override protected String[] columns() { return COLS; }
 
     @Override protected int[] columnWidths() {
-        return new int[]{80, 170, 200, 280, 340, 50};
+        return new int[]{80, 170, 320, 260, 300, 50};
     }
 
     @Override protected Object valueAt(Finding f, int c) {
         return switch (c) {
             case 0 -> f.getSeverity().name();
             case 1 -> f.getType();
-            case 2 -> f.getMasked();
+            case 2 -> fullValue(f);
             case 3 -> f.getLocationUrl();
             case 4 -> f.getEvidence();
             case 5 -> f.getTimesSeen();
