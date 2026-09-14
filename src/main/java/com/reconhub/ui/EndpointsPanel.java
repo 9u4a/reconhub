@@ -99,6 +99,13 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
         }
     }
 
+    @Override protected boolean supportsBodySearch() { return true; }
+
+    @Override
+    protected String searchableBody(Endpoint e) {
+        return e == null ? null : MessageViewer.toSearchText(e.getMessages());
+    }
+
     @Override protected List<Endpoint> supplyRows() { return store.snapshotEndpoints(); }
 
     @Override protected String[] columns() { return COLS; }

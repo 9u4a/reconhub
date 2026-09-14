@@ -1,6 +1,7 @@
 package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
@@ -59,5 +60,33 @@ public final class MessageViewer extends JPanel {
         HttpResponse resp = rr != null ? rr.response() : null;
         requestEditor.setRequest(req != null ? req : emptyRequest);
         responseEditor.setResponse(resp != null ? resp : emptyResponse);
+    }
+
+    /**
+     * Flattens a request/response into searchable text (URL, headers, and both bodies) so a "Body"
+     * search can match content that never appears in the table columns. Returns null when there is
+     * nothing to search.
+     */
+    public static String toSearchText(HttpRequestResponse rr) {
+        if (rr == null) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder();
+        HttpRequest req = rr.request();
+        if (req != null) {
+            sb.append(req.method()).append(' ').append(req.path()).append('\n');
+            for (HttpHeader h : req.headers()) {
+                sb.append(h.name()).append(": ").append(h.value()).append('\n');
+            }
+            sb.append(req.bodyToString()).append('\n');
+        }
+        HttpResponse resp = rr.response();
+        if (resp != null) {
+            for (HttpHeader h : resp.headers()) {
+                sb.append(h.name()).append(": ").append(h.value()).append('\n');
+            }
+            sb.append(resp.bodyToString());
+        }
+        return sb.length() == 0 ? null : sb.toString();
     }
 }

@@ -44,6 +44,11 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
 
+### 1.1.0
+- 각 탭의 **Filter를 Search로 개편**: 한국어·영어 동시 검색, request/response **본문 값까지 검색**.
+- 검색 옵션 추가: 정규식(Regex) 토글, 대소문자 구분(Aa) 토글, 다중 키워드 AND + 제외(`-단어`), 필드(컬럼) 지정 검색.
+- Endpoints/Parameters **Request/Response 뷰어 기본 세로 크기 확대** + 분할선 드래그로 조절.
+
 ### 1.0.0
 - 최초 릴리스.
 - Proxy History / Site Map 일괄 순회 + 신규 트래픽 라이브 캡처(스코프 필터링).

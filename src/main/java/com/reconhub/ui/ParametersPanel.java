@@ -36,6 +36,13 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
                 + "\" on " + p.getEndpointPath());
     }
 
+    @Override protected boolean supportsBodySearch() { return true; }
+
+    @Override
+    protected String searchableBody(ParameterInfo p) {
+        return p == null ? null : MessageViewer.toSearchText(p.getMessages());
+    }
+
     @Override protected List<ParameterInfo> supplyRows() { return store.snapshotParameters(); }
 
     @Override protected String[] columns() { return COLS; }
