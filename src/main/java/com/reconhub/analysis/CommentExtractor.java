@@ -1,5 +1,6 @@
 package com.reconhub.analysis;
 
+import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.HashUtil;
 import com.reconhub.model.Finding;
@@ -30,17 +31,17 @@ public final class CommentExtractor {
         this.store = store;
     }
 
-    public int extractHtml(String body, String url) {
-        return scan(HTML_COMMENT, body, url, "HTML Comment");
+    public int extractHtml(String body, String url, HttpRequestResponse messages) {
+        return scan(HTML_COMMENT, body, url, "HTML Comment", messages);
     }
 
-    public int extractJs(String body, String url) {
-        int n = scan(JS_BLOCK, body, url, "JS Comment");
-        n += scan(JS_LINE, body, url, "JS Comment");
+    public int extractJs(String body, String url, HttpRequestResponse messages) {
+        int n = scan(JS_BLOCK, body, url, "JS Comment", messages);
+        n += scan(JS_LINE, body, url, "JS Comment", messages);
         return n;
     }
 
-    private int scan(Pattern p, String body, String url, String type) {
+    private int scan(Pattern p, String body, String url, String type, HttpRequestResponse messages) {
         if (body == null || body.isEmpty()) {
             return 0;
         }
@@ -55,6 +56,7 @@ public final class CommentExtractor {
             // Dedup by content hash so the same comment across pages collapses to one row.
             Finding f = new Finding(type, Finding.Severity.INFO,
                     HashUtil.sha256(type + text), url, shown, false);
+            f.setMessages(messages);
             if (store.recordFinding(f)) {
                 found++;
             }

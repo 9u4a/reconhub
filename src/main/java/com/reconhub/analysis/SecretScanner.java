@@ -1,5 +1,6 @@
 package com.reconhub.analysis;
 
+import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Finding;
 
@@ -26,10 +27,14 @@ public final class SecretScanner {
         this.sensitive = sensitive;
     }
 
+    public int scan(String body, String locationUrl) {
+        return scan(body, locationUrl, null);
+    }
+
     /**
      * @return number of newly discovered (previously unseen) findings in this body.
      */
-    public int scan(String body, String locationUrl) {
+    public int scan(String body, String locationUrl, HttpRequestResponse messages) {
         if (body == null || body.isEmpty()) {
             return 0;
         }
@@ -45,6 +50,7 @@ public final class SecretScanner {
                 }
                 Finding f = new Finding(rule.name, rule.severity, match, locationUrl,
                         evidence(body, m.start(), m.end()), sensitive);
+                f.setMessages(messages);
                 if (store.recordFinding(f)) {
                     newCount++;
                 }

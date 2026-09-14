@@ -1,5 +1,6 @@
 package com.reconhub.analysis;
 
+import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.HashUtil;
 import com.reconhub.core.Settings;
@@ -35,7 +36,7 @@ public final class JsAnalyzer {
         this.settings = settings;
     }
 
-    public void analyze(String url, String body) {
+    public void analyze(String url, String body, HttpRequestResponse messages) {
         if (body == null || body.isBlank()) {
             return;
         }
@@ -56,11 +57,11 @@ public final class JsAnalyzer {
         int endpoints = extractEndpoints(url, body);
         asset.setExtractedEndpoints(endpoints);
 
-        int secrets = secretScanner.scan(body, url);
+        int secrets = secretScanner.scan(body, url, messages);
         asset.setExtractedSecrets(secrets);
 
         if (settings.isRunPassiveChecks()) {
-            commentExtractor.extractJs(body, url);
+            commentExtractor.extractJs(body, url, messages);
         }
     }
 

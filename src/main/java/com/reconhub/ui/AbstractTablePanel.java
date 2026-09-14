@@ -21,8 +21,10 @@ import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.TableRowSorter;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Desktop;
 import java.awt.FlowLayout;
@@ -100,6 +102,7 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         table.setFillsViewportHeight(true);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        table.setDefaultRenderer(Object.class, new StyledRenderer());
         add(scrollPane, BorderLayout.CENTER);
 
         table.getSelectionModel().addListSelectionListener(e -> {
@@ -152,6 +155,32 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
 
     protected boolean supportsBodySearch() {
         return false;
+    }
+
+    /**
+     * Hook to emphasize a cell. {@code comp} already has default (or selection) colors applied;
+     * override to tint it based on the row. Default: no change.
+     */
+    protected void styleCell(Component comp, T row, int viewColumn, boolean selected) {
+        // subclasses override
+    }
+
+    /** Shared renderer that resets colors then delegates to {@link #styleCell}. */
+    private final class StyledRenderer extends DefaultTableCellRenderer {
+        @Override
+        public Component getTableCellRendererComponent(JTable t, Object value, boolean sel,
+                                                       boolean focus, int row, int col) {
+            Component c = super.getTableCellRendererComponent(t, value, sel, focus, row, col);
+            if (sel) {
+                c.setBackground(t.getSelectionBackground());
+                c.setForeground(t.getSelectionForeground());
+            } else {
+                c.setBackground(t.getBackground());
+                c.setForeground(t.getForeground());
+            }
+            styleCell(c, rowAt(row), col, sel);
+            return c;
+        }
     }
 
     /** Absolute URL for a row (copy/open/send). Null when the row has none. */

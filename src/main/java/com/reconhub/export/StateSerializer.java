@@ -81,6 +81,8 @@ public final class StateSerializer {
     private static final class FindingDto {
         String type, severity, rawMatch, location, evidence;
         int timesSeen;
+        boolean sensitive;
+        String reqB64, respB64;
     }
 
     private static final class JsAssetDto {
@@ -162,6 +164,14 @@ public final class StateSerializer {
             d.location = f.getLocationUrl();
             d.evidence = f.getEvidence();
             d.timesSeen = f.getTimesSeen();
+            d.sensitive = f.isSensitive();
+            if (includeMessages) {
+                String[] msg = dumpMessages(f.getMessages());
+                if (msg != null) {
+                    d.reqB64 = msg[0];
+                    d.respB64 = msg[1];
+                }
+            }
             s.findings.add(d);
         }
 
@@ -241,8 +251,9 @@ public final class StateSerializer {
         if (s.findings != null) {
             for (FindingDto d : s.findings) {
                 Finding f = new Finding(d.type, parseSeverity(d.severity), d.rawMatch,
-                        d.location, d.evidence);
+                        d.location, d.evidence, d.sensitive);
                 f.setTimesSeen(d.timesSeen);
+                f.setMessages(rebuildMessages(d.reqB64, d.respB64));
                 store.restoreFinding(f);
                 findings++;
             }

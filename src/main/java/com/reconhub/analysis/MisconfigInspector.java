@@ -1,6 +1,7 @@
 package com.reconhub.analysis;
 
 import burp.api.montoya.http.message.HttpHeader;
+import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
 import com.reconhub.core.DataStore;
@@ -20,10 +21,14 @@ public final class MisconfigInspector {
         this.store = store;
     }
 
+    private HttpRequestResponse currentMessages;   // set per inspect() (single ingest thread)
+
     public void inspect(String host, HttpRequest request, HttpResponse response, String url) {
         if (response == null) {
             return;
         }
+        this.currentMessages = request != null
+                ? HttpRequestResponse.httpRequestResponse(request, response) : null;
         checkCors(request, response, url);
         checkCookies(host, response, url);
     }
@@ -83,6 +88,8 @@ public final class MisconfigInspector {
     }
 
     private void add(Finding.Severity sev, String type, String key, String url, String evidence) {
-        store.recordFinding(new Finding(type, sev, key, url, evidence, false));
+        Finding f = new Finding(type, sev, key, url, evidence, false);
+        f.setMessages(currentMessages);
+        store.recordFinding(f);
     }
 }

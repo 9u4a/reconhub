@@ -12,6 +12,7 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 | 탭 | 설명 |
 |----|------|
 | **Dashboard** | 요청·엔드포인트·파라미터·Findings·JS·호스트 카운트, 심각도별 요약, 상위 호스트/상태코드/콘텐츠타입 막대 차트 |
+| **Site Map** | 수집 엔드포인트를 host → 경로 계층 트리로 시각화, 노드 선택 시 원본 Request/Response |
 | **Endpoints** | method + 정규화 URL로 dedup한 엔드포인트 인벤토리. 행 선택 시 하단에 Request/Response 표시, 우클릭 → **Send to Repeater** |
 | **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie) — 경로·유형·예시값·반사 여부·Seen. 행 선택 시 매칭 Request/Response 표시 |
 | **Findings** | 시크릿/민감정보(AWS·Google·GitHub·Slack 키, JWT, private key, S3, 이메일, 내부 IP) + 흥미로운 응답(스택트레이스·SQL 에러·디버그·디렉터리 리스팅) + 보안 미스컨피그(CORS·쿠키 플래그) + 권한 값(role/admin/permissions 등) + HTML/JS 주석, 심각도 정렬. 행 우클릭으로 Repeater/Intruder 전송 |
@@ -43,6 +44,13 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 1.5.0
+- **Site Map 트리 탭 추가**: 수집 엔드포인트를 host → 경로 계층 트리로 시각화, 노드 선택 시 원본 Request/Response.
+- **Findings 상세**: 행 선택 시 하단에 필드 요약 + 원본 Request/Response 뷰어(시크릿이 어디서 나왔는지 확인), 우클릭 Repeater/Intruder 전송. 백업(State)에도 finding 원문 포함.
+- **JS Assets 상세**: URL·해시·크기·저장경로 + 저장 파일 열기 + 해당 JS에서 나온 엔드포인트/Findings 목록.
+- **Tech 가시성 개선**: 선택 호스트의 기술·누락 보안헤더를 칩 목록으로 세로 표시(콤마 나열 해소).
+- **강조 처리**: Findings 심각도 색상, Parameters 반사값 강조, Tech 누락 헤더 경고색.
 
 ### 1.4.0
 - **권한(Authorization) 값 탐지 추가**: 응답·JS·JSON에서 `role: admin`, `isAdmin: true`, `permissions/scopes/authorities`, `access_level` 등 권한/역할 관련 값을 Findings에 별도 표시(`Run passive checks` 토글). 인가 테스트 단서용.

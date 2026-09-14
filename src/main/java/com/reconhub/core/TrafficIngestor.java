@@ -187,18 +187,18 @@ public final class TrafficIngestor implements HttpHandler {
 
         if (response != null) {
             if (settings.isScanResponsesForSecrets()) {
-                secretScanner.scan(responseBody, url);
+                secretScanner.scan(responseBody, url, rr);
             }
             techFingerprinter.fingerprint(ep.host(), response, contentType);
             if (isJavaScript(url, contentType)) {
-                jsAnalyzer.analyze(url, responseBody);
+                jsAnalyzer.analyze(url, responseBody, rr);
             }
             if (settings.isRunPassiveChecks()) {
-                signatureScanner.scan(responseBody, url);
-                authzScanner.scan(responseBody, url);
+                signatureScanner.scan(responseBody, url, rr);
+                authzScanner.scan(responseBody, url, rr);
                 misconfigInspector.inspect(ep.host(), request, response, url);
                 if (isHtml(contentType)) {
-                    commentExtractor.extractHtml(responseBody, url);
+                    commentExtractor.extractHtml(responseBody, url, rr);
                 }
             }
         }

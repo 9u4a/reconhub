@@ -38,6 +38,20 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
     }
 
     @Override
+    protected void styleCell(java.awt.Component comp, ParameterInfo p, int viewColumn, boolean selected) {
+        if (p == null || !p.isReflected()) {
+            return;
+        }
+        // Reflected value = potential XSS candidate: emphasize.
+        if (!selected) {
+            comp.setForeground(SwingColors.WARN);
+        }
+        if (viewColumn == 4) {   // "Reflected" column
+            comp.setFont(comp.getFont().deriveFont(java.awt.Font.BOLD));
+        }
+    }
+
+    @Override
     protected void onRowSelected(ParameterInfo p) {
         if (p == null) {
             viewer.show(null);

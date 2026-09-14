@@ -1,5 +1,7 @@
 package com.reconhub.model;
 
+import burp.api.montoya.http.message.HttpRequestResponse;
+
 /**
  * A secret / sensitive-information hit produced by {@code SecretScanner} or {@code JsAnalyzer}.
  *
@@ -16,7 +18,9 @@ public final class Finding {
     private final String masked;       // display-safe, partially masked value
     private final String locationUrl;  // where first seen
     private final String evidence;     // short surrounding snippet
+    private final boolean sensitive;   // whether the value is masked for display
     private volatile int timesSeen;
+    private volatile HttpRequestResponse messages;   // request/response the finding came from
 
     /** Sensitive finding (e.g. a secret): the value is masked for display. */
     public Finding(String type, Severity severity, String rawMatch,
@@ -34,6 +38,7 @@ public final class Finding {
         this.type = type;
         this.severity = severity;
         this.rawMatch = rawMatch;
+        this.sensitive = sensitive;
         this.masked = sensitive ? mask(rawMatch) : "";
         this.locationUrl = locationUrl;
         this.evidence = evidence;
@@ -68,6 +73,8 @@ public final class Finding {
         return s.substring(0, keep) + "…" + s.substring(s.length() - keep);
     }
 
+    public void setMessages(HttpRequestResponse m) { this.messages = m; }
+
     public String getType() { return type; }
     public Severity getSeverity() { return severity; }
     public String getMasked() { return masked; }
@@ -75,4 +82,6 @@ public final class Finding {
     public String getLocationUrl() { return locationUrl; }
     public String getEvidence() { return evidence; }
     public int getTimesSeen() { return timesSeen; }
+    public boolean isSensitive() { return sensitive; }
+    public HttpRequestResponse getMessages() { return messages; }
 }

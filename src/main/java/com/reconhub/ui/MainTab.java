@@ -27,6 +27,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         setLayout(new BorderLayout());
 
         DashboardPanel dashboard = new DashboardPanel(store);
+        SiteMapPanel siteMap = new SiteMapPanel(store, api);
         EndpointsPanel endpoints = new EndpointsPanel(store, api);
         ParametersPanel parameters = new ParametersPanel(store, api);
         FindingsPanel findings = new FindingsPanel(store, api);
@@ -35,6 +36,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         SettingsPanel settingsPanel = new SettingsPanel(api, store, settings, ingestor);
 
         refreshables.add(dashboard);
+        refreshables.add(siteMap);
         refreshables.add(endpoints);
         refreshables.add(parameters);
         refreshables.add(findings);
@@ -43,6 +45,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
 
         JTabbedPane tabs = new JTabbedPane();
         tabs.addTab("Dashboard", dashboard);
+        tabs.addTab("Site Map", siteMap);
         tabs.addTab("Endpoints", endpoints);
         tabs.addTab("Parameters", parameters);
         tabs.addTab("Findings", findings);

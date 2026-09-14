@@ -4,23 +4,83 @@ import burp.api.montoya.MontoyaApi;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.TechInfo;
 
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import java.awt.Component;
+import java.awt.FlowLayout;
+import java.awt.Font;
 import java.util.List;
 
-/** Table of per-host technologies and missing security headers. */
+/** Per-host technologies + missing security headers, with a readable chip detail panel. */
 public final class TechPanel extends AbstractTablePanel<TechInfo> {
 
     private static final String[] COLS = {"Host", "Technologies", "Missing security headers"};
 
     private final DataStore store;
+    private final JPanel detailBody = new JPanel();
 
     public TechPanel(DataStore store, MontoyaApi api) {
         super(api);
         this.store = store;
+        detailBody.setLayout(new BoxLayout(detailBody, BoxLayout.Y_AXIS));
+        detailBody.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+        installDetail(new JScrollPane(detailBody));
+    }
+
+    @Override
+    protected void onRowSelected(TechInfo t) {
+        detailBody.removeAll();
+        if (t != null) {
+            detailBody.add(header(t.getHost()));
+            detailBody.add(chipRow("Technologies", t.getTechnologies(), SwingColors.OK));
+            detailBody.add(chipRow("Missing security headers",
+                    t.getMissingSecurityHeaders(), SwingColors.WARN));
+        }
+        detailBody.revalidate();
+        detailBody.repaint();
+    }
+
+    private static JLabel header(String host) {
+        JLabel l = new JLabel(host);
+        l.setFont(l.getFont().deriveFont(Font.BOLD, 14f));
+        l.setAlignmentX(Component.LEFT_ALIGNMENT);
+        l.setBorder(BorderFactory.createEmptyBorder(0, 0, 6, 0));
+        return l;
+    }
+
+    private static JPanel chipRow(String title, java.util.Set<String> items, java.awt.Color color) {
+        JPanel wrap = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 3));
+        wrap.setAlignmentX(Component.LEFT_ALIGNMENT);
+        JLabel t = new JLabel(title + ":");
+        t.setForeground(new java.awt.Color(0x9aa4b2));
+        wrap.add(t);
+        if (items.isEmpty()) {
+            wrap.add(new JLabel("(none)"));
+        } else {
+            for (String s : items) {
+                wrap.add(SwingColors.chip(s, color));
+            }
+        }
+        return wrap;
     }
 
     @Override
     protected String rowUrl(TechInfo t) {
         return t != null && !t.getHost().isBlank() ? "https://" + t.getHost() : null;
+    }
+
+    @Override
+    protected void styleCell(Component comp, TechInfo t, int viewColumn, boolean selected) {
+        if (t == null || selected) {
+            return;
+        }
+        // Warn-color the "Missing security headers" column when there are any.
+        if (viewColumn == 2 && !t.getMissingSecurityHeaders().isEmpty()) {
+            comp.setForeground(SwingColors.WARN);
+        }
     }
 
     @Override protected List<TechInfo> supplyRows() { return store.snapshotTech(); }
