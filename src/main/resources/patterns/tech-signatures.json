@@ -1,0 +1,40 @@
+{
+  "comment": "Technology fingerprint rules. 'source' = header | cookie | body. 'match' is a regex tested against the source; when it matches, 'tech' is recorded for the host. For headers, 'header' names the header (case-insensitive); the value is tested against 'match' (default '.*').",
+  "securityHeaders": [
+    "Content-Security-Policy",
+    "Strict-Transport-Security",
+    "X-Frame-Options",
+    "X-Content-Type-Options",
+    "Referrer-Policy",
+    "Permissions-Policy"
+  ],
+  "rules": [
+    { "source": "header", "header": "Server", "match": "(?i)nginx", "tech": "nginx" },
+    { "source": "header", "header": "Server", "match": "(?i)apache", "tech": "Apache httpd" },
+    { "source": "header", "header": "Server", "match": "(?i)microsoft-iis", "tech": "Microsoft IIS" },
+    { "source": "header", "header": "Server", "match": "(?i)cloudflare", "tech": "Cloudflare" },
+    { "source": "header", "header": "Server", "match": "(?i)openresty", "tech": "OpenResty" },
+    { "source": "header", "header": "X-Powered-By", "match": "(?i)php", "tech": "PHP" },
+    { "source": "header", "header": "X-Powered-By", "match": "(?i)asp\\.net", "tech": "ASP.NET" },
+    { "source": "header", "header": "X-Powered-By", "match": "(?i)express", "tech": "Express (Node.js)" },
+    { "source": "header", "header": "X-AspNet-Version", "match": ".+", "tech": "ASP.NET (version disclosed)" },
+    { "source": "header", "header": "X-Generator", "match": "(?i)drupal", "tech": "Drupal" },
+    { "source": "header", "header": "X-Drupal-Cache", "match": ".*", "tech": "Drupal" },
+    { "source": "cookie", "match": "(?i)PHPSESSID", "tech": "PHP" },
+    { "source": "cookie", "match": "(?i)JSESSIONID", "tech": "Java (JSP/Servlet)" },
+    { "source": "cookie", "match": "(?i)ASP\\.NET_SessionId", "tech": "ASP.NET" },
+    { "source": "cookie", "match": "(?i)\\.AspNetCore", "tech": "ASP.NET Core" },
+    { "source": "cookie", "match": "(?i)laravel_session", "tech": "Laravel (PHP)" },
+    { "source": "cookie", "match": "(?i)ci_session", "tech": "CodeIgniter (PHP)" },
+    { "source": "cookie", "match": "(?i)wordpress_", "tech": "WordPress" },
+    { "source": "cookie", "match": "(?i)connect\\.sid", "tech": "Express (Node.js)" },
+    { "source": "cookie", "match": "(?i)django", "tech": "Django (Python)" },
+    { "source": "body", "match": "(?i)/wp-content/", "tech": "WordPress" },
+    { "source": "body", "match": "(?i)<meta[^>]+name=[\"']generator[\"'][^>]+content=[\"']([^\"']+)", "tech": "Generator: $1" },
+    { "source": "body", "match": "(?i)jquery[.-]?([0-9]+\\.[0-9]+(?:\\.[0-9]+)?)(?:\\.min)?\\.js", "tech": "jQuery $1" },
+    { "source": "body", "match": "(?i)react(?:-dom)?[.-]?([0-9]+\\.[0-9]+(?:\\.[0-9]+)?)(?:\\.min)?\\.js", "tech": "React $1" },
+    { "source": "body", "match": "(?i)vue[.-]?([0-9]+\\.[0-9]+(?:\\.[0-9]+)?)(?:\\.min)?\\.js", "tech": "Vue.js $1" },
+    { "source": "body", "match": "(?i)angular[.-]?([0-9]+\\.[0-9]+(?:\\.[0-9]+)?)(?:\\.min)?\\.js", "tech": "Angular $1" },
+    { "source": "body", "match": "(?i)bootstrap[.-]?([0-9]+\\.[0-9]+(?:\\.[0-9]+)?)(?:\\.min)?\\.(?:js|css)", "tech": "Bootstrap $1" }
+  ]
+}

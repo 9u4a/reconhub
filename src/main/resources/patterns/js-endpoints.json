@@ -1,0 +1,9 @@
+{
+  "comment": "LinkFinder-style patterns for extracting endpoints/paths from JavaScript. Group 1 (or whole match) is the captured link.",
+  "patterns": [
+    { "name": "Quoted absolute/relative path", "regex": "['\"](/[a-zA-Z0-9_?&=/\\-#.:%]{2,}?)['\"]" },
+    { "name": "Quoted full URL", "regex": "['\"](https?://[a-zA-Z0-9_?&=/\\-#.:%]{4,}?)['\"]" },
+    { "name": "API-ish path", "regex": "['\"]((?:/|\\.\\./|\\./)?(?:api|rest|graphql|v[0-9]+|internal|admin|ajax)[a-zA-Z0-9_?&=/\\-#.:%]{1,}?)['\"]" },
+    { "name": "Endpoint with extension", "regex": "['\"]([a-zA-Z0-9_\\-/.]{2,}?\\.(?:php|asp|aspx|jsp|json|action|do|xml))(?:\\?[^'\"]*)?['\"]" }
+  ]
+}

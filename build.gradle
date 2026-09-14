@@ -1,0 +1,39 @@
+plugins {
+    id 'java'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+group = 'com.reconhub'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+dependencies {
+    // Montoya API is provided by the Burp runtime -> compileOnly (not bundled).
+    compileOnly 'net.portswigger.burp.extensions:montoya-api:2023.12.1'
+
+    // Gson is bundled into the fat-jar via shadowJar.
+    implementation 'com.google.code.gson:gson:2.10.1'
+}
+
+shadowJar {
+    archiveBaseName.set('reconhub')
+    archiveClassifier.set('all')
+    archiveVersion.set(version)
+    // Relocate gson to avoid clashing with other extensions/Burp internals.
+    relocate 'com.google.gson', 'com.reconhub.shaded.gson'
+}
+
+// Make `gradle build` produce the loadable fat-jar.
+build.dependsOn shadowJar
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}

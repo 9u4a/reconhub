@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ReconHub Report</title>
+<style>
+  :root {
+    --bg: #0f1216; --panel: #171b21; --line: #2a313b; --fg: #e6e9ee;
+    --muted: #9aa4b2; --accent: #4da3ff;
+    --high: #ff5c5c; --medium: #ffb020; --low: #4da3ff; --info: #7a8698;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 24px 32px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  .sub { color: var(--muted); font-size: 13px; }
+  main { padding: 24px 32px; max-width: 1200px; }
+  section { margin-bottom: 36px; }
+  h2 { font-size: 16px; border-left: 3px solid var(--accent); padding-left: 10px; margin: 0 0 14px; }
+  .cards { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 18px; min-width: 130px; }
+  .card .n { font-size: 24px; font-weight: 700; }
+  .card .l { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line);
+    vertical-align: top; word-break: break-word; }
+  th { background: #1c2129; color: var(--muted); font-weight: 600; font-size: 12px;
+    text-transform: uppercase; letter-spacing: .03em; position: sticky; top: 0; }
+  tr:last-child td { border-bottom: none; }
+  code { font-family: "SF Mono", Consolas, monospace; font-size: 12px; color: #c9d4e3; }
+  .sev { font-weight: 700; padding: 2px 8px; border-radius: 999px; font-size: 11px; }
+  .sev.HIGH { background: rgba(255,92,92,.15); color: var(--high); }
+  .sev.MEDIUM { background: rgba(255,176,32,.15); color: var(--medium); }
+  .sev.LOW { background: rgba(77,163,255,.15); color: var(--low); }
+  .sev.INFO { background: rgba(122,134,152,.15); color: var(--info); }
+  .bar { height: 8px; background: var(--accent); border-radius: 4px; }
+  .barrow { display: grid; grid-template-columns: 160px 1fr 60px; gap: 10px;
+    align-items: center; margin-bottom: 6px; }
+  .barrow .lbl { color: var(--muted); font-size: 12px; text-align: right; }
+  .barrow .val { font-size: 12px; color: var(--muted); }
+  .tag { display: inline-block; background: #212832; border: 1px solid var(--line);
+    border-radius: 6px; padding: 1px 8px; margin: 2px 4px 2px 0; font-size: 12px; }
+  .muted { color: var(--muted); }
+  .yes { color: var(--high); font-weight: 700; }
+  footer { padding: 20px 32px; color: var(--muted); font-size: 12px;
+    border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<header>
+  <h1>ReconHub Report</h1>
+  <div class="sub">Generated {{GENERATED_AT}}</div>
+</header>
+<main>
+{{BODY}}
+</main>
+<footer>ReconHub &mdash; Burp Suite recon aggregation extension.</footer>
+</body>
+</html>

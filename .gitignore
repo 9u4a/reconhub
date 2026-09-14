@@ -1,0 +1,21 @@
+# Build artifacts
+.gradle/
+build/
+*.class
+
+# IDE / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Sensitive / local-only (do NOT track)
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+
+# Target-derived output — may contain secrets or client data
+output/
+collected-js/
+*-report.json
+*-report.html
