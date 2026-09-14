@@ -7,6 +7,7 @@ import com.reconhub.core.DataStore;
 import com.reconhub.model.Endpoint;
 
 import javax.swing.BorderFactory;
+import javax.swing.Icon;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JPanel;
@@ -21,8 +22,12 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -31,23 +36,29 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Burp-style Site Map: a host → path tree on the left, a table of the requests under the selected
- * tree node on the top-right, and a read-only request/response viewer on the bottom-right. Selecting
- * a tree node lists every endpoint in that branch; selecting a table row shows its captured message.
+ * Burp-style Site Map: a host → path tree on the left (hosts shown as {@code host:port} with a
+ * scheme-colored lock icon, folders and file items with tree icons), a table of the requests under
+ * the selected node on the top-right, and a read-only request/response viewer on the bottom-right.
  */
 public final class SiteMapPanel extends JPanel implements Refreshable {
 
-    /** Tree node payload: a display label plus the endpoints attached directly at this node. */
+    /**
+     * Tree node payload. {@code host} nodes are the top-level authority rows (carry scheme flags for
+     * the lock color); every other node is a folder or a file item that may hold endpoints.
+     */
     private static final class Dir {
         final String label;
+        final boolean host;
+        boolean https;
+        boolean http;
         final List<Endpoint> endpoints = new ArrayList<>();
-        Dir(String label) { this.label = label; }
+        Dir(String label, boolean host) { this.label = label; this.host = host; }
         @Override public String toString() { return label; }
     }
 
     private final DataStore store;
 
-    private final DefaultMutableTreeNode root = new DefaultMutableTreeNode(new Dir("Site Map"));
+    private final DefaultMutableTreeNode root = new DefaultMutableTreeNode(new Dir("Site Map", false));
     private final DefaultTreeModel treeModel = new DefaultTreeModel(root);
     private final JTree tree = new JTree(treeModel);
 
@@ -65,8 +76,8 @@ public final class SiteMapPanel extends JPanel implements Refreshable {
         tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         tree.setRootVisible(false);
         tree.setShowsRootHandles(true);
-        tree.setRowHeight(0);   // let each row size to its renderer (host rows are taller)
-        tree.setCellRenderer(new HostEmphasisRenderer(root, tree.getFont()));
+        tree.setRowHeight(0);   // let each row size to its renderer
+        tree.setCellRenderer(new SiteMapTreeRenderer(root, tree.getFont()));
         tree.addTreeSelectionListener(e -> onTreeSelect());
 
         items.setRowSorter(sorter);
@@ -104,7 +115,7 @@ public final class SiteMapPanel extends JPanel implements Refreshable {
             collectSubtree(n, collected);
         }
         collected.sort((a, b) -> {
-            int c = a.getPath().compareTo(b.getPath());
+            int c = pathOf(a).compareTo(pathOf(b));
             return c != 0 ? c : a.getMethod().compareTo(b.getMethod());
         });
         itemsModel.setRows(collected);
@@ -145,21 +156,57 @@ public final class SiteMapPanel extends JPanel implements Refreshable {
 
         root.removeAllChildren();
         for (Endpoint e : store.snapshotEndpoints()) {
-            DefaultMutableTreeNode cur = childDir(root, hostOf(e));
-            for (String seg : splitPath(pathOf(e))) {
-                cur = childDir(cur, seg);
+            String[] key = hostKey(e);          // {scheme|null, authority}
+            DefaultMutableTreeNode hostNode = childDir(root, key[1], true);
+            Dir hostDir = (Dir) hostNode.getUserObject();
+            if ("https".equals(key[0])) {
+                hostDir.https = true;
+            } else if ("http".equals(key[0])) {
+                hostDir.http = true;
             }
-            ((Dir) cur.getUserObject()).endpoints.add(e);
+
+            List<String> segs = splitPath(pathOf(e));
+            if (segs.isEmpty()) {
+                // Root path: show a "/" file item under the host (as Burp does).
+                DefaultMutableTreeNode slash = childDir(hostNode, "/", false);
+                ((Dir) slash.getUserObject()).endpoints.add(e);
+            } else {
+                DefaultMutableTreeNode cur = hostNode;
+                for (String seg : segs) {
+                    cur = childDir(cur, seg, false);
+                }
+                ((Dir) cur.getUserObject()).endpoints.add(e);
+            }
         }
         treeModel.reload();
         restoreExpanded(expanded);
         restoreSelection(selectedPath);
     }
 
-    /**
-     * Host bucket for the tree. Uses the endpoint's own host; for JS-discovered endpoints whose
-     * "path" is an absolute URL, recovers the host from it so same-domain items don't fragment.
-     */
+    /** Returns {@code {scheme|null, authority}} — authority is {@code host[:port]} (default port omitted). */
+    private static String[] hostKey(Endpoint e) {
+        try {
+            URI u = URI.create(e.getNormalizedUrl());
+            if (u.getScheme() != null && u.getHost() != null) {
+                String scheme = u.getScheme().toLowerCase();
+                String auth = u.getHost();
+                int port = u.getPort();
+                if (port > 0 && !isDefaultPort(scheme, port)) {
+                    auth = auth + ":" + port;
+                }
+                return new String[]{scheme, auth};
+            }
+        } catch (RuntimeException ignored) {
+            // fall through to host-based fallback
+        }
+        return new String[]{null, hostOf(e)};
+    }
+
+    private static boolean isDefaultPort(String scheme, int port) {
+        return ("http".equals(scheme) && port == 80) || ("https".equals(scheme) && port == 443);
+    }
+
+    /** Host bucket fallback when the normalized URL has no scheme/host (JS/relative links). */
     private static String hostOf(Endpoint e) {
         String h = e.getHost();
         if (h != null && !h.isBlank()) {
@@ -180,8 +227,9 @@ public final class SiteMapPanel extends JPanel implements Refreshable {
     }
 
     /**
-     * Clean path for tree grouping: strips scheme+authority from absolute-URL "paths" (JS links) and
-     * drops any query/fragment, so an item lands under its host rather than re-nesting the domain.
+     * Clean path for tree grouping/display: strips scheme+authority from absolute-URL "paths" (JS
+     * links) and drops any query/fragment, so an item lands under its host rather than re-nesting the
+     * domain.
      */
     private static String pathOf(Endpoint e) {
         String p = e.getPath();
@@ -225,14 +273,14 @@ public final class SiteMapPanel extends JPanel implements Refreshable {
         return out;
     }
 
-    private DefaultMutableTreeNode childDir(DefaultMutableTreeNode parent, String label) {
+    private DefaultMutableTreeNode childDir(DefaultMutableTreeNode parent, String label, boolean host) {
         for (int i = 0; i < parent.getChildCount(); i++) {
             DefaultMutableTreeNode c = (DefaultMutableTreeNode) parent.getChildAt(i);
             if (c.getUserObject() instanceof Dir d && d.label.equals(label)) {
                 return c;
             }
         }
-        DefaultMutableTreeNode created = new DefaultMutableTreeNode(new Dir(label));
+        DefaultMutableTreeNode created = new DefaultMutableTreeNode(new Dir(label, host));
         parent.add(created);
         return created;
     }
@@ -369,28 +417,75 @@ public final class SiteMapPanel extends JPanel implements Refreshable {
         }
     }
 
-    // ---- Tree cell renderer: host (top-level) rows bold, larger, roomier -
+    // ---- Tree cell renderer: host lock + folder/file icons --------------
 
-    private static final class HostEmphasisRenderer extends DefaultTreeCellRenderer {
+    private static final class SiteMapTreeRenderer extends DefaultTreeCellRenderer {
         private final DefaultMutableTreeNode root;
         private final Font baseFont;
         private final Font hostFont;
+        private final Icon lockSecure = new LockIcon(new Color(0x3f, 0xb9, 0x50));   // https: green
+        private final Icon lockInsecure = new LockIcon(new Color(0xff, 0x5c, 0x5c)); // http: red
+        private final Icon lockUnknown = new LockIcon(new Color(0x8a, 0x93, 0x9e));  // unknown: gray
 
-        HostEmphasisRenderer(DefaultMutableTreeNode root, Font base) {
+        SiteMapTreeRenderer(DefaultMutableTreeNode root, Font base) {
             this.root = root;
             this.baseFont = base != null ? base : new Font(Font.SANS_SERIF, Font.PLAIN, 12);
-            this.hostFont = baseFont.deriveFont(Font.BOLD, baseFont.getSize2D() + 3f);
+            this.hostFont = baseFont.deriveFont(Font.BOLD, baseFont.getSize2D() + 1f);
         }
 
         @Override
         public Component getTreeCellRendererComponent(JTree t, Object value, boolean selected,
                 boolean expanded, boolean leaf, int row, boolean hasFocus) {
             super.getTreeCellRendererComponent(t, value, selected, expanded, leaf, row, hasFocus);
-            boolean isHost = value instanceof DefaultMutableTreeNode n && n.getParent() == root;
-            setFont(isHost ? hostFont : baseFont);
-            // Extra vertical breathing room, more for host rows.
-            setBorder(BorderFactory.createEmptyBorder(isHost ? 5 : 2, 2, isHost ? 5 : 2, 6));
+            boolean isHost = value instanceof DefaultMutableTreeNode n
+                    && n.getParent() == root && n.getUserObject() instanceof Dir d && d.host;
+            if (isHost) {
+                Dir d = (Dir) ((DefaultMutableTreeNode) value).getUserObject();
+                setFont(hostFont);
+                setIcon(d.https ? lockSecure : d.http ? lockInsecure : lockUnknown);
+                setIconTextGap(6);
+                setBorder(BorderFactory.createEmptyBorder(4, 2, 4, 6));
+            } else {
+                setFont(baseFont);
+                // keep the default folder/file icon set by super
+                setIconTextGap(4);
+                setBorder(BorderFactory.createEmptyBorder(1, 2, 1, 6));
+            }
             return this;
+        }
+    }
+
+    /** A small padlock icon painted in a given color (scheme indicator for host rows). */
+    private static final class LockIcon implements Icon {
+        private static final int W = 12;
+        private static final int H = 15;
+        private final Color color;
+
+        LockIcon(Color color) { this.color = color; }
+
+        @Override public int getIconWidth() { return W; }
+        @Override public int getIconHeight() { return H; }
+
+        @Override
+        public void paintIcon(Component c, Graphics g, int x, int y) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(color);
+            // Shackle (open arc on top).
+            g2.setStroke(new java.awt.BasicStroke(1.6f));
+            int shackleW = 7;
+            int shackleX = x + (W - shackleW) / 2;
+            g2.drawArc(shackleX, y + 1, shackleW, 8, 0, 180);
+            // Body.
+            int bodyW = 10;
+            int bodyH = 7;
+            int bodyX = x + (W - bodyW) / 2;
+            int bodyY = y + H - bodyH;
+            g2.fillRoundRect(bodyX, bodyY, bodyW, bodyH, 3, 3);
+            // Keyhole.
+            g2.setColor(new Color(255, 255, 255, 200));
+            g2.fillOval(bodyX + bodyW / 2 - 1, bodyY + 2, 2, 2);
+            g2.dispose();
         }
     }
 }
