@@ -1,10 +1,16 @@
 package com.reconhub.ui;
 
+import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.http.message.HttpRequestResponse;
+import burp.api.montoya.http.message.requests.HttpRequest;
+
 import javax.swing.Box;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
@@ -18,8 +24,14 @@ import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.BorderLayout;
 import java.awt.Component;
-import java.awt.Dimension;
+import java.awt.Desktop;
 import java.awt.FlowLayout;
+import java.awt.Dimension;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -31,12 +43,13 @@ import java.util.regex.PatternSyntaxException;
  * Base class for the data tabs: a Search bar on top, a sortable/searchable {@link JTable} below,
  * and a row count. Subclasses supply the rows, column names and cell values.
  *
- * <p>Search supports: multiple space-separated keywords (AND), {@code -term} exclusion, an optional
- * regex mode, case sensitivity, a per-field (column) scope, and — for panels that expose it via
- * {@link #searchableBody} — matching inside the request/response body (so Korean/English text that
- * only appears in the body is searchable). Typing is debounced; body text is cached per row.
+ * <p>Adds a shared right-click menu (copy cell/URL, open in browser, send to Repeater/Intruder)
+ * driven by the {@link #rowUrl}/{@link #rowMessages} hooks, and highlights the current search term
+ * inside the message viewer when one is installed.
  */
 public abstract class AbstractTablePanel<T> extends JPanel implements Refreshable {
+
+    protected final MontoyaApi api;
 
     // NOTE: `rows` MUST be initialized before `table`, because `new JTable(model)` immediately
     // queries model.getRowCount() -> rows.size(). Field initializers run in declaration order.
@@ -55,8 +68,10 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
 
     private final Timer debounce = new Timer(200, e -> applySearch());
     private final Map<T, String> bodyCache = new IdentityHashMap<>();
+    private MessageViewer viewer;   // set by installDetail when the detail is a MessageViewer
 
-    protected AbstractTablePanel() {
+    protected AbstractTablePanel(MontoyaApi api) {
+        this.api = api;
         setLayout(new BorderLayout());
         debounce.setRepeats(false);
 
@@ -90,8 +105,10 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         table.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
                 onRowSelected(rowAt(table.getSelectedRow()));
+                highlightViewer();
             }
         });
+        installContextMenu();
 
         searchField.getDocument().addDocumentListener(new DocumentListener() {
             public void insertUpdate(DocumentEvent e) { debounce.restart(); }
@@ -109,13 +126,16 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
      * The detail (request/response viewer) gets the larger default share and is resizable.
      */
     protected void installDetail(Component detail) {
+        if (detail instanceof MessageViewer mv) {
+            this.viewer = mv;
+        }
         remove(scrollPane);
         scrollPane.setMinimumSize(new Dimension(0, 0));
         scrollPane.setPreferredSize(new Dimension(100, 200));
         detail.setMinimumSize(new Dimension(0, 0));
         detail.setPreferredSize(new Dimension(100, 440));
         JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, scrollPane, detail);
-        split.setResizeWeight(0.3);          // extra space favors the viewer
+        split.setResizeWeight(0.3);
         split.setContinuousLayout(true);
         add(split, BorderLayout.CENTER);
         revalidate();
@@ -126,22 +146,133 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         // subclasses override
     }
 
-    /**
-     * Text to include in "Body" searches for a row (e.g. request+response). Null = none.
-     * Subclasses that hold an {@code HttpRequestResponse} override this.
-     */
     protected String searchableBody(T row) {
         return null;
     }
 
-    /** Whether this panel can search request/response bodies (shows the "Body" toggle). */
     protected boolean supportsBodySearch() {
         return false;
     }
 
-    /** Optional extra components placed on the search row. */
+    /** Absolute URL for a row (copy/open/send). Null when the row has none. */
+    protected String rowUrl(T row) {
+        return null;
+    }
+
+    /** Captured request/response for a row (send to Repeater/Intruder). Null when absent. */
+    protected HttpRequestResponse rowMessages(T row) {
+        return null;
+    }
+
     protected void addToToolbar(Component c) {
         ((JPanel) getComponent(0)).add(c);
+    }
+
+    // ---- Context menu ---------------------------------------------------
+
+    private void installContextMenu() {
+        table.addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e) { maybeShow(e); }
+            @Override public void mouseReleased(MouseEvent e) { maybeShow(e); }
+            private void maybeShow(MouseEvent e) {
+                if (!e.isPopupTrigger()) {
+                    return;
+                }
+                int row = table.rowAtPoint(e.getPoint());
+                int col = table.columnAtPoint(e.getPoint());
+                if (row >= 0 && !table.isRowSelected(row)) {
+                    table.setRowSelectionInterval(row, row);
+                }
+                buildMenu(col).show(table, e.getX(), e.getY());
+            }
+        });
+    }
+
+    private JPopupMenu buildMenu(int viewCol) {
+        JPopupMenu menu = new JPopupMenu();
+        T row = rowAt(table.getSelectedRow());
+
+        String cell = cellText(table.getSelectedRow(), viewCol);
+        add(menu, "Copy cell", cell != null, () -> copy(cell));
+
+        String url = row != null ? rowUrl(row) : null;
+        add(menu, "Copy URL", url != null, () -> copy(url));
+        boolean http = url != null && url.startsWith("http");
+        add(menu, "Open in browser", http, () -> openBrowser(url));
+        add(menu, "Send to Repeater", row != null && requestFor(row) != null,
+                () -> sendToRepeater(row));
+        add(menu, "Send to Intruder", row != null && requestFor(row) != null,
+                () -> sendToIntruder(row));
+        return menu;
+    }
+
+    private void add(JPopupMenu menu, String label, boolean enabled, Runnable action) {
+        JMenuItem item = new JMenuItem(label);
+        item.setEnabled(enabled);
+        item.addActionListener(e -> {
+            try {
+                action.run();
+            } catch (RuntimeException ex) {
+                api.logging().logToError("ReconHub menu action failed: " + ex);
+            }
+        });
+        menu.add(item);
+    }
+
+    private HttpRequest requestFor(T row) {
+        HttpRequestResponse rr = rowMessages(row);
+        if (rr != null && rr.request() != null) {
+            return rr.request();
+        }
+        String url = rowUrl(row);
+        if (url != null && url.startsWith("http")) {
+            try {
+                return HttpRequest.httpRequestFromUrl(url);
+            } catch (RuntimeException e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private void sendToRepeater(T row) {
+        HttpRequest req = requestFor(row);
+        if (req != null) {
+            api.repeater().sendToRepeater(req, "ReconHub");
+        }
+    }
+
+    private void sendToIntruder(T row) {
+        HttpRequest req = requestFor(row);
+        if (req != null) {
+            api.intruder().sendToIntruder(req);
+        }
+    }
+
+    private void openBrowser(String url) {
+        try {
+            if (Desktop.isDesktopSupported()
+                    && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                Desktop.getDesktop().browse(URI.create(url));
+            }
+        } catch (Exception e) {
+            api.logging().logToError("open in browser failed: " + e);
+        }
+    }
+
+    private static void copy(String s) {
+        if (s != null) {
+            Toolkit.getDefaultToolkit().getSystemClipboard()
+                    .setContents(new StringSelection(s), null);
+        }
+    }
+
+    private String cellText(int viewRow, int viewCol) {
+        if (viewRow < 0 || viewCol < 0) {
+            return null;
+        }
+        Object v = table.getValueAt(viewRow, viewCol);
+        return v == null ? null : v.toString();
     }
 
     // ---- Search ---------------------------------------------------------
@@ -168,18 +299,33 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
 
         if (includes.isEmpty() && excludes.isEmpty()) {
             sorter.setRowFilter(null);
-            updateCount();
-            return;
+        } else {
+            sorter.setRowFilter(new SearchFilter(includes, excludes, field, useBody));
         }
-        sorter.setRowFilter(new SearchFilter(includes, excludes, field, useBody));
         updateCount();
+        highlightViewer();
+    }
+
+    private void highlightViewer() {
+        if (viewer != null) {
+            viewer.setSearchExpression(firstIncludeTerm(searchField.getText().trim()));
+        }
+    }
+
+    private static String firstIncludeTerm(String raw) {
+        for (String tok : raw.split("\\s+")) {
+            if (!tok.isEmpty() && tok.charAt(0) != '-') {
+                return tok;
+            }
+        }
+        return "";
     }
 
     private static Pattern compile(String term, boolean regex, int flags) {
         try {
             return Pattern.compile(regex ? term : Pattern.quote(term), flags);
         } catch (PatternSyntaxException e) {
-            return Pattern.compile(Pattern.quote(term), flags);   // bad regex -> literal fallback
+            return Pattern.compile(Pattern.quote(term), flags);
         }
     }
 
@@ -279,7 +425,6 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
 
     protected abstract Object valueAt(T row, int column);
 
-    /** Preferred column widths; may return {@code null} for defaults. */
     protected int[] columnWidths() {
         return null;
     }

@@ -9,8 +9,10 @@ import burp.api.montoya.http.handler.ResponseReceivedAction;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
+import com.reconhub.analysis.CommentExtractor;
 import com.reconhub.analysis.EndpointExtractor;
 import com.reconhub.analysis.JsAnalyzer;
+import com.reconhub.analysis.MisconfigInspector;
 import com.reconhub.analysis.ParameterExtractor;
 import com.reconhub.analysis.PatternRegistry;
 import com.reconhub.analysis.SecretScanner;
@@ -36,8 +38,11 @@ public final class TrafficIngestor implements HttpHandler {
 
     private final ParameterExtractor parameterExtractor;
     private final SecretScanner secretScanner;
+    private final SecretScanner signatureScanner;
     private final JsAnalyzer jsAnalyzer;
     private final TechFingerprinter techFingerprinter;
+    private final MisconfigInspector misconfigInspector;
+    private final CommentExtractor commentExtractor;
 
     private final ExecutorService executor =
             Executors.newSingleThreadExecutor(r -> {
@@ -54,9 +59,12 @@ public final class TrafficIngestor implements HttpHandler {
         this.settings = settings;
         this.scopeFilter = new ScopeFilter(api, settings);
         this.parameterExtractor = new ParameterExtractor(store);
-        this.secretScanner = new SecretScanner(store, patterns);
-        this.jsAnalyzer = new JsAnalyzer(store, patterns, secretScanner, settings);
+        this.secretScanner = new SecretScanner(store, patterns.secretRules(), true);
+        this.signatureScanner = new SecretScanner(store, patterns.signatureRules(), false);
+        this.commentExtractor = new CommentExtractor(store);
+        this.jsAnalyzer = new JsAnalyzer(store, patterns, secretScanner, commentExtractor, settings);
         this.techFingerprinter = new TechFingerprinter(store, patterns);
+        this.misconfigInspector = new MisconfigInspector(store);
     }
 
     // ---- Bulk sweep of the existing site map ----------------------------
@@ -120,16 +128,34 @@ public final class TrafficIngestor implements HttpHandler {
         return ResponseReceivedAction.continueWith(responseReceived);
     }
 
+    // ---- Manual ingest (context menu) -----------------------------------
+
+    /** Ingests a user-chosen request/response regardless of scope (source = "manual"). */
+    public void ingestExternal(HttpRequestResponse rr) {
+        executor.submit(() -> {
+            try {
+                process(rr, "manual", false);
+                store.fireChanged();
+            } catch (RuntimeException e) {
+                api.logging().logToError("manual ingest failed: " + e);
+            }
+        });
+    }
+
     // ---- Core processing ------------------------------------------------
 
     private void process(HttpRequestResponse rr, String source) {
+        process(rr, source, true);
+    }
+
+    private void process(HttpRequestResponse rr, String source, boolean respectScope) {
         if (rr == null || rr.request() == null) {
             return;
         }
         HttpRequest request = rr.request();
         HttpResponse response = rr.response();
         String url = request.url();
-        if (!scopeFilter.inScope(url)) {
+        if (respectScope && !scopeFilter.inScope(url)) {
             return;
         }
 
@@ -143,6 +169,11 @@ public final class TrafficIngestor implements HttpHandler {
             String ct = response.headerValue("Content-Type");
             contentType = ct == null ? "" : ct;
             responseBody = response.bodyToString();
+        }
+
+        // Skip static assets (never JS) to cut noise, unless the user disabled it.
+        if (settings.isIgnoreStaticAssets() && isStaticAsset(url, contentType)) {
+            return;
         }
 
         String endpointKey = ep.normalizedUrl();
@@ -160,7 +191,32 @@ public final class TrafficIngestor implements HttpHandler {
             if (isJavaScript(url, contentType)) {
                 jsAnalyzer.analyze(url, responseBody);
             }
+            if (settings.isRunPassiveChecks()) {
+                signatureScanner.scan(responseBody, url);
+                misconfigInspector.inspect(ep.host(), request, response, url);
+                if (isHtml(contentType)) {
+                    commentExtractor.extractHtml(responseBody, url);
+                }
+            }
         }
+    }
+
+    private static boolean isHtml(String contentType) {
+        return contentType.toLowerCase(Locale.ROOT).contains("html");
+    }
+
+    /** True for images/fonts/stylesheets/media — deliberately excludes JS. */
+    private static boolean isStaticAsset(String url, String contentType) {
+        String ct = contentType.toLowerCase(Locale.ROOT);
+        if (ct.startsWith("image/") || ct.startsWith("font/") || ct.startsWith("audio/")
+                || ct.startsWith("video/") || ct.contains("text/css")) {
+            return true;
+        }
+        String u = url.toLowerCase(Locale.ROOT);
+        int q = u.indexOf('?');
+        String path = q >= 0 ? u.substring(0, q) : u;
+        return path.matches(".*\\.(?:png|jpe?g|gif|bmp|ico|svg|webp|css|woff2?|ttf|eot|otf|"
+                + "mp4|webm|mp3|wav|avi|mov|pdf)$");
     }
 
     private static boolean isJavaScript(String url, String contentType) {

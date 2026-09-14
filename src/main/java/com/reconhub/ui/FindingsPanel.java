@@ -1,5 +1,6 @@
 package com.reconhub.ui;
 
+import burp.api.montoya.MontoyaApi;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Finding;
 
@@ -13,8 +14,15 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
 
     private final DataStore store;
 
-    public FindingsPanel(DataStore store) {
+    public FindingsPanel(DataStore store, MontoyaApi api) {
+        super(api);
         this.store = store;
+    }
+
+    @Override
+    protected String rowUrl(Finding f) {
+        return f != null && f.getLocationUrl() != null
+                && f.getLocationUrl().startsWith("http") ? f.getLocationUrl() : null;
     }
 
     @Override protected List<Finding> supplyRows() { return store.snapshotFindings(); }

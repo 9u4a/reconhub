@@ -29,9 +29,9 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         DashboardPanel dashboard = new DashboardPanel(store);
         EndpointsPanel endpoints = new EndpointsPanel(store, api);
         ParametersPanel parameters = new ParametersPanel(store, api);
-        FindingsPanel findings = new FindingsPanel(store);
-        JsAssetsPanel jsAssets = new JsAssetsPanel(store);
-        TechPanel tech = new TechPanel(store);
+        FindingsPanel findings = new FindingsPanel(store, api);
+        JsAssetsPanel jsAssets = new JsAssetsPanel(store, api);
+        TechPanel tech = new TechPanel(store, api);
         SettingsPanel settingsPanel = new SettingsPanel(api, store, settings, ingestor);
 
         refreshables.add(dashboard);

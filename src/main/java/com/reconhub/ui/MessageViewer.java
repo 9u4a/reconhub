@@ -55,6 +55,21 @@ public final class MessageViewer extends JPanel {
         info.setText(text == null || text.isBlank() ? " " : text);
     }
 
+    /** Highlights {@code expr} inside both editors (empty clears the highlight). */
+    public void setSearchExpression(String expr) {
+        String e = expr == null ? "" : expr;
+        try {
+            if (requestEditor != null) {
+                requestEditor.setSearchExpression(e);
+            }
+            if (responseEditor != null) {
+                responseEditor.setSearchExpression(e);
+            }
+        } catch (RuntimeException ignored) {
+            // some Burp versions reject empty/odd expressions; ignore
+        }
+    }
+
     /** Shows the given request/response pair; clears the editors when {@code rr} has none. */
     public void show(HttpRequestResponse rr) {
         if (requestEditor == null || responseEditor == null) {

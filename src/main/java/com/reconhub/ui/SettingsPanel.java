@@ -53,6 +53,7 @@ public final class SettingsPanel extends JPanel {
 
         add(section("Scope"));
         add(scopeRow());
+        add(scopeRegexRow());
         add(gap());
 
         add(section("Analysis"));
@@ -60,9 +61,21 @@ public final class SettingsPanel extends JPanel {
                 settings.isScanResponsesForSecrets());
         scan.addActionListener(e -> settings.setScanResponsesForSecrets(scan.isSelected()));
         add(scan);
+        JCheckBox passive = leftCheck(
+                "Run passive checks (interesting responses, misconfig, comments)",
+                settings.isRunPassiveChecks());
+        passive.addActionListener(e -> settings.setRunPassiveChecks(passive.isSelected()));
+        add(passive);
         JCheckBox live = leftCheck("Capture new traffic live", settings.isLiveCaptureEnabled());
         live.addActionListener(e -> settings.setLiveCaptureEnabled(live.isSelected()));
         add(live);
+        JCheckBox ignoreStatic = leftCheck("Ignore static assets (img/css/font/media)",
+                settings.isIgnoreStaticAssets());
+        ignoreStatic.addActionListener(e -> settings.setIgnoreStaticAssets(ignoreStatic.isSelected()));
+        add(ignoreStatic);
+        JCheckBox autoIngest = leftCheck("Auto-ingest site map on load", settings.isAutoIngestOnLoad());
+        autoIngest.addActionListener(e -> settings.setAutoIngestOnLoad(autoIngest.isSelected()));
+        add(autoIngest);
         add(gap());
 
         add(section("JavaScript collection"));
@@ -100,6 +113,24 @@ public final class SettingsPanel extends JPanel {
         all.addActionListener(e -> settings.setScopeMode(Settings.ScopeMode.ALL));
         p.add(burp);
         p.add(all);
+        return p;
+    }
+
+    private JPanel scopeRegexRow() {
+        JPanel p = leftFlow();
+        JTextField include = new JTextField(settings.getScopeIncludeRegex(), 20);
+        JTextField exclude = new JTextField(settings.getScopeExcludeRegex(), 20);
+        JButton apply = new JButton("Apply");
+        apply.addActionListener(e -> {
+            settings.setScopeIncludeRegex(include.getText().trim());
+            settings.setScopeExcludeRegex(exclude.getText().trim());
+            setStatus("Scope regex applied.");
+        });
+        p.add(new JLabel("Include regex:"));
+        p.add(include);
+        p.add(new JLabel("Exclude regex:"));
+        p.add(exclude);
+        p.add(apply);
         return p;
     }
 

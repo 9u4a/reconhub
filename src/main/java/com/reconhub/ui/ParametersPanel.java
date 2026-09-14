@@ -1,6 +1,7 @@
 package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.ParameterInfo;
 
@@ -19,9 +20,21 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
     private final MessageViewer viewer;
 
     public ParametersPanel(DataStore store, MontoyaApi api) {
+        super(api);
         this.store = store;
         this.viewer = new MessageViewer(api);
         installDetail(viewer);
+    }
+
+    @Override
+    protected HttpRequestResponse rowMessages(ParameterInfo p) {
+        return p == null ? null : p.getMessages();
+    }
+
+    @Override
+    protected String rowUrl(ParameterInfo p) {
+        HttpRequestResponse rr = p == null ? null : p.getMessages();
+        return rr != null && rr.request() != null ? rr.request().url() : null;
     }
 
     @Override

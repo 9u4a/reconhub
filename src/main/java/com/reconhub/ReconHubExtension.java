@@ -7,6 +7,7 @@ import com.reconhub.core.DataStore;
 import com.reconhub.core.Settings;
 import com.reconhub.core.TrafficIngestor;
 import com.reconhub.ui.MainTab;
+import com.reconhub.ui.SendToReconHubMenu;
 
 import javax.swing.JComponent;
 import javax.swing.SwingUtilities;
@@ -37,14 +38,21 @@ public final class ReconHubExtension implements BurpExtension {
         TrafficIngestor ingestor = new TrafficIngestor(api, store, settings, patterns);
 
         api.http().registerHttpHandler(ingestor);
+        api.userInterface().registerContextMenuItemsProvider(new SendToReconHubMenu(ingestor));
 
         JComponent tab = buildUi(api, store, settings, ingestor);
         api.userInterface().registerSuiteTab("ReconHub", tab);
 
         api.extension().registerUnloadingHandler(ingestor::shutdown);
 
-        api.logging().logToOutput("ReconHub loaded. Open the ReconHub tab and click "
-                + "\"Ingest Site Map\" to sweep existing traffic.");
+        if (settings.isAutoIngestOnLoad()) {
+            ingestor.ingestSiteMapAsync(() ->
+                    api.logging().logToOutput("ReconHub: auto-ingest of existing site map complete."));
+            api.logging().logToOutput("ReconHub loaded. Auto-ingesting existing site map…");
+        } else {
+            api.logging().logToOutput("ReconHub loaded. Open the ReconHub tab and click "
+                    + "\"Ingest Site Map\" to sweep existing traffic.");
+        }
     }
 
     private static JComponent buildUi(MontoyaApi api, DataStore store, Settings settings,

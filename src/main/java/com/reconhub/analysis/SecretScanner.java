@@ -3,11 +3,12 @@ package com.reconhub.analysis;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Finding;
 
+import java.util.List;
 import java.util.regex.Matcher;
 
 /**
- * Scans a text body against the compiled secret patterns and records {@link Finding}s.
- * Shared by the response scanner and the JS analyzer.
+ * Scans a text body against a set of compiled rules and records {@link Finding}s. Reused for secret
+ * patterns and for interesting-response signatures — the caller supplies the rule list.
  */
 public final class SecretScanner {
 
@@ -15,11 +16,14 @@ public final class SecretScanner {
     private static final int EVIDENCE_RADIUS = 40;
 
     private final DataStore store;
-    private final PatternRegistry patterns;
+    private final List<PatternRegistry.SecretRule> rules;
+    private final boolean sensitive;
 
-    public SecretScanner(DataStore store, PatternRegistry patterns) {
+    /** @param sensitive true masks the matched value (secrets); false shows evidence (signatures). */
+    public SecretScanner(DataStore store, List<PatternRegistry.SecretRule> rules, boolean sensitive) {
         this.store = store;
-        this.patterns = patterns;
+        this.rules = rules;
+        this.sensitive = sensitive;
     }
 
     /**
@@ -30,7 +34,7 @@ public final class SecretScanner {
             return 0;
         }
         int newCount = 0;
-        for (PatternRegistry.SecretRule rule : patterns.secretRules()) {
+        for (PatternRegistry.SecretRule rule : rules) {
             Matcher m = rule.pattern.matcher(body);
             int hits = 0;
             while (m.find() && hits < MAX_MATCHES_PER_RULE) {
@@ -40,7 +44,7 @@ public final class SecretScanner {
                     continue;
                 }
                 Finding f = new Finding(rule.name, rule.severity, match, locationUrl,
-                        evidence(body, m.start(), m.end()));
+                        evidence(body, m.start(), m.end()), sensitive);
                 if (store.recordFinding(f)) {
                     newCount++;
                 }

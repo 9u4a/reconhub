@@ -23,13 +23,15 @@ public final class JsAnalyzer {
     private final DataStore store;
     private final PatternRegistry patterns;
     private final SecretScanner secretScanner;
+    private final CommentExtractor commentExtractor;
     private final Settings settings;
 
-    public JsAnalyzer(DataStore store, PatternRegistry patterns,
-                      SecretScanner secretScanner, Settings settings) {
+    public JsAnalyzer(DataStore store, PatternRegistry patterns, SecretScanner secretScanner,
+                      CommentExtractor commentExtractor, Settings settings) {
         this.store = store;
         this.patterns = patterns;
         this.secretScanner = secretScanner;
+        this.commentExtractor = commentExtractor;
         this.settings = settings;
     }
 
@@ -56,6 +58,10 @@ public final class JsAnalyzer {
 
         int secrets = secretScanner.scan(body, url);
         asset.setExtractedSecrets(secrets);
+
+        if (settings.isRunPassiveChecks()) {
+            commentExtractor.extractJs(body, url);
+        }
     }
 
     private int extractEndpoints(String jsUrl, String body) {

@@ -56,12 +56,14 @@ public final class PatternRegistry {
     }
 
     private final List<SecretRule> secretRules = new ArrayList<>();
+    private final List<SecretRule> signatureRules = new ArrayList<>();   // interesting-response signatures
     private final List<JsLinkRule> jsLinkRules = new ArrayList<>();
     private final List<TechRule> techRules = new ArrayList<>();
     private final List<String> securityHeaders = new ArrayList<>();
     private final List<String> loadErrors = new ArrayList<>();
 
     public List<SecretRule> secretRules() { return secretRules; }
+    public List<SecretRule> signatureRules() { return signatureRules; }
     public List<JsLinkRule> jsLinkRules() { return jsLinkRules; }
     public List<TechRule> techRules() { return techRules; }
     public List<String> securityHeaders() { return securityHeaders; }
@@ -72,6 +74,7 @@ public final class PatternRegistry {
         PatternRegistry r = new PatternRegistry();
         Gson gson = new Gson();
         r.loadSecrets(gson);
+        r.loadSignatures(gson);
         r.loadJsLinks(gson);
         r.loadTech(gson);
         return r;
@@ -108,6 +111,21 @@ public final class PatternRegistry {
                 secretRules.add(new SecretRule(raw.name, sev, Pattern.compile(raw.regex)));
             } catch (PatternSyntaxException e) {
                 loadErrors.add("secrets[" + raw.name + "]: " + e.getMessage());
+            }
+        }
+    }
+
+    private void loadSignatures(Gson gson) {
+        SecretsFile f = read(gson, "/patterns/interesting.json", SecretsFile.class);
+        if (f == null || f.patterns == null) {
+            return;
+        }
+        for (SecretsFile.Raw raw : f.patterns) {
+            try {
+                Finding.Severity sev = parseSeverity(raw.severity);
+                signatureRules.add(new SecretRule(raw.name, sev, Pattern.compile(raw.regex)));
+            } catch (PatternSyntaxException e) {
+                loadErrors.add("interesting[" + raw.name + "]: " + e.getMessage());
             }
         }
     }

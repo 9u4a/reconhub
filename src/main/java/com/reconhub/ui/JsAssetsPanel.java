@@ -1,5 +1,6 @@
 package com.reconhub.ui;
 
+import burp.api.montoya.MontoyaApi;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.JsAsset;
 
@@ -13,8 +14,14 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
 
     private final DataStore store;
 
-    public JsAssetsPanel(DataStore store) {
+    public JsAssetsPanel(DataStore store, MontoyaApi api) {
+        super(api);
         this.store = store;
+    }
+
+    @Override
+    protected String rowUrl(JsAsset a) {
+        return a != null && a.getUrl() != null && a.getUrl().startsWith("http") ? a.getUrl() : null;
     }
 
     @Override protected List<JsAsset> supplyRows() { return store.snapshotJsAssets(); }

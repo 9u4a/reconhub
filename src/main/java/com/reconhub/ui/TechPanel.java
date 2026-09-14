@@ -1,5 +1,6 @@
 package com.reconhub.ui;
 
+import burp.api.montoya.MontoyaApi;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.TechInfo;
 
@@ -12,8 +13,14 @@ public final class TechPanel extends AbstractTablePanel<TechInfo> {
 
     private final DataStore store;
 
-    public TechPanel(DataStore store) {
+    public TechPanel(DataStore store, MontoyaApi api) {
+        super(api);
         this.store = store;
+    }
+
+    @Override
+    protected String rowUrl(TechInfo t) {
+        return t != null && !t.getHost().isBlank() ? "https://" + t.getHost() : null;
     }
 
     @Override protected List<TechInfo> supplyRows() { return store.snapshotTech(); }

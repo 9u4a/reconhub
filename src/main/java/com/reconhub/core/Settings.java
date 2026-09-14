@@ -18,6 +18,11 @@ public final class Settings {
             Paths.get(System.getProperty("user.home"), "reconhub", "js");
     private volatile boolean scanResponsesForSecrets = true;
     private volatile boolean liveCaptureEnabled = true;
+    private volatile boolean runPassiveChecks = true;     // interesting responses, misconfig, comments
+    private volatile boolean ignoreStaticAssets = true;   // skip img/css/font/media (never JS)
+    private volatile boolean autoIngestOnLoad = true;     // sweep site map when the extension loads
+    private volatile String scopeIncludeRegex = "";       // extra include filter (empty = off)
+    private volatile String scopeExcludeRegex = "";       // extra exclude filter (empty = off)
 
     public ScopeMode getScopeMode() { return scopeMode; }
     public void setScopeMode(ScopeMode m) { this.scopeMode = m; }
@@ -33,4 +38,19 @@ public final class Settings {
 
     public boolean isLiveCaptureEnabled() { return liveCaptureEnabled; }
     public void setLiveCaptureEnabled(boolean b) { this.liveCaptureEnabled = b; }
+
+    public boolean isRunPassiveChecks() { return runPassiveChecks; }
+    public void setRunPassiveChecks(boolean b) { this.runPassiveChecks = b; }
+
+    public boolean isIgnoreStaticAssets() { return ignoreStaticAssets; }
+    public void setIgnoreStaticAssets(boolean b) { this.ignoreStaticAssets = b; }
+
+    public boolean isAutoIngestOnLoad() { return autoIngestOnLoad; }
+    public void setAutoIngestOnLoad(boolean b) { this.autoIngestOnLoad = b; }
+
+    public String getScopeIncludeRegex() { return scopeIncludeRegex; }
+    public void setScopeIncludeRegex(String s) { this.scopeIncludeRegex = s == null ? "" : s; }
+
+    public String getScopeExcludeRegex() { return scopeExcludeRegex; }
+    public void setScopeExcludeRegex(String s) { this.scopeExcludeRegex = s == null ? "" : s; }
 }

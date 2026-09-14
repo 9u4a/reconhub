@@ -1,33 +1,26 @@
 package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
-import burp.api.montoya.http.message.requests.HttpRequest;
+import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Endpoint;
 
-import javax.swing.JMenuItem;
-import javax.swing.JOptionPane;
-import javax.swing.JPopupMenu;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.util.List;
 
-/** Table of deduplicated endpoints, with a right-click "Send to Repeater" action. */
+/** Table of deduplicated endpoints with the request/response viewer and shared row menu. */
 public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
 
     private static final String[] COLS =
             {"Method", "Host", "Path", "Status", "Content-Type", "Params", "Source"};
 
     private final DataStore store;
-    private final MontoyaApi api;
     private final MessageViewer viewer;
 
     public EndpointsPanel(DataStore store, MontoyaApi api) {
+        super(api);
         this.store = store;
-        this.api = api;
         this.viewer = new MessageViewer(api);
         installDetail(viewer);
-        installContextMenu();
     }
 
     @Override
@@ -54,49 +47,14 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
         viewer.setInfo(info.toString());
     }
 
-    private void installContextMenu() {
-        JPopupMenu menu = new JPopupMenu();
-        JMenuItem toRepeater = new JMenuItem("Send to Repeater");
-        toRepeater.addActionListener(e -> sendSelectedToRepeater());
-        menu.add(toRepeater);
-
-        table.addMouseListener(new MouseAdapter() {
-            @Override public void mousePressed(MouseEvent e) { maybeShow(e); }
-            @Override public void mouseReleased(MouseEvent e) { maybeShow(e); }
-            private void maybeShow(MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    int row = table.rowAtPoint(e.getPoint());
-                    if (row >= 0 && !table.isRowSelected(row)) {
-                        table.setRowSelectionInterval(row, row);
-                    }
-                    menu.show(table, e.getX(), e.getY());
-                }
-            }
-        });
+    @Override
+    protected String rowUrl(Endpoint e) {
+        return e != null && e.getNormalizedUrl().startsWith("http") ? e.getNormalizedUrl() : null;
     }
 
-    private void sendSelectedToRepeater() {
-        Endpoint ep = rowAt(table.getSelectedRow());
-        if (ep == null) {
-            return;
-        }
-        String url = ep.getNormalizedUrl();
-        if (!url.startsWith("http")) {
-            JOptionPane.showMessageDialog(this,
-                    "This entry is a relative/JS-discovered path and has no absolute URL:\n" + url,
-                    "Cannot send to Repeater", JOptionPane.WARNING_MESSAGE);
-            return;
-        }
-        try {
-            HttpRequest request = HttpRequest.httpRequestFromUrl(url);
-            if (!"GET".equalsIgnoreCase(ep.getMethod()) && !"JS".equals(ep.getMethod())) {
-                request = request.withMethod(ep.getMethod());
-            }
-            api.repeater().sendToRepeater(request, "ReconHub: " + ep.getPath());
-        } catch (RuntimeException ex) {
-            JOptionPane.showMessageDialog(this, "Failed to send: " + ex.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
-        }
+    @Override
+    protected HttpRequestResponse rowMessages(Endpoint e) {
+        return e == null ? null : e.getMessages();
     }
 
     @Override protected boolean supportsBodySearch() { return true; }

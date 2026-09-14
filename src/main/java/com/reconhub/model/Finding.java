@@ -18,12 +18,23 @@ public final class Finding {
     private final String evidence;     // short surrounding snippet
     private volatile int timesSeen;
 
+    /** Sensitive finding (e.g. a secret): the value is masked for display. */
     public Finding(String type, Severity severity, String rawMatch,
                    String locationUrl, String evidence) {
+        this(type, severity, rawMatch, locationUrl, evidence, true);
+    }
+
+    /**
+     * @param sensitive when false the value is not shown (the detail lives in {@code evidence}); use
+     *                  for non-secret findings like misconfigurations, signatures and comments where
+     *                  {@code rawMatch} is only a dedup key.
+     */
+    public Finding(String type, Severity severity, String rawMatch,
+                   String locationUrl, String evidence, boolean sensitive) {
         this.type = type;
         this.severity = severity;
         this.rawMatch = rawMatch;
-        this.masked = mask(rawMatch);
+        this.masked = sensitive ? mask(rawMatch) : "";
         this.locationUrl = locationUrl;
         this.evidence = evidence;
         this.timesSeen = 1;
