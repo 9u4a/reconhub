@@ -2,15 +2,19 @@ package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
+import com.reconhub.analysis.JwtDecoder;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Finding;
 
 import javax.swing.JComponent;
+import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
 import java.awt.Component;
 import java.awt.Font;
 import java.util.List;
 
-/** Findings table with the request/response viewer and severity color-coding. */
+/** Findings table with the request/response viewer, a JWT-decode tab, and severity color-coding. */
 public final class FindingsPanel extends AbstractTablePanel<Finding> {
 
     private static final String[] COLS =
@@ -18,12 +22,23 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
 
     private final DataStore store;
     private final MessageViewer viewer;
+    private final JTabbedPane detailTabs = new JTabbedPane();
+    private final JTextArea jwtArea = new JTextArea();
+    private static final int JWT_TAB = 1;
 
     public FindingsPanel(DataStore store, MontoyaApi api) {
         super(api);
         this.store = store;
         this.viewer = new MessageViewer(api);
-        installDetail(viewer);
+
+        jwtArea.setEditable(false);
+        jwtArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        jwtArea.setLineWrap(true);
+        jwtArea.setWrapStyleWord(true);
+
+        detailTabs.addTab("Message", viewer);
+        detailTabs.addTab("JWT", new JScrollPane(jwtArea));
+        installDetail(detailTabs, viewer);
     }
 
     @Override
@@ -31,8 +46,11 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         if (f == null) {
             viewer.show(null);
             viewer.setInfo(" ");
+            jwtArea.setText("");
+            detailTabs.setTitleAt(JWT_TAB, "JWT");
             return;
         }
+        updateJwtTab(f);
         viewer.show(f.getMessages());
         StringBuilder sb = new StringBuilder();
         sb.append('[').append(f.getSeverity().name()).append("] ").append(f.getType());
@@ -78,6 +96,22 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
                 default -> null;
             };
             jc.setToolTipText(tip == null || tip.isBlank() ? null : tip);
+        }
+    }
+
+    /** Populates the JWT tab if the finding carries a JWT (in its value or evidence). */
+    private void updateJwtTab(Finding f) {
+        String token = JwtDecoder.findFirst(f.getRawMatch());
+        if (token == null) {
+            token = JwtDecoder.findFirst(f.getEvidence());
+        }
+        if (token != null) {
+            jwtArea.setText(JwtDecoder.decode(token));
+            jwtArea.setCaretPosition(0);
+            detailTabs.setTitleAt(JWT_TAB, "JWT ✓");
+        } else {
+            jwtArea.setText("No JWT in this finding.");
+            detailTabs.setTitleAt(JWT_TAB, "JWT");
         }
     }
 

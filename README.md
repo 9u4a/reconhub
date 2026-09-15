@@ -14,7 +14,7 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 | **Dashboard** | 요청·엔드포인트·파라미터·Findings·JS·호스트 카운트, 심각도별 요약, 상위 호스트/상태코드/콘텐츠타입 막대 차트 |
 | **Endpoints** | method + 정규화 URL로 dedup한 엔드포인트 인벤토리(출처: proxy/sitemap/js/**spec**). 행 선택 시 하단에 Request/Response 표시, 우클릭 → **Send to Repeater** |
 | **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie) — 경로·유형·**취약점 후보 클래스(IDOR·Redirect/SSRF·File/Path·SQLi·Command·Secret/Token·Debug)**·예시값·반사 여부·Seen. 행 선택 시 매칭 Request/Response 표시 |
-| **Findings** | 시크릿/민감정보(AWS·Google·GitHub·Slack 키, JWT, private key, S3, 이메일, 내부 IP) + 흥미로운 응답(스택트레이스·SQL 에러·디버그·디렉터리 리스팅) + 보안 미스컨피그(CORS·쿠키 플래그) + 권한 값(role/admin/permissions 등) + **API 스펙 노출(OpenAPI/Swagger)·GraphQL introspection** + HTML/JS 주석, 심각도 정렬. 행 우클릭으로 Repeater/Intruder 전송 |
+| **Findings** | 시크릿/민감정보(AWS·Google·GitHub·Slack 키, JWT, private key, S3, 이메일, 내부 IP) + **PII(주민등록번호·카드번호(Luhn)·휴대전화)** + 흥미로운 응답(스택트레이스·SQL 에러·디버그·디렉터리 리스팅) + 보안 미스컨피그(CORS·쿠키 플래그·**CSP 약점**) + 권한 값(role/admin/permissions 등) + **API 스펙 노출(OpenAPI/Swagger)·GraphQL introspection** + HTML/JS 주석, 심각도 정렬. 행 선택 시 **JWT 디코드 탭**(헤더·클레임·만료·alg 경고), 우클릭으로 Repeater/Intruder 전송 |
 | **JS Assets** | 수집한 JS를 SHA-256 해시로 dedup 저장, JS 내 엔드포인트·시크릿 추출. 출처 JS 파일 기록 |
 | **Tech** | 헤더/쿠키/JS 라이브러리 기반 호스트별 기술 식별 + 보안 헤더 누락 체크리스트 |
 | **Settings** | 스코프 모드/정규식, 패시브 검사·정적자산 제외·자동 Ingest 토글, JS 저장 폴더, 라이브 캡처/시크릿 스캔, Ingest Site Map, Clear, Export JSON/HTML, State Export/Import(백업·복원) |
@@ -43,6 +43,11 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 1.9.0
+- **PII 탐지(한국 특화)**: 응답에서 **주민등록번호**(날짜·체크섬 검증), **카드번호**(Luhn 검증), **휴대전화**를 Findings에 추가(민감값이라 리포트에선 마스킹). 검증을 거쳐 오탐 최소화. `Run passive checks` 토글에 포함.
+- **JWT 디코드 뷰**: Findings 행 선택 시 상세의 **JWT 탭**에서 헤더·페이로드(pretty JSON)·주요 클레임(iss/sub/exp 등, 시간 사람이 읽게)·경고(`alg:none`, 만료, 장기 토큰)를 표시(서명 검증 없이 디코드만).
+- **CSP 약점 분석**: `Content-Security-Policy`의 `unsafe-inline`/`unsafe-eval`, 와일드카드 소스, `frame-ancestors`/`object-src` 누락을 Findings로 보고.
 
 ### 1.8.0
 - **API 스펙·GraphQL 인식(passive)**: 히스토리에 이미 잡힌 **OpenAPI/Swagger JSON**을 파싱해 정의된 경로·메서드를 엔드포인트(출처 `spec`)로, query/header/cookie 파라미터를 Parameters 탭으로 흡수. 문서에만 있고 실제로 눌러보지 않은 경로 발견에 유용. **GraphQL** 엔드포인트 관찰 시 표시하고, 응답에 `__schema`가 노출되면(introspection 활성) MEDIUM Findings로 보고. 캡처된 응답만 사용(추가 요청 없음).

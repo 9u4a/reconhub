@@ -149,8 +149,16 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
      * The detail (request/response viewer) gets the larger default share and is resizable.
      */
     protected void installDetail(Component detail) {
-        if (detail instanceof MessageViewer mv) {
-            this.viewer = mv;
+        installDetail(detail, detail instanceof MessageViewer mv ? mv : null);
+    }
+
+    /**
+     * Same as {@link #installDetail(Component)}, but for a composite {@code detail} that embeds a
+     * {@link MessageViewer} — pass the viewer so search-term highlighting still targets it.
+     */
+    protected void installDetail(Component detail, MessageViewer viewerForHighlight) {
+        if (viewerForHighlight != null) {
+            this.viewer = viewerForHighlight;
         }
         remove(scrollPane);
         scrollPane.setMinimumSize(new Dimension(0, 0));
