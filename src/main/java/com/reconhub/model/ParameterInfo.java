@@ -2,6 +2,8 @@ package com.reconhub.model;
 
 import burp.api.montoya.http.message.HttpRequestResponse;
 
+import java.net.URI;
+
 /**
  * A deduplicated parameter observed on a specific endpoint.
  *
@@ -22,6 +24,7 @@ public final class ParameterInfo {
     private volatile boolean reflected;    // example value seen echoed back in a response
     private volatile int seen;             // number of requests in which this parameter appeared
     private volatile HttpRequestResponse messages;   // representative request/response
+    private volatile String host;          // derived lazily from endpointKey
 
     public ParameterInfo(Location location, String name, String endpointKey, String endpointPath) {
         this.location = location;
@@ -57,6 +60,31 @@ public final class ParameterInfo {
     public void setReflected(boolean b) { this.reflected = b; }
     public void setSeen(int n) { this.seen = n; }
     public void setMessages(HttpRequestResponse m) { this.messages = m; }
+
+    /** Host of the owning endpoint, parsed from {@code endpointKey} (empty if not derivable). */
+    public String getHost() {
+        String h = host;
+        if (h == null) {
+            h = deriveHost(endpointKey);
+            host = h;
+        }
+        return h;
+    }
+
+    private static String deriveHost(String endpointKey) {
+        if (endpointKey == null || endpointKey.isBlank()) {
+            return "";
+        }
+        try {
+            URI u = URI.create(endpointKey);
+            if (u.getHost() != null) {
+                return u.getHost();
+            }
+        } catch (RuntimeException ignored) {
+            // non-URL key -> no host
+        }
+        return "";
+    }
 
     public Location getLocation() { return location; }
     public String getName() { return name; }

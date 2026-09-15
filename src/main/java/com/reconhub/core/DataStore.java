@@ -164,7 +164,8 @@ public final class DataStore {
 
     public List<ParameterInfo> snapshotParameters() {
         List<ParameterInfo> l = new ArrayList<>(parameters.values());
-        l.sort(Comparator.comparing(ParameterInfo::getEndpointPath)
+        l.sort(Comparator.comparing(ParameterInfo::getHost)
+                .thenComparing(ParameterInfo::getEndpointPath)
                 .thenComparing(ParameterInfo::getName));
         return l;
     }

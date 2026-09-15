@@ -22,9 +22,10 @@ public final class PiiScanner {
     // Korean mobile phone: 01x-xxxx-xxxx (or 3-digit middle)
     private static final Pattern PHONE_KR =
             Pattern.compile("(?<![0-9])01[016789]-?\\d{3,4}-?\\d{4}(?![0-9])");
-    // Candidate payment card: 13-19 digits, optionally split by space/dash.
+    // Candidate payment card: 13-19 digits, optionally split by space/dash. Decimal points are
+    // excluded on both sides so parts of longer numbers/decimals aren't picked up.
     private static final Pattern CARD =
-            Pattern.compile("(?<![0-9])(?:\\d[ -]?){13,19}(?![0-9])");
+            Pattern.compile("(?<![0-9.])(?:\\d[ -]?){13,19}(?![0-9.])");
 
     private final DataStore store;
 
@@ -67,8 +68,8 @@ public final class PiiScanner {
         while (m.find() && hits < MAX_PER_RULE) {
             hits++;
             String digits = m.group().replaceAll("[ -]", "");
-            if (digits.length() >= 13 && digits.length() <= 19 && luhn(digits)) {
-                if (record("Payment card number (Luhn)", Finding.Severity.HIGH, m.group().trim(),
+            if (isPlausibleCard(digits)) {
+                if (record("Payment card number", Finding.Severity.HIGH, m.group().trim(),
                         url, rr)) {
                     found++;
                 }
@@ -98,6 +99,77 @@ public final class PiiScanner {
     }
 
     // ---- validation -----------------------------------------------------
+
+    /**
+     * A number is reported as a card only when it has a plausible length, passes Luhn, matches a
+     * known network's BIN range, and isn't an obviously synthetic run (all-same / sequential). The
+     * brand check is what removes most false positives: random Luhn-valid numbers rarely fall in a
+     * real BIN range.
+     */
+    static boolean isPlausibleCard(String d) {
+        int len = d.length();
+        if (len != 13 && len != 14 && len != 15 && len != 16 && len != 19) {
+            return false;
+        }
+        return luhn(d) && brandKnown(d) && !allSameDigit(d) && !isSequential(d);
+    }
+
+    /** Matches the leading digits/length against major card networks' issuer ranges. */
+    static boolean brandKnown(String d) {
+        int len = d.length();
+        int p2 = Integer.parseInt(d.substring(0, 2));
+        int p3 = Integer.parseInt(d.substring(0, 3));
+        int p4 = Integer.parseInt(d.substring(0, 4));
+
+        // Visa
+        if (d.charAt(0) == '4' && (len == 13 || len == 16 || len == 19)) {
+            return true;
+        }
+        // Mastercard: 51-55, or 2221-2720 (len 16)
+        if (len == 16 && ((p2 >= 51 && p2 <= 55) || (p4 >= 2221 && p4 <= 2720))) {
+            return true;
+        }
+        // American Express: 34/37 (len 15)
+        if (len == 15 && (p2 == 34 || p2 == 37)) {
+            return true;
+        }
+        // Discover: 6011, 65, 644-649 (len 16 or 19)
+        if ((len == 16 || len == 19)
+                && (d.startsWith("6011") || p2 == 65 || (p3 >= 644 && p3 <= 649))) {
+            return true;
+        }
+        // Diners Club: 36, 38, 300-305 (len 14)
+        if (len == 14 && (p2 == 36 || p2 == 38 || (p3 >= 300 && p3 <= 305))) {
+            return true;
+        }
+        // JCB: 3528-3589 (len 16)
+        return len == 16 && p4 >= 3528 && p4 <= 3589;
+    }
+
+    private static boolean allSameDigit(String d) {
+        for (int i = 1; i < d.length(); i++) {
+            if (d.charAt(i) != d.charAt(0)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** True for strictly ascending/descending consecutive-digit runs (e.g. 123456…, 9876…). */
+    private static boolean isSequential(String d) {
+        boolean asc = true;
+        boolean desc = true;
+        for (int i = 1; i < d.length(); i++) {
+            int diff = (d.charAt(i) - '0') - (d.charAt(i - 1) - '0');
+            if (diff != 1) {
+                asc = false;
+            }
+            if (diff != -1) {
+                desc = false;
+            }
+        }
+        return asc || desc;
+    }
 
     /** Luhn (mod-10) checksum for card numbers. */
     static boolean luhn(String digits) {

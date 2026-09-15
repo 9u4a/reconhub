@@ -121,10 +121,11 @@ public final class HtmlReporter {
             b.append("<p class=\"muted\">No parameters.</p></section>");
             return;
         }
-        b.append("<table><thead><tr><th>Endpoint</th><th>Type</th><th>Name</th><th>Class</th>"
-                + "<th>Example</th><th>Reflected</th><th>Seen</th></tr></thead><tbody>");
+        b.append("<table><thead><tr><th>Host</th><th>Endpoint</th><th>Type</th><th>Name</th>"
+                + "<th>Class</th><th>Example</th><th>Reflected</th><th>Seen</th></tr></thead><tbody>");
         for (ParameterInfo p : params) {
-            b.append("<tr><td><code>").append(esc(p.getEndpointPath())).append("</code></td><td><code>")
+            b.append("<tr><td>").append(esc(p.getHost())).append("</td><td><code>")
+                    .append(esc(p.getEndpointPath())).append("</code></td><td><code>")
                     .append(p.getLocation().name()).append("</code></td><td>")
                     .append(esc(p.getName())).append("</td><td>");
             for (String cls : ParameterClassifier.classify(p.getName())) {

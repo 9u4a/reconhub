@@ -78,6 +78,7 @@ public final class JsonExporter {
         List<Map<String, Object>> out = new ArrayList<>();
         for (ParameterInfo p : store.snapshotParameters()) {
             Map<String, Object> m = new LinkedHashMap<>();
+            m.put("host", p.getHost());
             m.put("endpoint", p.getEndpointPath());
             m.put("type", p.getLocation().name());
             m.put("name", p.getName());
