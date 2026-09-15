@@ -51,6 +51,7 @@ public final class HtmlReporter {
     private static String buildBody(DataStore store, ReportOptions options) {
         StringBuilder b = new StringBuilder();
         summarySection(b, store, options);
+        hostRiskSection(b, store, options);
         chartsSection(b, store);
         findingsSection(b, store, options);
         endpointsSection(b, store);
@@ -99,6 +100,58 @@ public final class HtmlReporter {
             }
         }
         b.append("</div></section>");
+    }
+
+    private static void hostRiskSection(StringBuilder b, DataStore store, ReportOptions options) {
+        java.util.Map<String, int[]> byHost = new java.util.TreeMap<>();   // [ep, H, M, L, I]
+        for (Endpoint e : store.snapshotEndpoints()) {
+            hostRow(byHost, hostLabel(e.getHost()))[0]++;
+        }
+        for (Finding f : filtered(store.snapshotFindings(), options)) {
+            hostRow(byHost, hostLabel(hostOf(f.getLocationUrl())))[1 + f.getSeverity().ordinal()]++;
+        }
+        b.append("<section id=\"hostrisk\"><h2>Host risk</h2>");
+        if (byHost.isEmpty()) {
+            b.append("<p class=\"muted\">No hosts.</p></section>");
+            return;
+        }
+        java.util.List<Object[]> rows = new java.util.ArrayList<>();
+        for (var e : byHost.entrySet()) {
+            int[] c = e.getValue();
+            int score = c[1] * 100 + c[2] * 10 + c[3];
+            rows.add(new Object[]{e.getKey(), c[0], c[1], c[2], c[3], c[4], score});
+        }
+        rows.sort(java.util.Comparator.comparingInt((Object[] r) -> (int) r[6]).reversed()
+                .thenComparing(r -> (int) r[1], java.util.Comparator.reverseOrder()));
+        b.append("<table><thead><tr><th>Host</th><th>Endpoints</th><th>High</th><th>Medium</th>"
+                + "<th>Low</th><th>Info</th><th>Score</th></tr></thead><tbody>");
+        for (Object[] r : rows) {
+            b.append("<tr><td>").append(esc((String) r[0])).append("</td><td>").append(r[1])
+                    .append("</td><td>").append(r[2]).append("</td><td>").append(r[3])
+                    .append("</td><td>").append(r[4]).append("</td><td>").append(r[5])
+                    .append("</td><td><b>").append(r[6]).append("</b></td></tr>");
+        }
+        b.append("</tbody></table></section>");
+    }
+
+    private static int[] hostRow(java.util.Map<String, int[]> m, String host) {
+        return m.computeIfAbsent(host, k -> new int[5]);
+    }
+
+    private static String hostLabel(String host) {
+        return host == null || host.isBlank() ? "(relative / JS)" : host;
+    }
+
+    private static String hostOf(String url) {
+        if (url == null || url.isBlank()) {
+            return "";
+        }
+        try {
+            String h = java.net.URI.create(url).getHost();
+            return h == null ? "" : h;
+        } catch (RuntimeException e) {
+            return "";
+        }
     }
 
     private static void chartsSection(StringBuilder b, DataStore store) {

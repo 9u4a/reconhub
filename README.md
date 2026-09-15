@@ -75,9 +75,10 @@
 
 **내보내기 / 백업** (Settings)
 
-- **Export JSON / HTML / Markdown** — 공유용 리포트. HTML은 상단에 **목차·행 검색·심각도 필터·섹션 접기**와
-  심각도 요약을 포함. HTML·Markdown은 **Confirmed only / Exclude false positives** 체크박스로 내보낼 범위를
-  트리아지 기준으로 좁힐 수 있음.
+- **Export JSON / HTML / Markdown / SARIF** — 공유용 리포트. HTML은 상단에 **목차·행 검색·심각도 필터·섹션
+  접기**와 심각도·카테고리 요약, **호스트별 위험 스코어카드**(엔드포인트·심각도별 건수·가중 점수)를 포함.
+  **SARIF 2.1.0**은 CI/코드 스캐닝용(시크릿 원문 미포함, 안정적 fingerprint). HTML·Markdown·SARIF 모두
+  **Confirmed only / Exclude false positives** 체크박스로 내보낼 범위를 트리아지 기준으로 좁힐 수 있음.
 - **워드리스트(Paths / Param names / Hosts)** — ffuf·Intruder용 텍스트(정렬·중복 제거).
 - **State Export / Import** — 수집 데이터 전체를 백업/복원(프로젝트 이동용). 원본 request/response 포함
   여부 선택 가능하며, Import 시 교체/병합 선택.
@@ -92,6 +93,10 @@
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 0.23.0
+- **리포트 강화**: HTML/Markdown 리포트에 **호스트별 위험 스코어카드**(호스트별 엔드포인트·High/Medium/Low/Info 건수·가중 점수, 점수 내림차순) 추가. HTML은 목차에 Host risk 링크 포함.
+- **SARIF 2.1.0 내보내기**: Settings에 **Export SARIF…** 추가 — CI/코드 스캐닝 수집용. 심각도→level(error/warning/note) 매핑, 규칙(유형)·위치(URL)·안정적 partialFingerprint 포함, **시크릿 원문은 미포함**(마스킹 값·해시 fingerprint). Confirmed only/Exclude FP 옵션 반영.
 
 ### 0.22.0
 - **Findings 노이즈 제어**: **Settings → Findings display**에 **최소 심각도 임계값**과 **카테고리 뮤트** 추가 — 수집 데이터는 유지한 채 Findings 탭 표시만 필터. 카테고리 필터 콤보에 **카테고리별 건수**를 실시간 표시(그룹 개요 + 드릴다운).

@@ -40,6 +40,7 @@ public final class MarkdownReporter {
                 .append("_\n\n");
 
         summary(b, store, opt);
+        hostRisk(b, store, opt);
         findings(b, store, opt);
         endpoints(b, store);
         parameters(b, store);
@@ -71,6 +72,54 @@ public final class MarkdownReporter {
             parts.add(s.name() + " " + sev.getOrDefault(s, 0));
         }
         b.append(String.join(" · ", parts)).append("\n\n");
+    }
+
+    private static void hostRisk(StringBuilder b, DataStore store, ReportOptions opt) {
+        java.util.Map<String, int[]> byHost = new java.util.TreeMap<>();   // [ep, H, M, L, I]
+        for (Endpoint e : store.snapshotEndpoints()) {
+            byHost.computeIfAbsent(hostLabel(e.getHost()), k -> new int[5])[0]++;
+        }
+        for (Finding f : filtered(store.snapshotFindings(), opt)) {
+            byHost.computeIfAbsent(hostLabel(hostOf(f.getLocationUrl())), k -> new int[5])
+                    [1 + f.getSeverity().ordinal()]++;
+        }
+        b.append("## Host risk\n\n");
+        if (byHost.isEmpty()) {
+            b.append("_No hosts._\n\n");
+            return;
+        }
+        java.util.List<Object[]> rows = new java.util.ArrayList<>();
+        for (var e : byHost.entrySet()) {
+            int[] c = e.getValue();
+            rows.add(new Object[]{e.getKey(), c[0], c[1], c[2], c[3], c[4],
+                    c[1] * 100 + c[2] * 10 + c[3]});
+        }
+        rows.sort(java.util.Comparator.comparingInt((Object[] r) -> (int) r[6]).reversed()
+                .thenComparing(r -> (int) r[1], java.util.Comparator.reverseOrder()));
+        b.append("| Host | Endpoints | High | Medium | Low | Info | Score |\n"
+                + "| --- | --- | --- | --- | --- | --- | --- |\n");
+        for (Object[] r : rows) {
+            b.append("| ").append(md((String) r[0])).append(" | ").append(r[1]).append(" | ")
+                    .append(r[2]).append(" | ").append(r[3]).append(" | ").append(r[4])
+                    .append(" | ").append(r[5]).append(" | ").append(r[6]).append(" |\n");
+        }
+        b.append('\n');
+    }
+
+    private static String hostLabel(String host) {
+        return host == null || host.isBlank() ? "(relative / JS)" : host;
+    }
+
+    private static String hostOf(String url) {
+        if (url == null || url.isBlank()) {
+            return "";
+        }
+        try {
+            String h = java.net.URI.create(url).getHost();
+            return h == null ? "" : h;
+        } catch (RuntimeException e) {
+            return "";
+        }
     }
 
     private static void findings(StringBuilder b, DataStore store, ReportOptions opt) {

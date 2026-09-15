@@ -11,6 +11,7 @@ import com.reconhub.export.HtmlReporter;
 import com.reconhub.export.JsonExporter;
 import com.reconhub.export.MarkdownReporter;
 import com.reconhub.export.ReportOptions;
+import com.reconhub.export.SarifExporter;
 import com.reconhub.export.StateSerializer;
 import com.reconhub.export.WordlistExporter;
 
@@ -200,6 +201,9 @@ public final class SettingsPanel extends JPanel {
         html.addActionListener(e -> exportHtml());
         JButton md = new JButton("Export Markdown…");
         md.addActionListener(e -> exportMarkdown());
+        JButton sarif = new JButton("Export SARIF…");
+        sarif.setToolTipText("SARIF 2.1.0 for CI / code-scanning (respects the scope options)");
+        sarif.addActionListener(e -> exportSarif());
         reportConfirmedOnly.setToolTipText("HTML/Markdown export: include only Confirmed findings");
         reportExcludeFp.setToolTipText("HTML/Markdown export: drop findings marked False positive");
         p.add(ingestButton);
@@ -208,6 +212,7 @@ public final class SettingsPanel extends JPanel {
         p.add(json);
         p.add(html);
         p.add(md);
+        p.add(sarif);
         p.add(Box.createHorizontalStrut(10));
         p.add(reportConfirmedOnly);
         p.add(reportExcludeFp);
@@ -432,6 +437,15 @@ public final class SettingsPanel extends JPanel {
         }
         ReportOptions opts = reportOptions();
         runExport(() -> MarkdownReporter.export(store, f.toPath(), opts), f);
+    }
+
+    private void exportSarif() {
+        File f = chooseSaveFile("reconhub.sarif");
+        if (f == null) {
+            return;
+        }
+        ReportOptions opts = reportOptions();
+        runExport(() -> SarifExporter.export(store, f.toPath(), opts), f);
     }
 
     private void exportState() {
