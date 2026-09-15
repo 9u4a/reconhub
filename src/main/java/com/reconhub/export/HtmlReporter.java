@@ -23,8 +23,12 @@ public final class HtmlReporter {
     private HtmlReporter() {}
 
     public static void export(DataStore store, Path file) throws IOException {
+        export(store, file, ReportOptions.all());
+    }
+
+    public static void export(DataStore store, Path file, ReportOptions options) throws IOException {
         String template = loadTemplate();
-        String body = buildBody(store);
+        String body = buildBody(store, options == null ? ReportOptions.all() : options);
         String html = template
                 .replace("{{GENERATED_AT}}",
                         ZonedDateTime.now().format(DateTimeFormatter.RFC_1123_DATE_TIME))
@@ -43,10 +47,10 @@ public final class HtmlReporter {
         }
     }
 
-    private static String buildBody(DataStore store) {
+    private static String buildBody(DataStore store, ReportOptions options) {
         StringBuilder b = new StringBuilder();
-        summarySection(b, store);
-        findingsSection(b, store);
+        summarySection(b, store, options);
+        findingsSection(b, store, options);
         endpointsSection(b, store);
         parametersSection(b, store);
         jsSection(b, store);
@@ -54,14 +58,28 @@ public final class HtmlReporter {
         return b.toString();
     }
 
-    private static void summarySection(StringBuilder b, DataStore store) {
-        b.append("<section><h2>Summary</h2><div class=\"cards\">");
+    private static void summarySection(StringBuilder b, DataStore store, ReportOptions options) {
+        b.append("<section id=\"summary\"><h2>Summary</h2><div class=\"cards\">");
         card(b, store.getRequestsProcessed(), "Requests");
         card(b, store.snapshotEndpoints().size(), "Endpoints");
         card(b, store.snapshotParameters().size(), "Parameters");
         card(b, store.snapshotFindings().size(), "Findings");
         card(b, store.snapshotJsAssets().size(), "JS files");
         card(b, store.snapshotTech().size(), "Hosts");
+        b.append("</div>");
+
+        // Severity summary over the findings that pass the report filter.
+        var shown = filtered(store.snapshotFindings(), options);
+        java.util.EnumMap<Finding.Severity, Integer> sev =
+                new java.util.EnumMap<>(Finding.Severity.class);
+        for (Finding f : shown) {
+            sev.merge(f.getSeverity(), 1, Integer::sum);
+        }
+        b.append("<div class=\"sevsummary\">");
+        for (Finding.Severity s : Finding.Severity.values()) {
+            b.append("<span class=\"sev ").append(s.name()).append("\">").append(s.name())
+                    .append(' ').append(sev.getOrDefault(s, 0)).append("</span>");
+        }
         b.append("</div>");
 
         b.append("<div style=\"display:flex;gap:32px;flex-wrap:wrap;margin-top:16px\">");
@@ -71,17 +89,19 @@ public final class HtmlReporter {
         b.append("</div></section>");
     }
 
-    private static void findingsSection(StringBuilder b, DataStore store) {
-        b.append("<section><h2>Findings &amp; Secrets</h2>");
-        var findings = store.snapshotFindings();
+    private static void findingsSection(StringBuilder b, DataStore store, ReportOptions options) {
+        b.append("<section id=\"findings\"><h2>Findings &amp; Secrets</h2>");
+        var findings = filtered(store.snapshotFindings(), options);
         if (findings.isEmpty()) {
             b.append("<p class=\"muted\">No findings.</p></section>");
             return;
         }
-        b.append("<table><thead><tr><th>Severity</th><th>Type</th><th>Value</th>"
+        b.append("<table id=\"findings-table\"><thead><tr><th>Severity</th><th>Type</th><th>Value</th>"
                 + "<th>Location</th><th>Evidence</th><th>Seen</th><th>Status</th></tr></thead><tbody>");
         for (Finding f : findings) {
-            b.append("<tr><td><span class=\"sev ").append(f.getSeverity().name()).append("\">")
+            b.append("<tr data-sev=\"").append(f.getSeverity().name())
+                    .append("\" data-triage=\"").append(f.getTriage().name()).append("\">")
+                    .append("<td><span class=\"sev ").append(f.getSeverity().name()).append("\">")
                     .append(f.getSeverity().name()).append("</span></td><td>")
                     .append(esc(f.getType())).append("</td><td><code>")
                     .append(esc(f.getMasked())).append("</code></td><td><code>")
@@ -94,7 +114,7 @@ public final class HtmlReporter {
     }
 
     private static void endpointsSection(StringBuilder b, DataStore store) {
-        b.append("<section><h2>Endpoints</h2>");
+        b.append("<section id=\"endpoints\"><h2>Endpoints</h2>");
         var endpoints = store.snapshotEndpoints();
         if (endpoints.isEmpty()) {
             b.append("<p class=\"muted\">No endpoints.</p></section>");
@@ -115,7 +135,7 @@ public final class HtmlReporter {
     }
 
     private static void parametersSection(StringBuilder b, DataStore store) {
-        b.append("<section><h2>Parameters</h2>");
+        b.append("<section id=\"parameters\"><h2>Parameters</h2>");
         var params = store.snapshotParameters();
         if (params.isEmpty()) {
             b.append("<p class=\"muted\">No parameters.</p></section>");
@@ -141,7 +161,7 @@ public final class HtmlReporter {
     }
 
     private static void jsSection(StringBuilder b, DataStore store) {
-        b.append("<section><h2>JavaScript Files</h2>");
+        b.append("<section id=\"js\"><h2>JavaScript Files</h2>");
         var assets = store.snapshotJsAssets();
         if (assets.isEmpty()) {
             b.append("<p class=\"muted\">No JS files collected.</p></section>");
@@ -160,7 +180,7 @@ public final class HtmlReporter {
     }
 
     private static void techSection(StringBuilder b, DataStore store) {
-        b.append("<section><h2>Technologies &amp; Security Headers</h2>");
+        b.append("<section id=\"tech\"><h2>Technologies &amp; Security Headers</h2>");
         var techs = store.snapshotTech();
         if (techs.isEmpty()) {
             b.append("<p class=\"muted\">No technology data.</p></section>");
@@ -184,6 +204,20 @@ public final class HtmlReporter {
     }
 
     // ---- helpers --------------------------------------------------------
+
+    private static java.util.List<Finding> filtered(java.util.List<Finding> findings,
+                                                    ReportOptions options) {
+        if (options == null) {
+            return findings;
+        }
+        java.util.List<Finding> out = new java.util.ArrayList<>();
+        for (Finding f : findings) {
+            if (options.includes(f)) {
+                out.add(f);
+            }
+        }
+        return out;
+    }
 
     private static void card(StringBuilder b, int n, String label) {
         b.append("<div class=\"card\"><div class=\"n\">").append(n)

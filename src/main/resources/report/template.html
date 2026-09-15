@@ -16,14 +16,31 @@
   header { padding: 24px 32px; border-bottom: 1px solid var(--line); }
   h1 { margin: 0 0 4px; font-size: 22px; }
   .sub { color: var(--muted); font-size: 13px; }
+  /* Sticky toolbar: section jump links + live search + severity filter. */
+  nav.toc { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap;
+    align-items: center; gap: 8px 14px; padding: 10px 32px; background: #12161c;
+    border-bottom: 1px solid var(--line); }
+  nav.toc a { color: var(--muted); text-decoration: none; font-size: 13px; }
+  nav.toc a:hover { color: var(--fg); }
+  nav.toc .spacer { flex: 1; }
+  nav.toc input[type=search] { background: var(--panel); border: 1px solid var(--line);
+    color: var(--fg); border-radius: 6px; padding: 5px 10px; font-size: 13px; min-width: 200px; }
+  nav.toc label { font-size: 12px; color: var(--muted); cursor: pointer; user-select: none; }
   main { padding: 24px 32px; max-width: 1360px; }
   section { margin-bottom: 36px; }
-  h2 { font-size: 16px; border-left: 3px solid var(--accent); padding-left: 10px; margin: 0 0 14px; }
+  h2 { font-size: 16px; border-left: 3px solid var(--accent); padding-left: 10px; margin: 0 0 14px;
+    cursor: pointer; }
+  h2::before { content: "\25be"; display: inline-block; width: 14px; color: var(--muted);
+    font-size: 12px; }
+  section.collapsed h2::before { content: "\25b8"; }
+  section.collapsed > *:not(h2) { display: none; }
   .cards { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
     padding: 14px 18px; min-width: 130px; }
   .card .n { font-size: 24px; font-weight: 700; }
   .card .l { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .sevsummary { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
+  .sevsummary .sev { font-size: 12px; }
   table { width: 100%; border-collapse: collapse; background: var(--panel);
     border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
     table-layout: auto; }
@@ -31,9 +48,10 @@
     vertical-align: top; white-space: normal; word-break: break-word;
     overflow-wrap: anywhere; }
   th { background: #1c2129; color: var(--muted); font-weight: 600; font-size: 12px;
-    text-transform: uppercase; letter-spacing: .03em; position: sticky; top: 0;
+    text-transform: uppercase; letter-spacing: .03em; position: sticky; top: 44px;
     white-space: nowrap; }
   tr:last-child td { border-bottom: none; }
+  tr.hidden { display: none; }
   code { font-family: "SF Mono", Consolas, monospace; font-size: 12px; color: #c9d4e3;
     white-space: pre-wrap; word-break: break-all; overflow-wrap: anywhere; }
   .sev { font-weight: 700; padding: 2px 8px; border-radius: 999px; font-size: 11px; }
@@ -50,6 +68,7 @@
     border-radius: 6px; padding: 1px 8px; margin: 2px 4px 2px 0; font-size: 12px; }
   .muted { color: var(--muted); }
   .yes { color: var(--high); font-weight: 700; }
+  .nores { color: var(--muted); font-style: italic; padding: 8px 0; }
   footer { padding: 20px 32px; color: var(--muted); font-size: 12px;
     border-top: 1px solid var(--line); }
 </style>
@@ -59,9 +78,62 @@
   <h1>ReconHub Report</h1>
   <div class="sub">Generated {{GENERATED_AT}}</div>
 </header>
+<nav class="toc">
+  <a href="#summary">Summary</a>
+  <a href="#findings">Findings</a>
+  <a href="#endpoints">Endpoints</a>
+  <a href="#parameters">Parameters</a>
+  <a href="#js">JS</a>
+  <a href="#tech">Tech</a>
+  <span class="spacer"></span>
+  <input type="search" id="q" placeholder="Filter rows&hellip;" aria-label="Filter table rows">
+  <span id="sevfilter">
+    <label><input type="checkbox" class="sevbox" value="HIGH" checked> High</label>
+    <label><input type="checkbox" class="sevbox" value="MEDIUM" checked> Medium</label>
+    <label><input type="checkbox" class="sevbox" value="LOW" checked> Low</label>
+    <label><input type="checkbox" class="sevbox" value="INFO" checked> Info</label>
+  </span>
+</nav>
 <main>
 {{BODY}}
 </main>
 <footer>ReconHub &mdash; Burp Suite recon aggregation extension.</footer>
+<script>
+(function () {
+  var q = document.getElementById("q");
+  var sevboxes = Array.prototype.slice.call(document.querySelectorAll(".sevbox"));
+
+  function activeSev() {
+    var on = {};
+    sevboxes.forEach(function (b) { if (b.checked) on[b.value] = true; });
+    return on;
+  }
+
+  function apply() {
+    var term = (q.value || "").toLowerCase();
+    var sev = activeSev();
+    document.querySelectorAll("table").forEach(function (tbl) {
+      var isFindings = tbl.id === "findings-table";
+      tbl.querySelectorAll("tbody tr").forEach(function (tr) {
+        var show = true;
+        if (isFindings) {
+          var s = tr.getAttribute("data-sev");
+          if (s && !sev[s]) { show = false; }
+        }
+        if (show && term) { show = tr.textContent.toLowerCase().indexOf(term) !== -1; }
+        tr.classList.toggle("hidden", !show);
+      });
+    });
+  }
+
+  q.addEventListener("input", apply);
+  sevboxes.forEach(function (b) { b.addEventListener("change", apply); });
+
+  // Collapsible sections (click the heading).
+  document.querySelectorAll("section > h2").forEach(function (h) {
+    h.addEventListener("click", function () { h.parentNode.classList.toggle("collapsed"); });
+  });
+})();
+</script>
 </body>
 </html>

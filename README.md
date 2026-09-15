@@ -71,7 +71,9 @@
 
 **내보내기 / 백업** (Settings)
 
-- **Export JSON / HTML** — 공유용 리포트.
+- **Export JSON / HTML / Markdown** — 공유용 리포트. HTML은 상단에 **목차·행 검색·심각도 필터·섹션 접기**와
+  심각도 요약을 포함. HTML·Markdown은 **Confirmed only / Exclude false positives** 체크박스로 내보낼 범위를
+  트리아지 기준으로 좁힐 수 있음.
 - **워드리스트(Paths / Param names / Hosts)** — ffuf·Intruder용 텍스트(정렬·중복 제거).
 - **State Export / Import** — 수집 데이터 전체를 백업/복원(프로젝트 이동용). 원본 request/response 포함
   여부 선택 가능하며, Import 시 교체/병합 선택.
@@ -86,6 +88,11 @@
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 1.18.0
+- **HTML 리포트 업그레이드**: 상단 sticky **목차/네비**(섹션 점프), **행 검색창**, **심각도 체크박스 필터**(High/Medium/Low/Info), 섹션 **접기/펼치기**, Summary에 **심각도 요약** 추가(외부 라이브러리 없이 인라인 JS/CSS).
+- **Markdown 리포트 추가**: 티켓·문서 붙여넣기용 `.md` 리포트(값은 HTML과 동일하게 마스킹).
+- **리포트 범위 옵션**: Settings에서 **Confirmed only / Exclude false positives** 체크로 HTML·Markdown 내보낼 Findings를 트리아지 기준으로 필터.
 
 ### 1.17.0
 - **엔드포인트 인증 관찰(접근제어 단서)**: 각 엔드포인트가 **Authorization/Cookie와 함께(auth) / 없이(anon) / 둘 다(both)** 관찰됐는지 기록해 Endpoints 탭 **Auth 컬럼**으로 표시. 인증 없이 2xx로 관찰된 엔드포인트는 경고색으로 강조되어(정렬 가능) 미인증 접근·IDOR 테스트 후보를 빠르게 식별. State 백업에 포함.

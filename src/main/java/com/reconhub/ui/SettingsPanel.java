@@ -7,6 +7,8 @@ import com.reconhub.core.Settings;
 import com.reconhub.core.TrafficIngestor;
 import com.reconhub.export.HtmlReporter;
 import com.reconhub.export.JsonExporter;
+import com.reconhub.export.MarkdownReporter;
+import com.reconhub.export.ReportOptions;
 import com.reconhub.export.StateSerializer;
 import com.reconhub.export.WordlistExporter;
 
@@ -51,6 +53,9 @@ public final class SettingsPanel extends JPanel {
     private final JProgressBar progress = new JProgressBar();
     private final JCheckBox includeMessages =
             new JCheckBox("Include raw request/response (larger file, keeps viewer/body-search)", true);
+    // Report scope (applies to HTML & Markdown export).
+    private final JCheckBox reportConfirmedOnly = new JCheckBox("Confirmed only", false);
+    private final JCheckBox reportExcludeFp = new JCheckBox("Exclude false positives", false);
 
     private final RulesModel rulesModel = new RulesModel();
     private JTable rulesTableRef;
@@ -185,12 +190,24 @@ public final class SettingsPanel extends JPanel {
         json.addActionListener(e -> exportJson());
         JButton html = new JButton("Export HTML…");
         html.addActionListener(e -> exportHtml());
+        JButton md = new JButton("Export Markdown…");
+        md.addActionListener(e -> exportMarkdown());
+        reportConfirmedOnly.setToolTipText("HTML/Markdown export: include only Confirmed findings");
+        reportExcludeFp.setToolTipText("HTML/Markdown export: drop findings marked False positive");
         p.add(ingestButton);
         p.add(clear);
         p.add(Box.createHorizontalStrut(16));
         p.add(json);
         p.add(html);
+        p.add(md);
+        p.add(Box.createHorizontalStrut(10));
+        p.add(reportConfirmedOnly);
+        p.add(reportExcludeFp);
         return p;
+    }
+
+    private ReportOptions reportOptions() {
+        return new ReportOptions(reportConfirmedOnly.isSelected(), reportExcludeFp.isSelected());
     }
 
     private JPanel wordlistRow() {
@@ -368,7 +385,17 @@ public final class SettingsPanel extends JPanel {
         if (f == null) {
             return;
         }
-        runExport(() -> HtmlReporter.export(store, f.toPath()), f);
+        ReportOptions opts = reportOptions();
+        runExport(() -> HtmlReporter.export(store, f.toPath(), opts), f);
+    }
+
+    private void exportMarkdown() {
+        File f = chooseSaveFile("reconhub-report.md");
+        if (f == null) {
+            return;
+        }
+        ReportOptions opts = reportOptions();
+        runExport(() -> MarkdownReporter.export(store, f.toPath(), opts), f);
     }
 
     private void exportState() {
