@@ -87,7 +87,9 @@ public final class DashboardPanel extends JPanel implements Refreshable {
     private final JLabel jsFiles = stat();
     private final JLabel hosts = stat();
 
-    private final JPanel severityRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 3));
+    // Plain FlowLayout (not WrapLayout): the four chips never split across lines — when they don't
+    // fit beside the pills the whole row drops to the next line as a single unit.
+    private final JPanel severityRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
     private final BarChartPanel hostChart = new BarChartPanel("", 8, ACCENT);
     private final JPanel classChips = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 4));
 
@@ -114,8 +116,8 @@ public final class DashboardPanel extends JPanel implements Refreshable {
 
     public DashboardPanel(DataStore store) {
         this.store = store;
-        setLayout(new BorderLayout(0, 14));
-        setBorder(BorderFactory.createEmptyBorder(14, 16, 14, 16));
+        setLayout(new BorderLayout(0, 12));
+        setBorder(BorderFactory.createEmptyBorder(8, 16, 14, 16));
 
         // --- compact single-line top strip: stat pills + severity chips (wraps when narrow) ---
         JPanel pills = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
@@ -126,7 +128,7 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         pills.add(pill("JS files", jsFiles));
         pills.add(pill("Hosts", hosts));
 
-        JPanel north = new JPanel(new WrapLayout(FlowLayout.LEFT, 12, 4));
+        JPanel north = new JPanel(new WrapLayout(FlowLayout.LEFT, 12, 2));
         north.add(pills);
         north.add(severityRow);
         add(north, BorderLayout.NORTH);

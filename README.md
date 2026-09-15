@@ -89,6 +89,9 @@
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
 
+### 0.19.3
+- **Dashboard 상단 정리**: 심각도 칩(HIGH/MEDIUM/LOW/INFO)이 좁은 폭에서 두 줄로 쪼개지지 않고 **항상 한 줄**로 유지되도록 변경(안 맞으면 pills 아래로 통째로 이동), 상단 세로 여백을 줄여 **위로 당김**.
+
 ### 0.19.2
 - **HTML 리포트 레이아웃 개선**: 콘텐츠를 **중앙정렬**(고정 최대폭 컬럼), **Top hosts·Status codes·Content types**를 하나의 접이식 **Distribution 섹션**으로 묶어 토글, 필터(검색+심각도)를 TOC와 분리해 **라벨 붙인 필터 그룹**으로 재배치(가시성·사용성 개선). TOC에 Charts 링크 추가.
 
