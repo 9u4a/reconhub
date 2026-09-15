@@ -16,7 +16,7 @@
 
 | 탭 | 설명 |
 |----|------|
-| **Dashboard** | 요청·엔드포인트·파라미터·Findings·JS·호스트 카운트, 심각도 요약, Top hosts 차트, **호스트 스코어카드(호스트별 엔드포인트·파라미터·Findings H/M/L/I·누락헤더)**, **Top Findings(유형별 건수)**, **주목 엔드포인트(고위험 파라미터·admin/api 경로)**, **파라미터 클래스 요약** |
+| **Dashboard** | 요청·엔드포인트·파라미터·Findings·JS·호스트 카운트(좁은 폭에서 자동 줄바꿈되는 컴팩트 상단 스트립), 심각도 요약, **호스트 스코어카드(좌: 호스트·엔드포인트·파라미터 목록 / 행 선택 시 우: 해당 호스트의 High·Medium·Low·Info·누락헤더 상세)**, **Top Findings(유형별 건수)**, **주목 엔드포인트(고위험 파라미터·admin/api 경로)**, Top hosts 차트, **파라미터 클래스 요약** |
 | **Endpoints** | method + 정규화 URL로 dedup한 엔드포인트 인벤토리(출처: proxy/sitemap/js/spec). 행 선택 시 하단에 원문 Request/Response, 우클릭 → Send to Repeater |
 | **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie). 컬럼: Host·Endpoint·Type·Name·Value·**Class(취약점 후보)**·Reflected·Seen. 기본 정렬 host→endpoint, 행 선택 시 매칭 Request/Response |
 | **Findings** | 아래 *탐지 항목*을 심각도 순으로 집계. **심각도 빠른 필터**, 행 선택 시 원문 + **JWT 디코드 탭**, 우클릭으로 **트리아지(New/Reviewed/Confirmed/False positive)** 지정·Repeater/Intruder 전송 |
@@ -85,6 +85,10 @@
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 1.14.0
+- **Dashboard 레이아웃 개선(좁은 폭 대응)**: 상단 카운트 카드를 컴팩트 pill로 축소하고 심각도 칩과 함께 폭이 좁아지면 자동 줄바꿈(패널이 절반 폭이어도 한눈에 식별) — 상단 공간 차지 대폭 감소.
+- **호스트 스코어카드 master-detail 전환**: 표에는 **Host·Endpoints·Params**만 남기고, 행 선택 시 **우측 상세 패널**에 해당 호스트의 High·Medium·Low·Info·Missing headers를 심각도 색으로 표시. 새로고침 시 선택 호스트 유지.
 
 ### 1.13.1
 - **Dashboard 가시성 개선**: 호스트 스코어카드의 `H/M/L/I` 약어를 **High/Medium/Low/Info**로 풀고 심각도 색상+굵게로 강조. 잘리던 **Top hosts 차트** 높이 확보(중복 제목 제거). 섹션 제목 볼드·확대(15pt), 표 행 높이·헤더 강조, 전체 패딩/간격 확대 및 레이아웃 재배치(스코어카드 상단 전체폭 → Top findings·주목 엔드포인트 → Top hosts·파라미터 클래스).

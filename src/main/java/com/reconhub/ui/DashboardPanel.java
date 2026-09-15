@@ -13,19 +13,25 @@ import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JTable;
+import javax.swing.ListSelectionModel;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableRowSorter;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
+import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridLayout;
+import java.awt.Insets;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -34,14 +40,16 @@ import java.util.Set;
 import java.util.TreeMap;
 
 /**
- * Summary dashboard: headline cards, findings-by-severity chips, a Top-hosts chart, and aggregate
- * triage views — a per-host scorecard, top finding types, notable endpoints (risky params / admin
- * paths), and a parameter-class summary. All read-only aggregates over the {@link DataStore}.
+ * Summary dashboard: a compact stats strip, findings-by-severity chips, and aggregate triage views —
+ * a per-host scorecard (host list + per-host detail), top finding types, notable endpoints (risky
+ * params / admin paths), a Top-hosts chart, and a parameter-class summary. All read-only aggregates
+ * over the {@link DataStore}. Laid out to stay legible at half width (strips wrap; scorecard splits).
  */
 public final class DashboardPanel extends JPanel implements Refreshable {
 
     private static final Color ACCENT = new Color(0x4da3ff);
     private static final Color MUTED = new Color(0x9aa4b2);
+    private static final Color LINE = new Color(0x2a313b);
     private static final Map<Finding.Severity, Color> SEV_COLORS = new EnumMap<>(Finding.Severity.class);
     static {
         SEV_COLORS.put(Finding.Severity.HIGH, new Color(0xff5c5c));
@@ -62,15 +70,19 @@ public final class DashboardPanel extends JPanel implements Refreshable {
     private final JLabel jsFiles = stat();
     private final JLabel hosts = stat();
 
-    private final JPanel severityRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
+    private final JPanel severityRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 4));
     private final BarChartPanel hostChart = new BarChartPanel("", 8, ACCENT);
-    private final JPanel classChips = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
+    private final JPanel classChips = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 4));
 
+    // Host scorecard: the visible table carries only Host/Endpoints/Params; the full per-host
+    // counts live in hostStats and drive the detail panel on selection.
     private final SimpleModel hostModel = new SimpleModel(
-            new String[]{"Host", "Endpoints", "Params", "High", "Medium", "Low", "Info",
-                    "Missing headers"},
-            new Class<?>[]{String.class, Integer.class, Integer.class, Integer.class,
-                    Integer.class, Integer.class, Integer.class, Integer.class});
+            new String[]{"Host", "Endpoints", "Params"},
+            new Class<?>[]{String.class, Integer.class, Integer.class});
+    private final Map<String, int[]> hostStats = new HashMap<>();   // label -> [ep,param,H,M,L,I,missHdr]
+    private final JPanel hostDetail = new JPanel(new BorderLayout());
+    private String selectedHost;
+
     private final SimpleModel typeModel = new SimpleModel(
             new String[]{"Finding type", "Count"},
             new Class<?>[]{String.class, Integer.class});
@@ -84,24 +96,25 @@ public final class DashboardPanel extends JPanel implements Refreshable {
 
     public DashboardPanel(DataStore store) {
         this.store = store;
-        setLayout(new BorderLayout(0, 16));
-        setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
+        setLayout(new BorderLayout(0, 14));
+        setBorder(BorderFactory.createEmptyBorder(14, 16, 14, 16));
 
+        // --- compact top strip: small stat pills + severity chips (both wrap at narrow width) ---
         JPanel north = new JPanel();
         north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
 
-        JPanel cards = new JPanel(new GridLayout(1, 6, 12, 12));
-        cards.add(card("Requests", requests));
-        cards.add(card("Endpoints", endpoints));
-        cards.add(card("Parameters", parameters));
-        cards.add(card("Findings", findings));
-        cards.add(card("JS files", jsFiles));
-        cards.add(card("Hosts", hosts));
-        cards.setAlignmentX(LEFT_ALIGNMENT);
-        north.add(cards);
+        JPanel pills = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 4));
+        pills.setAlignmentX(LEFT_ALIGNMENT);
+        pills.add(pill("Requests", requests));
+        pills.add(pill("Endpoints", endpoints));
+        pills.add(pill("Parameters", parameters));
+        pills.add(pill("Findings", findings));
+        pills.add(pill("JS files", jsFiles));
+        pills.add(pill("Hosts", hosts));
+        north.add(pills);
 
         severityRow.setAlignmentX(LEFT_ALIGNMENT);
-        severityRow.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
+        severityRow.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
         north.add(severityRow);
         add(north, BorderLayout.NORTH);
 
@@ -110,39 +123,53 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         JPanel body = new JPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
 
-        // Host scorecard: the primary triage view, full width and prominent.
-        body.add(sized(titled("Host scorecard", new JScrollPane(hostTable)), 250));
-        body.add(Box.createVerticalStrut(16));
+        // Host scorecard: list on the left, per-host severity/header detail on the right.
+        hostDetail.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+        JSplitPane scorecard = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
+                new JScrollPane(hostTable), new JScrollPane(hostDetail));
+        scorecard.setResizeWeight(0.62);
+        scorecard.setBorder(null);
+        scorecard.setContinuousLayout(true);
+        body.add(sized(titled("Host scorecard", scorecard), 250));
+        body.add(Box.createVerticalStrut(14));
 
-        JPanel row2 = new JPanel(new GridLayout(1, 2, 16, 0));
+        JPanel row2 = new JPanel(new GridLayout(1, 2, 14, 0));
         row2.add(titled("Top findings", new JScrollPane(typeTable)));
         row2.add(titled("Notable endpoints  (risky params / admin·api paths)",
                 new JScrollPane(notableTable)));
-        body.add(sized(row2, 240));
-        body.add(Box.createVerticalStrut(16));
+        body.add(sized(row2, 230));
+        body.add(Box.createVerticalStrut(14));
 
-        JPanel row3 = new JPanel(new GridLayout(1, 2, 16, 0));
+        JPanel row3 = new JPanel(new GridLayout(1, 2, 14, 0));
         row3.add(titled("Top hosts", hostChart));
         row3.add(titled("Parameter classes", classChips));
-        body.add(sized(row3, 260));
+        body.add(sized(row3, 250));
         body.add(Box.createVerticalGlue());
 
         add(new JScrollPane(body), BorderLayout.CENTER);
+        updateHostDetail(null);
     }
 
     private void configureTables() {
         styleTable(hostTable);
         styleTable(typeTable);
         styleTable(notableTable);
-        // Color the severity count columns (High/Medium/Low/Info) of the scorecard.
-        SeverityCountRenderer sr = new SeverityCountRenderer();
-        for (int col = 3; col <= 6; col++) {
-            hostTable.getColumnModel().getColumn(col).setCellRenderer(sr);
-        }
-        int[] hw = {220, 90, 80, 60, 80, 60, 60, 130};
+        int[] hw = {220, 90, 90};
         for (int i = 0; i < hw.length; i++) {
             hostTable.getColumnModel().getColumn(i).setPreferredWidth(hw[i]);
         }
+        hostTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        hostTable.getSelectionModel().addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) {
+                return;
+            }
+            int view = hostTable.getSelectedRow();
+            if (view < 0) {
+                return;
+            }
+            int model = hostTable.convertRowIndexToModel(view);
+            updateHostDetail((String) hostModel.getValueAt(model, 0));
+        });
         typeTable.getColumnModel().getColumn(1).setMaxWidth(90);
     }
 
@@ -166,7 +193,7 @@ public final class DashboardPanel extends JPanel implements Refreshable {
             sevCounts.merge(f.getSeverity(), 1, Integer::sum);
         }
         severityRow.removeAll();
-        severityRow.add(new JLabel("Findings by severity:"));
+        severityRow.add(muted("Findings by severity:"));
         for (Finding.Severity sev : Finding.Severity.values()) {
             severityRow.add(chip(sev.name() + "  " + sevCounts.getOrDefault(sev, 0), SEV_COLORS.get(sev)));
         }
@@ -197,16 +224,105 @@ public final class DashboardPanel extends JPanel implements Refreshable {
             row(byHost, hostLabel(t.getHost()))[6] = t.getMissingSecurityHeaders().size();
         }
 
+        hostStats.clear();
+        hostStats.putAll(byHost);
+
         List<Object[]> rows = new ArrayList<>();
         for (Map.Entry<String, int[]> e : byHost.entrySet()) {
             int[] c = e.getValue();
-            rows.add(new Object[]{e.getKey(), c[0], c[1], c[2], c[3], c[4], c[5], c[6]});
+            rows.add(new Object[]{e.getKey(), c[0], c[1],
+                    // hidden sort weight so the most interesting host lands on top
+                    c[2] * 100 + c[3] * 10 + c[4]});
         }
         // Most findings first (H weighted), then most endpoints.
         rows.sort(Comparator
-                .comparingInt((Object[] r) -> (int) r[3] * 100 + (int) r[4] * 10 + (int) r[5]).reversed()
+                .comparingInt((Object[] r) -> (int) r[3]).reversed()
                 .thenComparing(r -> (int) r[1], Comparator.reverseOrder()));
-        hostModel.setRows(rows);
+        List<Object[]> trimmed = new ArrayList<>();
+        for (Object[] r : rows) {
+            trimmed.add(new Object[]{r[0], r[1], r[2]});   // drop sort key
+        }
+        hostModel.setRows(trimmed);
+
+        // Preserve the selected host across refreshes; otherwise show the top host.
+        String want = selectedHost != null && hostStats.containsKey(selectedHost)
+                ? selectedHost
+                : (trimmed.isEmpty() ? null : (String) trimmed.get(0)[0]);
+        if (want == null) {
+            updateHostDetail(null);
+        } else {
+            selectRow(want);
+        }
+    }
+
+    private void selectRow(String host) {
+        for (int i = 0; i < hostModel.getRowCount(); i++) {
+            if (host.equals(hostModel.getValueAt(i, 0))) {
+                int view = hostTable.convertRowIndexToView(i);
+                if (view >= 0) {
+                    hostTable.getSelectionModel().setSelectionInterval(view, view);
+                }
+                break;
+            }
+        }
+        updateHostDetail(host);
+    }
+
+    /** Rebuilds the right-hand detail card for one host (severity breakdown + missing headers). */
+    private void updateHostDetail(String host) {
+        selectedHost = host;
+        hostDetail.removeAll();
+        int[] c = host == null ? null : hostStats.get(host);
+        if (c == null) {
+            JLabel hint = muted("Select a host on the left to see its severity breakdown.");
+            hint.setBorder(BorderFactory.createEmptyBorder(6, 4, 0, 0));
+            hostDetail.add(hint, BorderLayout.NORTH);
+            hostDetail.revalidate();
+            hostDetail.repaint();
+            return;
+        }
+
+        JLabel header = new JLabel(host);
+        header.setFont(header.getFont().deriveFont(Font.BOLD, 14f));
+        header.setBorder(BorderFactory.createEmptyBorder(2, 2, 8, 2));
+
+        JPanel grid = new JPanel(new GridLayout(0, 2, 10, 6));
+        grid.setOpaque(false);
+        grid.add(metric("Endpoints", c[0], null));
+        grid.add(metric("Parameters", c[1], null));
+        grid.add(metric("High", c[2], SEV_COLORS.get(Finding.Severity.HIGH)));
+        grid.add(metric("Medium", c[3], SEV_COLORS.get(Finding.Severity.MEDIUM)));
+        grid.add(metric("Low", c[4], SEV_COLORS.get(Finding.Severity.LOW)));
+        grid.add(metric("Info", c[5], SEV_COLORS.get(Finding.Severity.INFO)));
+        grid.add(metric("Missing headers", c[6],
+                c[6] > 0 ? SEV_COLORS.get(Finding.Severity.MEDIUM) : null));
+
+        JPanel wrap = new JPanel(new BorderLayout());
+        wrap.setOpaque(false);
+        wrap.add(header, BorderLayout.NORTH);
+        wrap.add(grid, BorderLayout.CENTER);
+        hostDetail.add(wrap, BorderLayout.NORTH);
+        hostDetail.revalidate();
+        hostDetail.repaint();
+    }
+
+    /** A single "label: value" tile for the host-detail card; value is colored when non-zero. */
+    private static JPanel metric(String label, int value, Color valueColor) {
+        JPanel p = new JPanel(new BorderLayout());
+        p.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(LINE),
+                BorderFactory.createEmptyBorder(4, 8, 4, 8)));
+        JLabel t = new JLabel(label.toUpperCase());
+        t.setFont(t.getFont().deriveFont(10.5f));
+        t.setForeground(MUTED);
+        JLabel v = new JLabel(String.valueOf(value));
+        v.setFont(v.getFont().deriveFont(Font.BOLD, 16f));
+        if (valueColor != null && value > 0) {
+            v.setForeground(valueColor);
+        }
+        p.add(t, BorderLayout.NORTH);
+        p.add(v, BorderLayout.CENTER);
+        return p;
     }
 
     private void buildTopFindings(List<Finding> finds) {
@@ -319,22 +435,21 @@ public final class DashboardPanel extends JPanel implements Refreshable {
 
     private static JLabel stat() {
         JLabel l = new JLabel("0");
-        l.setFont(l.getFont().deriveFont(Font.BOLD, 26f));
+        l.setFont(l.getFont().deriveFont(Font.BOLD, 16f));
         return l;
     }
 
-    private JPanel card(String title, JLabel value) {
-        JPanel p = new JPanel();
-        p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
+    /** Compact "LABEL value" pill for the top strip. */
+    private JPanel pill(String title, JLabel value) {
+        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 3));
         p.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(0x2a313b)),
-                BorderFactory.createEmptyBorder(10, 14, 10, 14)));
-        p.setPreferredSize(new Dimension(150, 76));
+                BorderFactory.createLineBorder(LINE),
+                BorderFactory.createEmptyBorder(1, 8, 1, 10)));
         JLabel t = new JLabel(title.toUpperCase());
-        t.setFont(t.getFont().deriveFont(11f));
+        t.setFont(t.getFont().deriveFont(10.5f));
         t.setForeground(MUTED);
-        p.add(value);
         p.add(t);
+        p.add(value);
         return p;
     }
 
@@ -367,7 +482,7 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         t.setFont(t.getFont().deriveFont(13f));
     }
 
-    private static JPanel titled(String title, java.awt.Component inner) {
+    private static JPanel titled(String title, Component inner) {
         JPanel p = new JPanel(new BorderLayout());
         javax.swing.border.TitledBorder tb = BorderFactory.createTitledBorder(title);
         tb.setTitleFont(p.getFont().deriveFont(Font.BOLD, 15f));
@@ -382,29 +497,6 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         p.setPreferredSize(new Dimension(p.getPreferredSize().width, height));
         p.setAlignmentX(LEFT_ALIGNMENT);
         return p;
-    }
-
-    /** Renders scorecard severity counts in the matching severity color (bold when non-zero). */
-    private static final class SeverityCountRenderer extends javax.swing.table.DefaultTableCellRenderer {
-        private static final Finding.Severity[] BY_COL =
-                {Finding.Severity.HIGH, Finding.Severity.MEDIUM, Finding.Severity.LOW, Finding.Severity.INFO};
-
-        SeverityCountRenderer() {
-            setHorizontalAlignment(CENTER);
-        }
-
-        @Override
-        public java.awt.Component getTableCellRendererComponent(JTable t, Object value,
-                boolean sel, boolean focus, int row, int col) {
-            super.getTableCellRendererComponent(t, value, sel, focus, row, col);
-            int n = value instanceof Integer i ? i : 0;
-            Finding.Severity sev = BY_COL[col - 3];
-            if (!sel) {
-                setForeground(n > 0 ? SEV_COLORS.get(sev) : MUTED);
-            }
-            setFont(getFont().deriveFont(n > 0 ? Font.BOLD : Font.PLAIN));
-            return this;
-        }
     }
 
     // ---- read-only aggregate table model --------------------------------
@@ -430,5 +522,56 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         @Override public Class<?> getColumnClass(int c) { return types[c]; }
         @Override public boolean isCellEditable(int r, int c) { return false; }
         @Override public Object getValueAt(int r, int c) { return rows.get(r)[c]; }
+    }
+
+    /**
+     * A {@link FlowLayout} that wraps to multiple rows and reports the correct height for the parent
+     * width, so the top stat/chip strips stay fully visible when the panel is only half wide.
+     */
+    private static final class WrapLayout extends FlowLayout {
+        WrapLayout(int align, int hgap, int vgap) {
+            super(align, hgap, vgap);
+        }
+
+        @Override public Dimension preferredLayoutSize(Container target) { return layoutSize(target, true); }
+        @Override public Dimension minimumLayoutSize(Container target) {
+            Dimension d = layoutSize(target, false);
+            d.width -= (getHgap() + 1);
+            return d;
+        }
+
+        private Dimension layoutSize(Container target, boolean preferred) {
+            synchronized (target.getTreeLock()) {
+                int targetWidth = target.getSize().width;
+                if (targetWidth == 0) {
+                    targetWidth = Integer.MAX_VALUE;
+                }
+                Insets insets = target.getInsets();
+                int maxWidth = targetWidth - (insets.left + insets.right + getHgap() * 2);
+                Dimension dim = new Dimension(0, 0);
+                int rowWidth = 0;
+                int rowHeight = 0;
+                for (int i = 0; i < target.getComponentCount(); i++) {
+                    Component m = target.getComponent(i);
+                    if (!m.isVisible()) {
+                        continue;
+                    }
+                    Dimension d = preferred ? m.getPreferredSize() : m.getMinimumSize();
+                    if (rowWidth + d.width > maxWidth && rowWidth > 0) {
+                        dim.width = Math.max(dim.width, rowWidth);
+                        dim.height += rowHeight + getVgap();
+                        rowWidth = 0;
+                        rowHeight = 0;
+                    }
+                    rowWidth += d.width + getHgap();
+                    rowHeight = Math.max(rowHeight, d.height);
+                }
+                dim.width = Math.max(dim.width, rowWidth);
+                dim.height += rowHeight;
+                dim.width += insets.left + insets.right + getHgap() * 2;
+                dim.height += insets.top + insets.bottom + getVgap() * 2;
+                return dim;
+            }
+        }
     }
 }
