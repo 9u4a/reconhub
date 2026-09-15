@@ -27,9 +27,11 @@
     color: var(--fg); border-radius: 6px; padding: 5px 10px; font-size: 13px; min-width: 200px; }
   nav.toc label { font-size: 12px; color: var(--muted); cursor: pointer; user-select: none; }
   main { padding: 24px 32px; max-width: 1360px; }
-  section { margin-bottom: 36px; }
+  /* Leave room below the sticky toolbar when jumping to a section via the TOC, so the heading
+     (and its collapse toggle) is not hidden underneath it. */
+  section { margin-bottom: 36px; scroll-margin-top: 60px; }
   h2 { font-size: 16px; border-left: 3px solid var(--accent); padding-left: 10px; margin: 0 0 14px;
-    cursor: pointer; }
+    cursor: pointer; user-select: none; }
   h2::before { content: "\25be"; display: inline-block; width: 14px; color: var(--muted);
     font-size: 12px; }
   section.collapsed h2::before { content: "\25b8"; }
@@ -45,15 +47,22 @@
     border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
     table-layout: auto; }
   th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line);
-    vertical-align: top; white-space: normal; word-break: break-word;
-    overflow-wrap: anywhere; }
+    vertical-align: top; white-space: normal; overflow-wrap: break-word; word-break: normal; }
   th { background: #1c2129; color: var(--muted); font-weight: 600; font-size: 12px;
-    text-transform: uppercase; letter-spacing: .03em; position: sticky; top: 44px;
-    white-space: nowrap; }
+    text-transform: uppercase; letter-spacing: .03em; white-space: nowrap; }
   tr:last-child td { border-bottom: none; }
   tr.hidden { display: none; }
+  /* Only long opaque tokens/URLs may break mid-"word"; plain text wraps between words. */
   code { font-family: "SF Mono", Consolas, monospace; font-size: 12px; color: #c9d4e3;
     white-space: pre-wrap; word-break: break-all; overflow-wrap: anywhere; }
+  /* Findings table: fixed column budget so rows stay aligned and Type reads on few lines. */
+  #findings-table { table-layout: fixed; }
+  #findings-table th:nth-child(1), #findings-table td:nth-child(1) { width: 88px; white-space: nowrap; }
+  #findings-table th:nth-child(2), #findings-table td:nth-child(2) { width: 17%; }
+  #findings-table th:nth-child(3), #findings-table td:nth-child(3) { width: 15%; }
+  #findings-table th:nth-child(4), #findings-table td:nth-child(4) { width: 20%; }
+  #findings-table th:nth-child(6), #findings-table td:nth-child(6) { width: 54px; white-space: nowrap; }
+  #findings-table th:nth-child(7), #findings-table td:nth-child(7) { width: 92px; white-space: nowrap; }
   .sev { font-weight: 700; padding: 2px 8px; border-radius: 999px; font-size: 11px; }
   .sev.HIGH { background: rgba(255,92,92,.15); color: var(--high); }
   .sev.MEDIUM { background: rgba(255,176,32,.15); color: var(--medium); }
