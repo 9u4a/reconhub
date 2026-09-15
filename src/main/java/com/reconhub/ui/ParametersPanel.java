@@ -19,8 +19,8 @@ import java.util.List;
 public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
 
     private static final String[] COLS =
-            {"Host", "Endpoint", "Type", "Name", "Class", "Example", "Reflected", "Seen"};
-    private static final int COL_CLASS = 4;
+            {"Host", "Endpoint", "Type", "Name", "Value", "Class", "Reflected", "Seen"};
+    private static final int COL_CLASS = 5;
     private static final int COL_REFLECTED = 6;
 
     private final DataStore store;
@@ -98,7 +98,7 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
     @Override protected String[] columns() { return COLS; }
 
     @Override protected int[] columnWidths() {
-        return new int[]{150, 250, 60, 150, 150, 190, 80, 55};
+        return new int[]{150, 250, 60, 150, 190, 150, 80, 55};
     }
 
     @Override protected Object valueAt(ParameterInfo p, int c) {
@@ -107,8 +107,8 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
             case 1 -> p.getEndpointPath();
             case 2 -> p.getLocation().name();
             case 3 -> p.getName();
-            case 4 -> ParameterClassifier.classifyJoined(p.getName());
-            case 5 -> p.getExampleValue();
+            case 4 -> p.getExampleValue();
+            case 5 -> ParameterClassifier.classifyJoined(p.getName());
             case 6 -> p.isReflected() ? "yes" : "";
             case 7 -> p.getSeen();
             default -> "";

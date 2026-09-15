@@ -23,7 +23,7 @@ import java.util.Set;
 public final class FindingsPanel extends AbstractTablePanel<Finding> {
 
     private static final String[] COLS =
-            {"Severity", "Type", "Value", "Location", "Evidence", "Seen", "Status"};
+            {"Severity", "Type", "Evidence", "Location", "Value", "Seen", "Status"};
     private static final int COL_STATUS = 6;
 
     private final DataStore store;
@@ -124,9 +124,9 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         // Hover tooltip carries the full, untruncated text so a narrow column hides nothing.
         if (comp instanceof JComponent jc) {
             String tip = switch (viewColumn) {
-                case 2 -> fullValue(f);
+                case 2 -> f.getEvidence();
                 case 3 -> f.getLocationUrl();
-                case 4 -> f.getEvidence();
+                case 4 -> fullValue(f);
                 default -> null;
             };
             jc.setToolTipText(tip == null || tip.isBlank() ? null : tip);
@@ -191,9 +191,9 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         return switch (c) {
             case 0 -> f.getSeverity().name();
             case 1 -> f.getType();
-            case 2 -> fullValue(f);
+            case 2 -> f.getEvidence();
             case 3 -> f.getLocationUrl();
-            case 4 -> f.getEvidence();
+            case 4 -> fullValue(f);
             case 5 -> f.getTimesSeen();
             case COL_STATUS -> label(f.getTriage());
             default -> "";
