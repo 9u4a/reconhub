@@ -7,6 +7,7 @@ import com.reconhub.core.TrafficIngestor;
 import com.reconhub.export.HtmlReporter;
 import com.reconhub.export.JsonExporter;
 import com.reconhub.export.StateSerializer;
+import com.reconhub.export.WordlistExporter;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -89,6 +90,10 @@ public final class SettingsPanel extends JPanel {
         add(actionsRow());
         add(gap());
 
+        add(section("Wordlists (for ffuf / Intruder)"));
+        add(wordlistRow());
+        add(gap());
+
         add(section("Backup / State"));
         includeMessages.setAlignmentX(Component.LEFT_ALIGNMENT);
         add(includeMessages);
@@ -163,6 +168,29 @@ public final class SettingsPanel extends JPanel {
         p.add(json);
         p.add(html);
         return p;
+    }
+
+    private JPanel wordlistRow() {
+        JPanel p = leftFlow();
+        JButton paths = new JButton("Paths…");
+        paths.addActionListener(e -> exportWordlist(WordlistExporter.Kind.PATHS, "reconhub-paths.txt"));
+        JButton params = new JButton("Param names…");
+        params.addActionListener(e ->
+                exportWordlist(WordlistExporter.Kind.PARAM_NAMES, "reconhub-params.txt"));
+        JButton hosts = new JButton("Hosts…");
+        hosts.addActionListener(e -> exportWordlist(WordlistExporter.Kind.HOSTS, "reconhub-hosts.txt"));
+        p.add(paths);
+        p.add(params);
+        p.add(hosts);
+        return p;
+    }
+
+    private void exportWordlist(WordlistExporter.Kind kind, String suggestedName) {
+        File f = chooseSaveFile(suggestedName);
+        if (f == null) {
+            return;
+        }
+        runExport(() -> WordlistExporter.export(store, f.toPath(), kind), f);
     }
 
     private JPanel stateRow() {

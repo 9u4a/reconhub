@@ -12,6 +12,9 @@ public final class Finding {
 
     public enum Severity { HIGH, MEDIUM, LOW, INFO }
 
+    /** Analyst triage state (workflow aid; persisted in state backups). */
+    public enum Triage { NEW, REVIEWED, CONFIRMED, FALSE_POSITIVE }
+
     private final String type;         // e.g. "AWS Access Key", "JWT", "Email"
     private final Severity severity;
     private final String rawMatch;     // the exact matched text (used for dedup, not shown raw)
@@ -20,6 +23,7 @@ public final class Finding {
     private final String evidence;     // short surrounding snippet
     private final boolean sensitive;   // whether the value is masked for display
     private volatile int timesSeen;
+    private volatile Triage triage = Triage.NEW;      // analyst triage state
     private volatile HttpRequestResponse messages;   // request/response the finding came from
 
     /** Sensitive finding (e.g. a secret): the value is masked for display. */
@@ -74,6 +78,8 @@ public final class Finding {
     }
 
     public void setMessages(HttpRequestResponse m) { this.messages = m; }
+    public void setTriage(Triage t) { this.triage = t == null ? Triage.NEW : t; }
+    public Triage getTriage() { return triage; }
 
     public String getType() { return type; }
     public Severity getSeverity() { return severity; }

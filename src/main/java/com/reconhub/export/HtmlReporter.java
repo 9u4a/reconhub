@@ -79,7 +79,7 @@ public final class HtmlReporter {
             return;
         }
         b.append("<table><thead><tr><th>Severity</th><th>Type</th><th>Value</th>"
-                + "<th>Location</th><th>Evidence</th><th>Seen</th></tr></thead><tbody>");
+                + "<th>Location</th><th>Evidence</th><th>Seen</th><th>Status</th></tr></thead><tbody>");
         for (Finding f : findings) {
             b.append("<tr><td><span class=\"sev ").append(f.getSeverity().name()).append("\">")
                     .append(f.getSeverity().name()).append("</span></td><td>")
@@ -87,7 +87,8 @@ public final class HtmlReporter {
                     .append(esc(f.getMasked())).append("</code></td><td><code>")
                     .append(esc(f.getLocationUrl())).append("</code></td><td class=\"muted\">")
                     .append(esc(f.getEvidence())).append("</td><td>")
-                    .append(f.getTimesSeen()).append("</td></tr>");
+                    .append(f.getTimesSeen()).append("</td><td class=\"muted\">")
+                    .append(esc(triageLabel(f.getTriage()))).append("</td></tr>");
         }
         b.append("</tbody></table></section>");
     }
@@ -204,6 +205,15 @@ public final class HtmlReporter {
                     .append("<div class=\"val\">").append(e.getValue()).append("</div></div>");
         }
         b.append("</div>");
+    }
+
+    private static String triageLabel(Finding.Triage t) {
+        return switch (t) {
+            case NEW -> "New";
+            case REVIEWED -> "Reviewed";
+            case CONFIRMED -> "Confirmed";
+            case FALSE_POSITIVE -> "False positive";
+        };
     }
 
     private static String shortCt(String ct) {

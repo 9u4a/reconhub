@@ -82,6 +82,7 @@ public final class StateSerializer {
         String type, severity, rawMatch, location, evidence;
         int timesSeen;
         boolean sensitive;
+        String triage;
         String reqB64, respB64;
     }
 
@@ -165,6 +166,7 @@ public final class StateSerializer {
             d.evidence = f.getEvidence();
             d.timesSeen = f.getTimesSeen();
             d.sensitive = f.isSensitive();
+            d.triage = f.getTriage().name();
             if (includeMessages) {
                 String[] msg = dumpMessages(f.getMessages());
                 if (msg != null) {
@@ -253,6 +255,7 @@ public final class StateSerializer {
                 Finding f = new Finding(d.type, parseSeverity(d.severity), d.rawMatch,
                         d.location, d.evidence, d.sensitive);
                 f.setTimesSeen(d.timesSeen);
+                f.setTriage(parseTriage(d.triage));
                 f.setMessages(rebuildMessages(d.reqB64, d.respB64));
                 store.restoreFinding(f);
                 findings++;
@@ -339,6 +342,17 @@ public final class StateSerializer {
             return Finding.Severity.valueOf(s);
         } catch (RuntimeException e) {
             return Finding.Severity.INFO;
+        }
+    }
+
+    private static Finding.Triage parseTriage(String s) {
+        if (s == null) {
+            return Finding.Triage.NEW;
+        }
+        try {
+            return Finding.Triage.valueOf(s);
+        } catch (RuntimeException e) {
+            return Finding.Triage.NEW;
         }
     }
 }

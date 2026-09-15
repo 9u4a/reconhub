@@ -5,8 +5,10 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 
 import javax.swing.Box;
+import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
@@ -35,7 +37,11 @@ import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
+import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -109,6 +115,10 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         top.add(bodyBox);
         top.add(regexBox);
         top.add(caseBox);
+        JButton csvButton = new JButton("CSV…");
+        csvButton.setToolTipText("Export the current (filtered/sorted) view to CSV");
+        csvButton.addActionListener(e -> exportCsv());
+        top.add(csvButton);
         top.add(Box.createHorizontalStrut(10));
         top.add(countLabel);
         add(top, BorderLayout.NORTH);
@@ -260,7 +270,18 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
                 () -> sendToRepeater(row));
         add(menu, "Send to Intruder", row != null && requestFor(row) != null,
                 () -> sendToIntruder(row));
+        extraMenuItems(menu, row);
         return menu;
+    }
+
+    /** Hook for subclasses to append their own right-click items (a separator is added first). */
+    protected void extraMenuItems(JPopupMenu menu, T row) {
+        // subclasses override
+    }
+
+    /** Adds a menu item that runs {@code action} (errors are logged, never thrown to the UI). */
+    protected void addMenuItem(JPopupMenu menu, String label, boolean enabled, Runnable action) {
+        add(menu, label, enabled, action);
     }
 
     private void add(JPopupMenu menu, String label, boolean enabled, Runnable action) {
@@ -445,6 +466,48 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
 
     private void updateCount() {
         countLabel.setText(table.getRowCount() + " / " + rows.size() + " rows");
+    }
+
+    // ---- CSV export (current view) --------------------------------------
+
+    private void exportCsv() {
+        JFileChooser fc = new JFileChooser(System.getProperty("user.home"));
+        fc.setSelectedFile(new File(System.getProperty("user.home"), "reconhub-table.csv"));
+        if (fc.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        int cols = table.getColumnCount();
+        for (int c = 0; c < cols; c++) {
+            if (c > 0) {
+                sb.append(',');
+            }
+            sb.append(csv(table.getColumnName(c)));
+        }
+        sb.append("\r\n");
+        for (int r = 0; r < table.getRowCount(); r++) {   // view order, respects filter+sort
+            for (int c = 0; c < cols; c++) {
+                if (c > 0) {
+                    sb.append(',');
+                }
+                Object v = table.getValueAt(r, c);
+                sb.append(csv(v == null ? "" : v.toString()));
+            }
+            sb.append("\r\n");
+        }
+        try {
+            Files.write(fc.getSelectedFile().toPath(), sb.toString().getBytes(StandardCharsets.UTF_8));
+            countLabel.setText("Saved CSV: " + fc.getSelectedFile().getName());
+        } catch (IOException ex) {
+            api.logging().logToError("CSV export failed: " + ex);
+            countLabel.setText("CSV export failed");
+        }
+    }
+
+    private static String csv(String s) {
+        boolean needsQuote = s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r");
+        String v = s.replace("\"", "\"\"");
+        return needsQuote ? "\"" + v + "\"" : v;
     }
 
     /** @return the model row index for a view row (accounts for sorting/filtering). */

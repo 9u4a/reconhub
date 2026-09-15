@@ -7,6 +7,7 @@ import com.reconhub.core.DataStore;
 import com.reconhub.model.Finding;
 
 import javax.swing.JComponent;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
@@ -14,11 +15,12 @@ import java.awt.Component;
 import java.awt.Font;
 import java.util.List;
 
-/** Findings table with the request/response viewer, a JWT-decode tab, and severity color-coding. */
+/** Findings table with the request/response viewer, a JWT-decode tab, triage, and color-coding. */
 public final class FindingsPanel extends AbstractTablePanel<Finding> {
 
     private static final String[] COLS =
-            {"Severity", "Type", "Value", "Location", "Evidence", "Seen"};
+            {"Severity", "Type", "Value", "Location", "Evidence", "Seen", "Status"};
+    private static final int COL_STATUS = 6;
 
     private final DataStore store;
     private final MessageViewer viewer;
@@ -82,11 +84,16 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         if (f == null) {
             return;
         }
+        Finding.Triage triage = f.getTriage();
         if (!selected) {
-            comp.setForeground(SwingColors.severityFg(f.getSeverity()));
+            // False positives are dimmed; everything else keeps its severity color.
+            comp.setForeground(triage == Finding.Triage.FALSE_POSITIVE
+                    ? SwingColors.severityFg(Finding.Severity.INFO)
+                    : SwingColors.severityFg(f.getSeverity()));
         }
-        // Emphasize the Severity column in bold.
-        comp.setFont(comp.getFont().deriveFont(viewColumn == 0 ? Font.BOLD : Font.PLAIN));
+        // Bold the Severity column always; bold the whole row when Confirmed.
+        boolean bold = viewColumn == 0 || triage == Finding.Triage.CONFIRMED;
+        comp.setFont(comp.getFont().deriveFont(bold ? Font.BOLD : Font.PLAIN));
         // Hover tooltip carries the full, untruncated text so a narrow column hides nothing.
         if (comp instanceof JComponent jc) {
             String tip = switch (viewColumn) {
@@ -97,6 +104,31 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
             };
             jc.setToolTipText(tip == null || tip.isBlank() ? null : tip);
         }
+    }
+
+    @Override
+    protected void extraMenuItems(JPopupMenu menu, Finding f) {
+        if (f == null) {
+            return;
+        }
+        menu.addSeparator();
+        for (Finding.Triage t : Finding.Triage.values()) {
+            boolean current = f.getTriage() == t;
+            addMenuItem(menu, (current ? "● " : "○ ") + "Mark: " + label(t), !current,
+                    () -> {
+                        f.setTriage(t);
+                        store.fireChanged();
+                    });
+        }
+    }
+
+    private static String label(Finding.Triage t) {
+        return switch (t) {
+            case NEW -> "New";
+            case REVIEWED -> "Reviewed";
+            case CONFIRMED -> "Confirmed";
+            case FALSE_POSITIVE -> "False positive";
+        };
     }
 
     /** Populates the JWT tab if the finding carries a JWT (in its value or evidence). */
@@ -125,7 +157,7 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     @Override protected String[] columns() { return COLS; }
 
     @Override protected int[] columnWidths() {
-        return new int[]{80, 170, 320, 260, 300, 50};
+        return new int[]{80, 170, 300, 250, 280, 50, 100};
     }
 
     @Override protected Object valueAt(Finding f, int c) {
@@ -136,6 +168,7 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
             case 3 -> f.getLocationUrl();
             case 4 -> f.getEvidence();
             case 5 -> f.getTimesSeen();
+            case COL_STATUS -> label(f.getTriage());
             default -> "";
         };
     }

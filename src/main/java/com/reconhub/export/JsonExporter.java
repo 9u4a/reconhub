@@ -100,6 +100,7 @@ public final class JsonExporter {
             m.put("location", f.getLocationUrl());
             m.put("evidence", f.getEvidence());
             m.put("timesSeen", f.getTimesSeen());
+            m.put("triage", f.getTriage().name());
             out.add(m);
         }
         return out;
