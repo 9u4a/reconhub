@@ -29,7 +29,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         DashboardPanel dashboard = new DashboardPanel(store);
         EndpointsPanel endpoints = new EndpointsPanel(store, api);
         ParametersPanel parameters = new ParametersPanel(store, api);
-        FindingsPanel findings = new FindingsPanel(store, api);
+        FindingsPanel findings = new FindingsPanel(store, settings, api);
         JsAssetsPanel jsAssets = new JsAssetsPanel(store, api);
         TechPanel tech = new TechPanel(store, api);
         SettingsPanel settingsPanel = new SettingsPanel(api, store, settings, ingestor);
@@ -51,8 +51,8 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         tabs.addTab("Settings", settingsPanel);
         add(tabs, BorderLayout.CENTER);
 
-        // Let dashboard rows jump to a filtered view of another tab.
-        dashboard.setNavigator(new DashboardPanel.Navigator() {
+        // Let dashboard/findings rows jump to a filtered view of another tab.
+        DashboardPanel.Navigator navigator = new DashboardPanel.Navigator() {
             @Override public void filterEndpoints(String q) {
                 tabs.setSelectedComponent(endpoints);
                 endpoints.searchFor(q);
@@ -65,7 +65,9 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
                 tabs.setSelectedComponent(findings);
                 findings.searchFor(q);
             }
-        });
+        };
+        dashboard.setNavigator(navigator);
+        findings.setNavigator(navigator);
 
         refreshTimer = new Timer(300, e -> refreshAll());
         refreshTimer.setRepeats(false);

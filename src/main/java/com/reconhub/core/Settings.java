@@ -1,7 +1,12 @@
 package com.reconhub.core;
 
+import com.reconhub.analysis.FindingTaxonomy;
+import com.reconhub.model.Finding;
+
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.EnumSet;
+import java.util.Set;
 
 /**
  * Mutable, shared runtime configuration edited from the Settings panel. All fields are volatile so
@@ -23,6 +28,10 @@ public final class Settings {
     private volatile boolean autoIngestOnLoad = true;     // sweep site map when the extension loads
     private volatile String scopeIncludeRegex = "";       // extra include filter (empty = off)
     private volatile String scopeExcludeRegex = "";       // extra exclude filter (empty = off)
+    // Findings display noise control (view-only filter; does not drop collected data).
+    private volatile Finding.Severity minFindingSeverity = Finding.Severity.INFO;   // INFO = show all
+    private final Set<FindingTaxonomy.Category> mutedCategories =
+            EnumSet.noneOf(FindingTaxonomy.Category.class);
 
     public ScopeMode getScopeMode() { return scopeMode; }
     public void setScopeMode(ScopeMode m) { this.scopeMode = m; }
@@ -53,4 +62,23 @@ public final class Settings {
 
     public String getScopeExcludeRegex() { return scopeExcludeRegex; }
     public void setScopeExcludeRegex(String s) { this.scopeExcludeRegex = s == null ? "" : s; }
+
+    public Finding.Severity getMinFindingSeverity() { return minFindingSeverity; }
+    public void setMinFindingSeverity(Finding.Severity s) {
+        this.minFindingSeverity = s == null ? Finding.Severity.INFO : s;
+    }
+
+    public boolean isCategoryMuted(FindingTaxonomy.Category c) { return mutedCategories.contains(c); }
+    public void setCategoryMuted(FindingTaxonomy.Category c, boolean muted) {
+        if (muted) {
+            mutedCategories.add(c);
+        } else {
+            mutedCategories.remove(c);
+        }
+    }
+
+    /** True when a finding passes the display noise filter (severity threshold + category mute). */
+    public boolean findingVisible(Finding.Severity sev, FindingTaxonomy.Category cat) {
+        return sev.ordinal() <= minFindingSeverity.ordinal() && !mutedCategories.contains(cat);
+    }
 }

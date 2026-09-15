@@ -19,7 +19,7 @@
 | **Dashboard** | 카운트(요청·엔드포인트·파라미터·Findings·JS·호스트)와 심각도 요약을 **한 줄 컴팩트 스트립**(좁은 폭에서 자동 줄바꿈)으로, **호스트 스코어카드(좌: 호스트·엔드포인트·파라미터 목록 / 행 선택 시 우: 심각도별 칩·실제 누락 보안헤더 이름)**, **Top Findings(유형별 건수)**, **주목 엔드포인트(고위험 파라미터·admin/api 경로)**, Top hosts 차트, **파라미터 클래스 요약**. 각 표는 **우클릭으로 해당 항목을 다른 탭에서 필터링해 보기**(호스트→Endpoints/Parameters/Findings, 유형→Findings, 엔드포인트→Endpoints) 및 Copy·브라우저 열기 |
 | **Endpoints** | method + 정규화 URL로 dedup한 엔드포인트 인벤토리(출처: proxy/sitemap/js/spec). 컬럼: Method·Host·Path·Status·Content-Type·Params·**Auth(auth/anon/both — 인증 없이 관찰된 2xx는 경고색)**·Source. 행 선택 시 하단에 원문 Request/Response, 우클릭 → Send to Repeater |
 | **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie). 컬럼: Host·Endpoint·Type·Name·Value·**Class(취약점 후보)**·Reflected·Seen. 기본 정렬 host→endpoint, 행 선택 시 매칭 Request/Response |
-| **Findings** | 아래 *탐지 항목*을 심각도 순으로 집계. 컬럼: Severity·**Category(Secret/PII/Auth/Misconfig/Info leak/API/Injection/Comment)**·Type·Evidence·Location·Value·Seen·Status. **카테고리 필터 + 심각도 빠른 필터**, 행 선택 시 원문 + **JWT 디코드 탭**, 우클릭으로 **트리아지(New/Reviewed/Confirmed/False positive)** 지정·Repeater/Intruder 전송. TYPE·EVIDENCE는 짧게 식별 가능한 형태(상세는 툴팁·원문 뷰어) |
+| **Findings** | 아래 *탐지 항목*을 심각도 순으로 집계. 컬럼: Severity·**Category(Secret/PII/Auth/Misconfig/Info leak/API/Injection/Comment)**·Type·Evidence·Location·Value·Seen·Status. **카테고리 필터(건수 표시) + 심각도 빠른 필터**, 행 선택 시 원문 + **JWT 디코드 탭**, 우클릭으로 **트리아지** 지정·Repeater/Intruder 전송·**해당 호스트의 Endpoints/Parameters로 이동**. TYPE·EVIDENCE는 짧게 식별 가능한 형태(상세는 툴팁·원문 뷰어). 노이즈는 **Settings → Findings display**(최소 심각도·카테고리 뮤트)로 제어 |
 | **JS Assets** | 수집 JS를 SHA-256으로 dedup 저장(옵션: 디스크 저장), JS 내 엔드포인트·시크릿 추출. 행 선택 시 메타·저장파일 열기·관련 엔드포인트/Findings |
 | **Tech** | 헤더/쿠키/JS 라이브러리 기반 호스트별 기술 식별 + 보안 헤더 누락 체크리스트 |
 | **Settings** | 스코프·패시브 토글·커스텀 탐지 규칙·Ingest·각종 내보내기·State 백업 (아래 *사용법* 참고) |
@@ -92,6 +92,10 @@
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 0.22.0
+- **Findings 노이즈 제어**: **Settings → Findings display**에 **최소 심각도 임계값**과 **카테고리 뮤트** 추가 — 수집 데이터는 유지한 채 Findings 탭 표시만 필터. 카테고리 필터 콤보에 **카테고리별 건수**를 실시간 표시(그룹 개요 + 드릴다운).
+- **Findings→관련 항목 이동**: finding 우클릭에 **해당 호스트의 Endpoints/Parameters 보기** 추가(탭 전환 + 자동 필터).
 
 ### 0.21.0
 - **탐지 확장(passive)**: 시크릿 제공자 추가(GitLab·npm·Shopify·Square·OpenAI·Postman·New Relic·Databricks·Telegram, 고정밀 prefix 규칙). **노출 민감 파일**(`.env`/`.git`/`.htpasswd`/`wp-config`/`id_rsa`/`docker-compose` 2xx 서빙 → HIGH, `.bak`/`.old`/`.sql`/`.dump` 백업 → MEDIUM), **혼합 콘텐츠**(https 페이지의 http 하위 리소스 → LOW), **인증 응답 캐시 가능**(no-store/private 없는 인증 JSON → LOW) Findings 추가. 모두 이미 캡처된 트래픽만 사용.

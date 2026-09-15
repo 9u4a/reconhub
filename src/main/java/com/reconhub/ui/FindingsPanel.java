@@ -5,6 +5,7 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.JwtDecoder;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.Settings;
 import com.reconhub.model.Finding;
 
 import javax.swing.JComboBox;
@@ -17,8 +18,11 @@ import javax.swing.JTextArea;
 import javax.swing.JToggleButton;
 import java.awt.Component;
 import java.awt.Font;
+import java.net.URI;
+import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /** Findings table with the request/response viewer, a JWT-decode tab, triage, and color-coding. */
@@ -30,6 +34,7 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     private static final int COL_STATUS = 7;
 
     private final DataStore store;
+    private final Settings settings;
     private final MessageViewer viewer;
     private final JTabbedPane detailTabs = new JTabbedPane();
     private final JTextArea jwtArea = new JTextArea();
@@ -39,10 +44,14 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     private final Set<Finding.Severity> activeSeverities = EnumSet.noneOf(Finding.Severity.class);
     /** Category filter; null = show all. */
     private FindingTaxonomy.Category activeCategory;
+    private final JComboBox<String> catBox = new JComboBox<>();
+    private boolean rebuildingCatBox;
+    private DashboardPanel.Navigator navigator;
 
-    public FindingsPanel(DataStore store, MontoyaApi api) {
+    public FindingsPanel(DataStore store, Settings settings, MontoyaApi api) {
         super(api);
         this.store = store;
+        this.settings = settings;
         this.viewer = new MessageViewer(api);
 
         jwtArea.setEditable(false);
@@ -55,13 +64,12 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         installDetail(detailTabs, viewer);
 
         addToToolbar(new JLabel("  Category:"));
-        JComboBox<String> catBox = new JComboBox<>();
-        catBox.addItem("All");
-        for (FindingTaxonomy.Category c : FindingTaxonomy.Category.values()) {
-            catBox.addItem(c.label());
-        }
-        catBox.setToolTipText("Show only this finding category");
+        rebuildCategoryItems(Map.of());   // "All" + each category (counts filled on refresh)
+        catBox.setToolTipText("Show only this finding category (counts update live)");
         catBox.addActionListener(e -> {
+            if (rebuildingCatBox) {
+                return;
+            }
             int i = catBox.getSelectedIndex();
             activeCategory = i <= 0 ? null : FindingTaxonomy.Category.values()[i - 1];
             reapplyFilter();
@@ -89,10 +97,51 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         if (f == null) {
             return true;
         }
+        FindingTaxonomy.Category cat = FindingTaxonomy.categoryOf(f.getType());
+        // Settings-driven noise control (severity threshold + muted categories).
+        if (settings != null && !settings.findingVisible(f.getSeverity(), cat)) {
+            return false;
+        }
         boolean sevOk = activeSeverities.isEmpty() || activeSeverities.contains(f.getSeverity());
-        boolean catOk = activeCategory == null
-                || FindingTaxonomy.categoryOf(f.getType()) == activeCategory;
+        boolean catOk = activeCategory == null || cat == activeCategory;
         return sevOk && catOk;
+    }
+
+    /** Wires cross-tab navigation (finding → related endpoints/parameters). */
+    public void setNavigator(DashboardPanel.Navigator navigator) {
+        this.navigator = navigator;
+    }
+
+    @Override
+    public void refreshData() {
+        super.refreshData();
+        // Live per-category counts in the filter combo.
+        Map<FindingTaxonomy.Category, Integer> counts =
+                new EnumMap<>(FindingTaxonomy.Category.class);
+        for (Finding f : store.snapshotFindings()) {
+            counts.merge(FindingTaxonomy.categoryOf(f.getType()), 1, Integer::sum);
+        }
+        rebuildCategoryItems(counts);
+    }
+
+    /** Rebuilds the category combo items as "Label (count)" while preserving the selection. */
+    private void rebuildCategoryItems(Map<FindingTaxonomy.Category, Integer> counts) {
+        int total = counts.values().stream().mapToInt(Integer::intValue).sum();
+        int keep = catBox.getSelectedIndex();
+        rebuildingCatBox = true;
+        try {
+            catBox.removeAllItems();
+            catBox.addItem(counts.isEmpty() ? "All" : "All (" + total + ")");
+            for (FindingTaxonomy.Category c : FindingTaxonomy.Category.values()) {
+                int n = counts.getOrDefault(c, 0);
+                catBox.addItem(counts.isEmpty() ? c.label() : c.label() + " (" + n + ")");
+            }
+            if (keep >= 0 && keep < catBox.getItemCount()) {
+                catBox.setSelectedIndex(keep);
+            }
+        } finally {
+            rebuildingCatBox = false;
+        }
     }
 
     @Override
@@ -167,6 +216,14 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         if (f == null) {
             return;
         }
+        String host = hostOf(f.getLocationUrl());
+        if (navigator != null && !host.isEmpty()) {
+            menu.addSeparator();
+            addMenuItem(menu, "View endpoints for " + host, true,
+                    () -> navigator.filterEndpoints(host));
+            addMenuItem(menu, "View parameters for " + host, true,
+                    () -> navigator.filterParameters(host));
+        }
         menu.addSeparator();
         for (Finding.Triage t : Finding.Triage.values()) {
             boolean current = f.getTriage() == t;
@@ -175,6 +232,18 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
                         f.setTriage(t);
                         store.fireChanged();
                     });
+        }
+    }
+
+    private static String hostOf(String url) {
+        if (url == null || !url.startsWith("http")) {
+            return "";
+        }
+        try {
+            String h = URI.create(url).getHost();
+            return h == null ? "" : h;
+        } catch (RuntimeException e) {
+            return "";
         }
     }
 

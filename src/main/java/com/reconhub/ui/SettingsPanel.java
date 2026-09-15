@@ -1,8 +1,10 @@
 package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
+import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.UserRuleStore;
 import com.reconhub.core.DataStore;
+import com.reconhub.model.Finding;
 import com.reconhub.core.Settings;
 import com.reconhub.core.TrafficIngestor;
 import com.reconhub.export.HtmlReporter;
@@ -95,6 +97,12 @@ public final class SettingsPanel extends JPanel {
         JCheckBox autoIngest = leftCheck("Auto-ingest site map on load", settings.isAutoIngestOnLoad());
         autoIngest.addActionListener(e -> settings.setAutoIngestOnLoad(autoIngest.isSelected()));
         add(autoIngest);
+        add(gap());
+
+        add(section("Findings display (noise control)"));
+        add(new JLabel("View-only filter for the Findings tab — hides rows, never drops collected data."));
+        add(minSeverityRow());
+        add(categoryMuteRow());
         add(gap());
 
         add(section("JavaScript collection"));
@@ -208,6 +216,34 @@ public final class SettingsPanel extends JPanel {
 
     private ReportOptions reportOptions() {
         return new ReportOptions(reportConfirmedOnly.isSelected(), reportExcludeFp.isSelected());
+    }
+
+    private JPanel minSeverityRow() {
+        JPanel p = leftFlow();
+        p.add(new JLabel("Minimum severity:"));
+        JComboBox<Finding.Severity> sev = new JComboBox<>(Finding.Severity.values());
+        sev.setSelectedItem(settings.getMinFindingSeverity());
+        sev.setToolTipText("Show findings at or above this severity (INFO = show all)");
+        sev.addActionListener(e -> {
+            settings.setMinFindingSeverity((Finding.Severity) sev.getSelectedItem());
+            store.fireChanged();
+        });
+        p.add(sev);
+        return p;
+    }
+
+    private JPanel categoryMuteRow() {
+        JPanel p = leftFlow();
+        p.add(new JLabel("Mute categories:"));
+        for (FindingTaxonomy.Category c : FindingTaxonomy.Category.values()) {
+            JCheckBox b = new JCheckBox(c.label(), settings.isCategoryMuted(c));
+            b.addActionListener(e -> {
+                settings.setCategoryMuted(c, b.isSelected());
+                store.fireChanged();
+            });
+            p.add(b);
+        }
+        return p;
     }
 
     private JPanel wordlistRow() {
