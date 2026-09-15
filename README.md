@@ -28,7 +28,8 @@
 
 - **시크릿/키** — AWS·Google·GitHub·Slack·Stripe·Twilio·SendGrid 등 API 키, JWT, private key,
   Bearer/Basic 인증 헤더, S3/GCS/Azure 스토리지 URL, 일반 `api_key=…` 할당식
-- **PII** — 주민등록번호(날짜·체크섬 검증), 카드번호(Luhn+BIN 검증), 휴대전화, 이메일, 내부 IPv4
+- **PII** — 주민등록번호(날짜·체크섬 검증), 카드번호(Luhn+BIN 검증), **사업자등록번호·법인등록번호(체크섬 검증)**, 휴대전화, 이메일, 내부 IPv4
+- **요청 기반 단서(passive)** — URL(query)에 실린 시크릿/토큰(이름 클래스·JWT·고엔트로피), redirect 파라미터가 `Location` 헤더에 반사되는 **오픈 리다이렉트 후보**, 응답 HTML에 인코딩 없이 반사되는 **파라미터(XSS 테스트 후보, INFO)**
 - **응답 시그니처** — 스택트레이스·SQL 에러·디버그 모드·디렉터리 리스팅
 - **미스컨피그** — CORS(와일드카드/반사 + credentials), 쿠키 HttpOnly/Secure/SameSite 누락, **CSP 약점**
   (`unsafe-inline`·`unsafe-eval`·와일드카드 소스·`frame-ancestors`/`object-src` 누락)
@@ -85,6 +86,10 @@
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 1.16.0
+- **요청 기반 탐지 추가(passive)**: URL query에 노출된 시크릿/토큰(이름 클래스·JWT·고엔트로피) → `Sensitive data in URL query`(MEDIUM), redirect 계열 파라미터 값이 3xx `Location` 헤더에 반사 → `Open redirect candidate`(MEDIUM), 응답 HTML에 인코딩 없이 반사되는 파라미터 값 → `Reflected parameter (XSS candidate)`(INFO). 모두 dedup·응답당 상한으로 노이즈 제한, 이미 캡처된 요청/응답만 사용.
+- **한국 PII 확장**: **사업자등록번호**(10자리 가중치 체크섬)·**법인등록번호**(13자리 체크섬)를 검증 후 탐지(전부 동일 숫자 등 자명 케이스 배제). 민감값이라 리포트에선 마스킹.
 
 ### 1.15.0
 - **Dashboard 상단 1줄화**: 카운트 pill과 심각도 칩을 한 줄로 합쳐 상단 공간 확보(좁아지면 자동 줄바꿈).

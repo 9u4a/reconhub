@@ -17,6 +17,7 @@ import com.reconhub.analysis.MisconfigInspector;
 import com.reconhub.analysis.ParameterExtractor;
 import com.reconhub.analysis.PiiScanner;
 import com.reconhub.analysis.PatternRegistry;
+import com.reconhub.analysis.RequestInspector;
 import com.reconhub.analysis.SecretScanner;
 import com.reconhub.analysis.TechFingerprinter;
 import com.reconhub.analysis.UserRuleStore;
@@ -51,6 +52,7 @@ public final class TrafficIngestor implements HttpHandler {
     private final CommentExtractor commentExtractor;
     private final ApiSpecAnalyzer apiSpecAnalyzer;
     private final PiiScanner piiScanner;
+    private final RequestInspector requestInspector;
 
     private final ExecutorService executor =
             Executors.newSingleThreadExecutor(r -> {
@@ -84,6 +86,7 @@ public final class TrafficIngestor implements HttpHandler {
         this.misconfigInspector = new MisconfigInspector(store);
         this.apiSpecAnalyzer = new ApiSpecAnalyzer(store);
         this.piiScanner = new PiiScanner(store);
+        this.requestInspector = new RequestInspector(store);
     }
 
     // ---- Bulk sweep of the existing site map ----------------------------
@@ -245,6 +248,7 @@ public final class TrafficIngestor implements HttpHandler {
                 signatureScanner.scan(responseBody, url, rr);
                 authzScanner.scan(responseBody, url, rr);
                 piiScanner.scan(responseBody, url, rr);
+                requestInspector.inspect(request, response, url, contentType, responseBody, rr);
                 misconfigInspector.inspect(ep.host(), request, response, url);
                 if (isHtml(contentType)) {
                     commentExtractor.extractHtml(responseBody, url, rr);
