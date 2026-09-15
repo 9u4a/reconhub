@@ -9,27 +9,36 @@
     --bg: #0f1216; --panel: #171b21; --line: #2a313b; --fg: #e6e9ee;
     --muted: #9aa4b2; --accent: #4da3ff;
     --high: #ff5c5c; --medium: #ffb020; --low: #4da3ff; --info: #7a8698;
+    --maxw: 1200px;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--fg);
     font: 14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
-  header { padding: 24px 32px; border-bottom: 1px solid var(--line); }
+  /* Centered content column shared by header / toolbar / main / footer. */
+  .wrap { max-width: var(--maxw); margin: 0 auto; }
+  header { padding: 24px 32px; border-bottom: 1px solid var(--line); text-align: center; }
   h1 { margin: 0 0 4px; font-size: 22px; }
   .sub { color: var(--muted); font-size: 13px; }
-  /* Sticky toolbar: section jump links + live search + severity filter. */
-  nav.toc { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: wrap;
-    align-items: center; gap: 8px 14px; padding: 10px 32px; background: #12161c;
+  /* Sticky toolbar: section jump links on the left, a labeled filter group on the right. */
+  nav.toc { position: sticky; top: 0; z-index: 5; background: #12161c;
     border-bottom: 1px solid var(--line); }
+  nav.toc .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px;
+    padding: 9px 32px; }
+  nav.toc .links { display: flex; flex-wrap: wrap; gap: 14px; }
   nav.toc a { color: var(--muted); text-decoration: none; font-size: 13px; }
   nav.toc a:hover { color: var(--fg); }
-  nav.toc .spacer { flex: 1; }
-  nav.toc input[type=search] { background: var(--panel); border: 1px solid var(--line);
-    color: var(--fg); border-radius: 6px; padding: 5px 10px; font-size: 13px; min-width: 200px; }
+  nav.toc .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+    margin-left: auto; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 5px 12px; }
+  nav.toc .filters .fl { text-transform: uppercase; font-size: 11px; letter-spacing: .05em;
+    color: var(--muted); font-weight: 600; }
+  nav.toc input[type=search] { background: var(--bg); border: 1px solid var(--line);
+    color: var(--fg); border-radius: 6px; padding: 5px 10px; font-size: 13px; min-width: 180px; }
   nav.toc label { font-size: 12px; color: var(--muted); cursor: pointer; user-select: none; }
-  main { padding: 24px 32px; max-width: 1360px; }
+  main { padding: 24px 32px; }
   /* Leave room below the sticky toolbar when jumping to a section via the TOC, so the heading
      (and its collapse toggle) is not hidden underneath it. */
-  section { margin-bottom: 36px; scroll-margin-top: 60px; }
+  section { margin-bottom: 36px; scroll-margin-top: 72px; }
   h2 { font-size: 16px; border-left: 3px solid var(--accent); padding-left: 10px; margin: 0 0 14px;
     cursor: pointer; user-select: none; }
   h2::before { content: "\25be"; display: inline-block; width: 14px; color: var(--muted);
@@ -79,31 +88,40 @@
   .yes { color: var(--high); font-weight: 700; }
   .nores { color: var(--muted); font-style: italic; padding: 8px 0; }
   footer { padding: 20px 32px; color: var(--muted); font-size: 12px;
-    border-top: 1px solid var(--line); }
+    border-top: 1px solid var(--line); text-align: center; }
 </style>
 </head>
 <body>
 <header>
-  <h1>ReconHub Report</h1>
-  <div class="sub">Generated {{GENERATED_AT}}</div>
+  <div class="wrap">
+    <h1>ReconHub Report</h1>
+    <div class="sub">Generated {{GENERATED_AT}}</div>
+  </div>
 </header>
 <nav class="toc">
-  <a href="#summary">Summary</a>
-  <a href="#findings">Findings</a>
-  <a href="#endpoints">Endpoints</a>
-  <a href="#parameters">Parameters</a>
-  <a href="#js">JS</a>
-  <a href="#tech">Tech</a>
-  <span class="spacer"></span>
-  <input type="search" id="q" placeholder="Filter rows&hellip;" aria-label="Filter table rows">
-  <span id="sevfilter">
-    <label><input type="checkbox" class="sevbox" value="HIGH" checked> High</label>
-    <label><input type="checkbox" class="sevbox" value="MEDIUM" checked> Medium</label>
-    <label><input type="checkbox" class="sevbox" value="LOW" checked> Low</label>
-    <label><input type="checkbox" class="sevbox" value="INFO" checked> Info</label>
-  </span>
+  <div class="wrap">
+    <div class="links">
+      <a href="#summary">Summary</a>
+      <a href="#charts">Charts</a>
+      <a href="#findings">Findings</a>
+      <a href="#endpoints">Endpoints</a>
+      <a href="#parameters">Parameters</a>
+      <a href="#js">JS</a>
+      <a href="#tech">Tech</a>
+    </div>
+    <div class="filters">
+      <span class="fl">Filter</span>
+      <input type="search" id="q" placeholder="Search rows&hellip;" aria-label="Filter table rows">
+      <span id="sevfilter">
+        <label><input type="checkbox" class="sevbox" value="HIGH" checked> High</label>
+        <label><input type="checkbox" class="sevbox" value="MEDIUM" checked> Medium</label>
+        <label><input type="checkbox" class="sevbox" value="LOW" checked> Low</label>
+        <label><input type="checkbox" class="sevbox" value="INFO" checked> Info</label>
+      </span>
+    </div>
+  </div>
 </nav>
-<main>
+<main class="wrap">
 {{BODY}}
 </main>
 <footer>ReconHub &mdash; Burp Suite recon aggregation extension.</footer>

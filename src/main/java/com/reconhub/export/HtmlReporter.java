@@ -50,6 +50,7 @@ public final class HtmlReporter {
     private static String buildBody(DataStore store, ReportOptions options) {
         StringBuilder b = new StringBuilder();
         summarySection(b, store, options);
+        chartsSection(b, store);
         findingsSection(b, store, options);
         endpointsSection(b, store);
         parametersSection(b, store);
@@ -80,9 +81,12 @@ public final class HtmlReporter {
             b.append("<span class=\"sev ").append(s.name()).append("\">").append(s.name())
                     .append(' ').append(sev.getOrDefault(s, 0)).append("</span>");
         }
-        b.append("</div>");
+        b.append("</div></section>");
+    }
 
-        b.append("<div style=\"display:flex;gap:32px;flex-wrap:wrap;margin-top:16px\">");
+    private static void chartsSection(StringBuilder b, DataStore store) {
+        b.append("<section id=\"charts\"><h2>Distribution</h2>");
+        b.append("<div style=\"display:flex;gap:32px;flex-wrap:wrap\">");
         barBlock(b, "Top hosts", store.hostCounts(), 8);
         barBlock(b, "Status codes", store.statusCodeCounts(), 8);
         barBlock(b, "Content types", store.contentTypeCounts(), 8);
