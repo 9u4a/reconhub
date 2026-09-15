@@ -14,10 +14,10 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 | **Dashboard** | 요청·엔드포인트·파라미터·Findings·JS·호스트 카운트, 심각도별 요약, 상위 호스트/상태코드/콘텐츠타입 막대 차트 |
 | **Endpoints** | method + 정규화 URL로 dedup한 엔드포인트 인벤토리(출처: proxy/sitemap/js/**spec**). 행 선택 시 하단에 Request/Response 표시, 우클릭 → **Send to Repeater** |
 | **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie) — 경로·유형·**취약점 후보 클래스(IDOR·Redirect/SSRF·File/Path·SQLi·Command·Secret/Token·Debug)**·예시값·반사 여부·Seen. 행 선택 시 매칭 Request/Response 표시 |
-| **Findings** | 시크릿/민감정보(AWS·Google·GitHub·Slack 키, JWT, private key, S3, 이메일, 내부 IP) + **PII(주민등록번호·카드번호(Luhn)·휴대전화)** + 흥미로운 응답(스택트레이스·SQL 에러·디버그·디렉터리 리스팅) + 보안 미스컨피그(CORS·쿠키 플래그·**CSP 약점**) + 권한 값(role/admin/permissions 등) + **API 스펙 노출(OpenAPI/Swagger)·GraphQL introspection** + HTML/JS 주석, 심각도 정렬. 행 선택 시 **JWT 디코드 탭**(헤더·클레임·만료·alg 경고), 우클릭으로 **트리아지 상태(New/Reviewed/Confirmed/False positive)** 지정·Repeater/Intruder 전송 |
+| **Findings** | 시크릿/민감정보(AWS·Google·GitHub·Slack 키, JWT, private key, S3, 이메일, 내부 IP) + **PII(주민등록번호·카드번호(Luhn)·휴대전화)** + 흥미로운 응답(스택트레이스·SQL 에러·디버그·디렉터리 리스팅) + 보안 미스컨피그(CORS·쿠키 플래그·**CSP 약점**) + 권한 값(role/admin/permissions 등) + **API 스펙 노출(OpenAPI/Swagger)·GraphQL introspection** + HTML/JS 주석, 심각도 정렬·**심각도 빠른 필터**. 행 선택 시 **JWT 디코드 탭**(헤더·클레임·만료·alg 경고), 우클릭으로 **트리아지 상태(New/Reviewed/Confirmed/False positive)** 지정·Repeater/Intruder 전송 |
 | **JS Assets** | 수집한 JS를 SHA-256 해시로 dedup 저장, JS 내 엔드포인트·시크릿 추출. 출처 JS 파일 기록 |
 | **Tech** | 헤더/쿠키/JS 라이브러리 기반 호스트별 기술 식별 + 보안 헤더 누락 체크리스트 |
-| **Settings** | 스코프 모드/정규식, 패시브 검사·정적자산 제외·자동 Ingest 토글, JS 저장 폴더, 라이브 캡처/시크릿 스캔, Ingest Site Map, Clear, Export JSON/HTML, **워드리스트 내보내기(Paths/Param names/Hosts)**, State Export/Import(백업·복원) |
+| **Settings** | 스코프 모드/정규식, 패시브 검사·정적자산 제외·자동 Ingest 토글, JS 저장 폴더, 라이브 캡처/시크릿 스캔, **커스텀 탐지 규칙(정규식 추가·삭제, 재시작 후 유지)**, Ingest Site Map(**진행률·취소**), Clear, Export JSON/HTML, **워드리스트 내보내기(Paths/Param names/Hosts)**, State Export/Import(백업·복원) |
 
 ## 사용법
 
@@ -43,6 +43,11 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 1.11.0
+- **커스텀 탐지 규칙 UI**: Settings에서 사용자 정규식 규칙(이름·심각도·정규식)을 추가/삭제. 내장 시크릿 스캔과 함께 동작하며 신규 트래픽·다음 Ingest부터 적용. **Burp 재시작 후에도 유지**(Montoya 환경설정에 저장).
+- **Ingest 진행률/취소**: Site Map 스윕 시 진행 바(done/total)와 **Cancel** 버튼 표시.
+- **Findings 심각도 빠른 필터**: 상단 HIGH/MEDIUM/LOW/INFO 토글로 즉시 필터(미선택 = 전체).
 
 ### 1.10.0
 - **Findings 트리아지**: 행 우클릭으로 **New/Reviewed/Confirmed/False positive** 상태 지정. Status 컬럼 추가, Confirmed는 굵게·False positive는 흐리게 강조. 상태는 State 백업 및 JSON/HTML 리포트에 포함.

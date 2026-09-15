@@ -375,13 +375,23 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
             (exclude ? excludes : includes).add(compile(term, regexBox.isSelected(), flags));
         }
 
-        if (includes.isEmpty() && excludes.isEmpty()) {
-            sorter.setRowFilter(null);
-        } else {
-            sorter.setRowFilter(new SearchFilter(includes, excludes, field, useBody));
-        }
+        // Always install the filter so subclass row filters (rowIncluded) apply even with no search.
+        sorter.setRowFilter(new SearchFilter(includes, excludes, field, useBody));
         updateCount();
         highlightViewer();
+    }
+
+    /**
+     * Additional per-row visibility hook, ANDed with the search filter. Override to add quick
+     * filters (e.g. by severity); call {@link #reapplyFilter()} when the criteria change.
+     */
+    protected boolean rowIncluded(T row) {
+        return true;
+    }
+
+    /** Re-applies the search + {@link #rowIncluded} filter (call after quick-filter changes). */
+    protected void reapplyFilter() {
+        applySearch();
     }
 
     private void highlightViewer() {
@@ -422,6 +432,11 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
 
         @Override
         public boolean include(Entry<? extends Model, ? extends Integer> entry) {
+            int idx = entry.getIdentifier();
+            T row = (idx >= 0 && idx < rows.size()) ? rows.get(idx) : null;
+            if (!rowIncluded(row)) {
+                return false;
+            }
             String hay = haystack(entry);
             for (Pattern p : includes) {
                 if (!p.matcher(hay).find()) {

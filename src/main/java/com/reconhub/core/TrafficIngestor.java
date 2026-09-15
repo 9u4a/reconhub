@@ -19,6 +19,7 @@ import com.reconhub.analysis.PiiScanner;
 import com.reconhub.analysis.PatternRegistry;
 import com.reconhub.analysis.SecretScanner;
 import com.reconhub.analysis.TechFingerprinter;
+import com.reconhub.analysis.UserRuleStore;
 
 import java.util.List;
 import java.util.Locale;
@@ -40,6 +41,8 @@ public final class TrafficIngestor implements HttpHandler {
 
     private final ParameterExtractor parameterExtractor;
     private final SecretScanner secretScanner;
+    private final SecretScanner userScanner;
+    private final UserRuleStore userRules;
     private final SecretScanner signatureScanner;
     private final SecretScanner authzScanner;
     private final JsAnalyzer jsAnalyzer;
@@ -56,6 +59,12 @@ public final class TrafficIngestor implements HttpHandler {
                 return t;
             });
     private final AtomicBoolean bulkRunning = new AtomicBoolean(false);
+    private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
+
+    /** Progress callback for the bulk sweep. */
+    public interface ProgressListener {
+        void update(int done, int total);
+    }
 
     public TrafficIngestor(MontoyaApi api, DataStore store, Settings settings,
                            PatternRegistry patterns) {
@@ -65,6 +74,8 @@ public final class TrafficIngestor implements HttpHandler {
         this.scopeFilter = new ScopeFilter(api, settings);
         this.parameterExtractor = new ParameterExtractor(store);
         this.secretScanner = new SecretScanner(store, patterns.secretRules(), true);
+        this.userRules = new UserRuleStore(api);
+        this.userScanner = new SecretScanner(store, userRules.compiledRules(), true);
         this.signatureScanner = new SecretScanner(store, patterns.signatureRules(), false);
         this.authzScanner = new SecretScanner(store, patterns.authzRules(), false);
         this.commentExtractor = new CommentExtractor(store);
@@ -79,24 +90,42 @@ public final class TrafficIngestor implements HttpHandler {
 
     /** Kicks off a background sweep of {@code siteMap().requestResponses()}. Ignored if running. */
     public void ingestSiteMapAsync(Runnable onDone) {
+        ingestSiteMapAsync(onDone, null);
+    }
+
+    /** As above, reporting progress and honoring {@link #requestCancelBulk()}. */
+    public void ingestSiteMapAsync(Runnable onDone, ProgressListener progress) {
         if (!bulkRunning.compareAndSet(false, true)) {
             return;
         }
+        cancelRequested.set(false);
         executor.submit(() -> {
             try {
                 List<HttpRequestResponse> items = api.siteMap().requestResponses();
+                int total = items.size();
+                if (progress != null) {
+                    progress.update(0, total);
+                }
                 int i = 0;
                 for (HttpRequestResponse rr : items) {
+                    if (cancelRequested.get()) {
+                        api.logging().logToOutput("ReconHub: ingest cancelled at " + i + "/" + total);
+                        break;
+                    }
                     try {
                         process(rr, "sitemap");
                     } catch (RuntimeException e) {
                         api.logging().logToError("ingest item failed: " + e);
                     }
-                    if (++i % 200 == 0) {
+                    i++;
+                    if (progress != null && (i % 25 == 0 || i == total)) {
+                        progress.update(i, total);
+                    }
+                    if (i % 200 == 0) {
                         store.fireChanged();
                     }
                 }
-                api.logging().logToOutput("ReconHub: swept " + items.size() + " site map items.");
+                api.logging().logToOutput("ReconHub: swept " + i + "/" + total + " site map items.");
             } finally {
                 bulkRunning.set(false);
                 store.fireChanged();
@@ -109,6 +138,16 @@ public final class TrafficIngestor implements HttpHandler {
 
     public boolean isBulkRunning() {
         return bulkRunning.get();
+    }
+
+    /** Requests the running bulk sweep to stop as soon as possible. */
+    public void requestCancelBulk() {
+        cancelRequested.set(true);
+    }
+
+    /** The editable user-defined detection rules (persisted across restarts). */
+    public UserRuleStore userRules() {
+        return userRules;
     }
 
     // ---- Live capture (HttpHandler) ------------------------------------
@@ -194,6 +233,7 @@ public final class TrafficIngestor implements HttpHandler {
         if (response != null) {
             if (settings.isScanResponsesForSecrets()) {
                 secretScanner.scan(responseBody, url, rr);
+                userScanner.scan(responseBody, url, rr);
             }
             techFingerprinter.fingerprint(ep.host(), response, contentType);
             // Passive API-surface discovery (OpenAPI/Swagger/GraphQL) from the captured body.

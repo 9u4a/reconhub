@@ -1,6 +1,7 @@
 package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
+import com.reconhub.analysis.UserRuleStore;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.Settings;
 import com.reconhub.core.TrafficIngestor;
@@ -15,18 +16,25 @@ import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JRadioButton;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
 import javax.swing.JTextField;
+import javax.swing.ListSelectionModel;
+import javax.swing.table.AbstractTableModel;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 
 /** Configuration + actions: scope, JS saving, ingest/clear, and JSON/HTML export. */
 public final class SettingsPanel extends JPanel {
@@ -39,8 +47,13 @@ public final class SettingsPanel extends JPanel {
     private final JLabel status = new JLabel(" ");
     private final JTextField jsDir = new JTextField(36);
     private final JButton ingestButton = new JButton("Ingest Site Map");
+    private final JButton cancelButton = new JButton("Cancel");
+    private final JProgressBar progress = new JProgressBar();
     private final JCheckBox includeMessages =
             new JCheckBox("Include raw request/response (larger file, keeps viewer/body-search)", true);
+
+    private final RulesModel rulesModel = new RulesModel();
+    private JTable rulesTableRef;
 
     public SettingsPanel(MontoyaApi api, DataStore store, Settings settings,
                          TrafficIngestor ingestor) {
@@ -86,8 +99,16 @@ public final class SettingsPanel extends JPanel {
         add(jsDirRow());
         add(gap());
 
+        add(section("Custom detection rules"));
+        add(new JLabel("User regex rules run alongside the built-in secret scan "
+                + "(apply to new traffic and the next ingest). Saved across restarts."));
+        add(rulesTable());
+        add(addRuleRow());
+        add(gap());
+
         add(section("Actions"));
         add(actionsRow());
+        add(progressRow());
         add(gap());
 
         add(section("Wordlists (for ffuf / Intruder)"));
@@ -103,6 +124,8 @@ public final class SettingsPanel extends JPanel {
         status.setForeground(new java.awt.Color(0x9aa4b2));
         status.setAlignmentX(Component.LEFT_ALIGNMENT);
         add(status);
+
+        rulesModel.reload();
     }
 
     private JPanel scopeRow() {
@@ -193,6 +216,72 @@ public final class SettingsPanel extends JPanel {
         runExport(() -> WordlistExporter.export(store, f.toPath(), kind), f);
     }
 
+    private JPanel progressRow() {
+        JPanel p = leftFlow();
+        progress.setStringPainted(true);
+        progress.setPreferredSize(new Dimension(260, 18));
+        progress.setVisible(false);
+        cancelButton.setEnabled(false);
+        cancelButton.setVisible(false);
+        cancelButton.addActionListener(e -> {
+            ingestor.requestCancelBulk();
+            setStatus("Cancelling ingest…");
+        });
+        p.add(progress);
+        p.add(cancelButton);
+        return p;
+    }
+
+    private JScrollPane rulesTable() {
+        JTable t = new JTable(rulesModel);
+        t.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        t.setName("rulesTable");
+        JScrollPane sp = new JScrollPane(t);
+        sp.setAlignmentX(Component.LEFT_ALIGNMENT);
+        sp.setPreferredSize(new Dimension(720, 120));
+        sp.setMaximumSize(new Dimension(Integer.MAX_VALUE, 140));
+        this.rulesTableRef = t;
+        return sp;
+    }
+
+    private JPanel addRuleRow() {
+        JPanel p = leftFlow();
+        JTextField name = new JTextField(14);
+        JComboBox<String> sev = new JComboBox<>(new String[]{"HIGH", "MEDIUM", "LOW", "INFO"});
+        sev.setSelectedItem("MEDIUM");
+        JTextField regex = new JTextField(24);
+        JButton addBtn = new JButton("Add rule");
+        addBtn.addActionListener(e -> {
+            String err = ingestor.userRules().add(name.getText(),
+                    (String) sev.getSelectedItem(), regex.getText());
+            if (err != null) {
+                setStatus(err);
+            } else {
+                name.setText("");
+                regex.setText("");
+                rulesModel.reload();
+                setStatus("Rule added.");
+            }
+        });
+        JButton removeBtn = new JButton("Remove selected");
+        removeBtn.addActionListener(e -> {
+            int row = rulesTableRef != null ? rulesTableRef.getSelectedRow() : -1;
+            if (row >= 0) {
+                ingestor.userRules().removeAt(row);
+                rulesModel.reload();
+                setStatus("Rule removed.");
+            }
+        });
+        p.add(new JLabel("Name:"));
+        p.add(name);
+        p.add(sev);
+        p.add(new JLabel("Regex:"));
+        p.add(regex);
+        p.add(addBtn);
+        p.add(removeBtn);
+        return p;
+    }
+
     private JPanel stateRow() {
         JPanel p = leftFlow();
         JButton exp = new JButton("Export State…");
@@ -214,11 +303,27 @@ public final class SettingsPanel extends JPanel {
             return;
         }
         ingestButton.setEnabled(false);
+        cancelButton.setEnabled(true);
+        cancelButton.setVisible(true);
+        progress.setVisible(true);
+        progress.setIndeterminate(true);
+        progress.setString("starting…");
         setStatus("Ingesting site map…");
-        ingestor.ingestSiteMapAsync(() -> javax.swing.SwingUtilities.invokeLater(() -> {
-            ingestButton.setEnabled(true);
-            setStatus("Ingest complete.");
-        }));
+        ingestor.ingestSiteMapAsync(
+                () -> javax.swing.SwingUtilities.invokeLater(() -> {
+                    ingestButton.setEnabled(true);
+                    cancelButton.setEnabled(false);
+                    cancelButton.setVisible(false);
+                    progress.setVisible(false);
+                    progress.setIndeterminate(false);
+                    setStatus("Ingest complete.");
+                }),
+                (done, total) -> javax.swing.SwingUtilities.invokeLater(() -> {
+                    progress.setIndeterminate(false);
+                    progress.setMaximum(Math.max(total, 1));
+                    progress.setValue(done);
+                    progress.setString(done + " / " + total);
+                }));
     }
 
     private void doClear() {
@@ -385,5 +490,32 @@ public final class SettingsPanel extends JPanel {
 
     private static Component gap() {
         return Box.createVerticalStrut(14);
+    }
+
+    // ---- Custom-rules table model ---------------------------------------
+
+    private final class RulesModel extends AbstractTableModel {
+        private static final String[] COLS = {"Name", "Severity", "Regex"};
+        private List<UserRuleStore.UserRule> rows = List.of();
+
+        void reload() {
+            rows = ingestor.userRules().rules();
+            fireTableDataChanged();
+        }
+
+        @Override public int getRowCount() { return rows.size(); }
+        @Override public int getColumnCount() { return COLS.length; }
+        @Override public String getColumnName(int c) { return COLS[c]; }
+        @Override public boolean isCellEditable(int r, int c) { return false; }
+
+        @Override public Object getValueAt(int r, int c) {
+            UserRuleStore.UserRule rule = rows.get(r);
+            return switch (c) {
+                case 0 -> rule.name;
+                case 1 -> rule.severity;
+                case 2 -> rule.regex;
+                default -> "";
+            };
+        }
     }
 }

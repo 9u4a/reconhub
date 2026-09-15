@@ -7,13 +7,17 @@ import com.reconhub.core.DataStore;
 import com.reconhub.model.Finding;
 
 import javax.swing.JComponent;
+import javax.swing.JLabel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
+import javax.swing.JToggleButton;
 import java.awt.Component;
 import java.awt.Font;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /** Findings table with the request/response viewer, a JWT-decode tab, triage, and color-coding. */
 public final class FindingsPanel extends AbstractTablePanel<Finding> {
@@ -28,6 +32,9 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     private final JTextArea jwtArea = new JTextArea();
     private static final int JWT_TAB = 1;
 
+    /** Severity quick filter; empty = show all. */
+    private final Set<Finding.Severity> activeSeverities = EnumSet.noneOf(Finding.Severity.class);
+
     public FindingsPanel(DataStore store, MontoyaApi api) {
         super(api);
         this.store = store;
@@ -41,6 +48,26 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         detailTabs.addTab("Message", viewer);
         detailTabs.addTab("JWT", new JScrollPane(jwtArea));
         installDetail(detailTabs, viewer);
+
+        addToToolbar(new JLabel("  Severity:"));
+        for (Finding.Severity sev : Finding.Severity.values()) {
+            JToggleButton b = new JToggleButton(sev.name());
+            b.setToolTipText("Show only " + sev.name() + " (toggle; none selected = all)");
+            b.addActionListener(e -> {
+                if (b.isSelected()) {
+                    activeSeverities.add(sev);
+                } else {
+                    activeSeverities.remove(sev);
+                }
+                reapplyFilter();
+            });
+            addToToolbar(b);
+        }
+    }
+
+    @Override
+    protected boolean rowIncluded(Finding f) {
+        return f == null || activeSeverities.isEmpty() || activeSeverities.contains(f.getSeverity());
     }
 
     @Override
