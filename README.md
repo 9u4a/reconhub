@@ -16,7 +16,7 @@
 
 | 탭 | 설명 |
 |----|------|
-| **Dashboard** | 요청·엔드포인트·파라미터·Findings·JS·호스트 카운트, 심각도별 요약, Top hosts 차트, 수집 엔드포인트를 **host→경로 디렉터리 트리(접이식)**로 개괄 |
+| **Dashboard** | 요청·엔드포인트·파라미터·Findings·JS·호스트 카운트, 심각도 요약, Top hosts 차트, **호스트 스코어카드(호스트별 엔드포인트·파라미터·Findings H/M/L/I·누락헤더)**, **Top Findings(유형별 건수)**, **주목 엔드포인트(고위험 파라미터·admin/api 경로)**, **파라미터 클래스 요약** |
 | **Endpoints** | method + 정규화 URL로 dedup한 엔드포인트 인벤토리(출처: proxy/sitemap/js/spec). 행 선택 시 하단에 원문 Request/Response, 우클릭 → Send to Repeater |
 | **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie). 컬럼: Host·Endpoint·Type·Name·Value·**Class(취약점 후보)**·Reflected·Seen. 기본 정렬 host→endpoint, 행 선택 시 매칭 Request/Response |
 | **Findings** | 아래 *탐지 항목*을 심각도 순으로 집계. **심각도 빠른 필터**, 행 선택 시 원문 + **JWT 디코드 탭**, 우클릭으로 **트리아지(New/Reviewed/Confirmed/False positive)** 지정·Repeater/Intruder 전송 |
@@ -85,6 +85,9 @@
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 1.13.0
+- **Dashboard 재구성**: 가독성이 떨어지던 디렉터리 트리를 제거하고, 진단 우선순위 판단에 유용한 집계 뷰로 교체 — **호스트 스코어카드**(호스트별 엔드포인트·파라미터·Findings H/M/L/I·누락 보안헤더), **Top Findings**(유형별 건수 랭킹), **주목 엔드포인트**(고위험 파라미터 클래스 보유 또는 admin/api/graphql 경로), **파라미터 클래스 요약**(칩). Top hosts 차트는 유지.
 
 ### 1.12.0
 - **Dashboard 개편**: 식별에 불필요한 상태코드·콘텐츠타입 막대 차트 제거, 대신 **수집 엔드포인트를 host→경로 디렉터리 트리(접이식)**로 표시(리프에 method·상태코드). Top hosts 차트는 유지.

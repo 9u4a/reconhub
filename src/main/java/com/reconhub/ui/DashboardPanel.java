@@ -1,20 +1,21 @@
 package com.reconhub.ui;
 
+import com.reconhub.analysis.ParameterClassifier;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
+import com.reconhub.model.ParameterInfo;
+import com.reconhub.model.TechInfo;
 
 import javax.swing.BorderFactory;
+import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
-import javax.swing.JTree;
-import javax.swing.tree.DefaultMutableTreeNode;
-import javax.swing.tree.DefaultTreeModel;
-import javax.swing.tree.TreePath;
-import javax.swing.tree.TreeSelectionModel;
+import javax.swing.JTable;
+import javax.swing.table.AbstractTableModel;
+import javax.swing.table.TableRowSorter;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -23,18 +24,24 @@ import java.awt.Font;
 import java.awt.GridLayout;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
-import java.util.Enumeration;
-import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
-/** Summary dashboard: headline stat cards, findings-by-severity chips, Top-hosts chart, and a
- *  collapsible host&rarr;path directory tree of the collected endpoints. */
+/**
+ * Summary dashboard: headline cards, findings-by-severity chips, a Top-hosts chart, and aggregate
+ * triage views — a per-host scorecard, top finding types, notable endpoints (risky params / admin
+ * paths), and a parameter-class summary. All read-only aggregates over the {@link DataStore}.
+ */
 public final class DashboardPanel extends JPanel implements Refreshable {
 
     private static final Color ACCENT = new Color(0x4da3ff);
+    private static final Color MUTED = new Color(0x9aa4b2);
     private static final Map<Finding.Severity, Color> SEV_COLORS = new EnumMap<>(Finding.Severity.class);
     static {
         SEV_COLORS.put(Finding.Severity.HIGH, new Color(0xff5c5c));
@@ -42,6 +49,9 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         SEV_COLORS.put(Finding.Severity.LOW, new Color(0x4da3ff));
         SEV_COLORS.put(Finding.Severity.INFO, new Color(0x7a8698));
     }
+    /** Param-name classes considered high-risk for the "Notable endpoints" list. */
+    private static final Set<String> RISKY_CLASSES =
+            Set.of("IDOR", "Redirect/SSRF", "File/Path", "SQLi/Sort", "Command", "Secret/Token");
 
     private final DataStore store;
 
@@ -54,10 +64,18 @@ public final class DashboardPanel extends JPanel implements Refreshable {
 
     private final JPanel severityRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
     private final BarChartPanel hostChart = new BarChartPanel("Top hosts", 10, ACCENT);
+    private final JPanel classChips = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
 
-    private final DefaultMutableTreeNode root = new DefaultMutableTreeNode("Endpoints");
-    private final DefaultTreeModel treeModel = new DefaultTreeModel(root);
-    private final JTree tree = new JTree(treeModel);
+    private final SimpleModel hostModel = new SimpleModel(
+            new String[]{"Host", "Endpoints", "Params", "H", "M", "L", "I", "Miss hdr"},
+            new Class<?>[]{String.class, Integer.class, Integer.class, Integer.class,
+                    Integer.class, Integer.class, Integer.class, Integer.class});
+    private final SimpleModel typeModel = new SimpleModel(
+            new String[]{"Finding type", "Count"},
+            new Class<?>[]{String.class, Integer.class});
+    private final SimpleModel notableModel = new SimpleModel(
+            new String[]{"Method", "URL", "Why"},
+            new Class<?>[]{String.class, String.class, String.class});
 
     public DashboardPanel(DataStore store) {
         this.store = store;
@@ -81,17 +99,194 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         north.add(severityRow);
         add(north, BorderLayout.NORTH);
 
-        tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
-        tree.setRootVisible(false);
-        tree.setShowsRootHandles(true);
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
 
-        JScrollPane treeScroll = new JScrollPane(tree);
-        treeScroll.setBorder(BorderFactory.createTitledBorder("Endpoints (directory)"));
+        JPanel row1 = new JPanel(new GridLayout(1, 2, 12, 0));
+        row1.add(hostChart);
+        row1.add(titled("Parameter classes", classChips));
+        body.add(sized(row1, 210));
 
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, hostChart, treeScroll);
-        split.setResizeWeight(0.35);
-        split.setContinuousLayout(true);
-        add(split, BorderLayout.CENTER);
+        body.add(sized(titled("Host scorecard", table(hostModel)), 200));
+
+        JPanel row2 = new JPanel(new GridLayout(1, 2, 12, 0));
+        row2.add(titled("Top findings", table(typeModel)));
+        row2.add(titled("Notable endpoints (risky params / admin paths)", table(notableModel)));
+        body.add(sized(row2, 220));
+        body.add(Box.createVerticalGlue());
+
+        add(new JScrollPane(body), BorderLayout.CENTER);
+    }
+
+    // ---- refresh --------------------------------------------------------
+
+    @Override
+    public void refreshData() {
+        List<Endpoint> eps = store.snapshotEndpoints();
+        List<ParameterInfo> params = store.snapshotParameters();
+        List<Finding> finds = store.snapshotFindings();
+
+        requests.setText(String.valueOf(store.getRequestsProcessed()));
+        endpoints.setText(String.valueOf(eps.size()));
+        parameters.setText(String.valueOf(params.size()));
+        findings.setText(String.valueOf(finds.size()));
+        jsFiles.setText(String.valueOf(store.snapshotJsAssets().size()));
+        hosts.setText(String.valueOf(store.snapshotTech().size()));
+
+        Map<Finding.Severity, Integer> sevCounts = new EnumMap<>(Finding.Severity.class);
+        for (Finding f : finds) {
+            sevCounts.merge(f.getSeverity(), 1, Integer::sum);
+        }
+        severityRow.removeAll();
+        severityRow.add(new JLabel("Findings by severity:"));
+        for (Finding.Severity sev : Finding.Severity.values()) {
+            severityRow.add(chip(sev.name() + "  " + sevCounts.getOrDefault(sev, 0), SEV_COLORS.get(sev)));
+        }
+        severityRow.revalidate();
+        severityRow.repaint();
+
+        hostChart.setData(store.hostCounts());
+        buildHostScorecard(eps, params, finds);
+        buildTopFindings(finds);
+        buildNotableEndpoints(eps);
+        buildClassSummary(params);
+    }
+
+    private void buildHostScorecard(List<Endpoint> eps, List<ParameterInfo> params,
+                                    List<Finding> finds) {
+        Map<String, int[]> byHost = new TreeMap<>();   // [ep, param, H, M, L, I, missHdr]
+        for (Endpoint e : eps) {
+            row(byHost, hostLabel(e.getHost()))[0]++;
+        }
+        for (ParameterInfo p : params) {
+            row(byHost, hostLabel(p.getHost()))[1]++;
+        }
+        for (Finding f : finds) {
+            int idx = 2 + f.getSeverity().ordinal();   // HIGH..INFO -> 2..5
+            row(byHost, hostLabel(hostOf(f.getLocationUrl())))[idx]++;
+        }
+        for (TechInfo t : store.snapshotTech()) {
+            row(byHost, hostLabel(t.getHost()))[6] = t.getMissingSecurityHeaders().size();
+        }
+
+        List<Object[]> rows = new ArrayList<>();
+        for (Map.Entry<String, int[]> e : byHost.entrySet()) {
+            int[] c = e.getValue();
+            rows.add(new Object[]{e.getKey(), c[0], c[1], c[2], c[3], c[4], c[5], c[6]});
+        }
+        // Most findings first (H weighted), then most endpoints.
+        rows.sort(Comparator
+                .comparingInt((Object[] r) -> (int) r[3] * 100 + (int) r[4] * 10 + (int) r[5]).reversed()
+                .thenComparing(r -> (int) r[1], Comparator.reverseOrder()));
+        hostModel.setRows(rows);
+    }
+
+    private void buildTopFindings(List<Finding> finds) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (Finding f : finds) {
+            counts.merge(f.getType(), 1, Integer::sum);
+        }
+        List<Object[]> rows = new ArrayList<>();
+        counts.forEach((type, n) -> rows.add(new Object[]{type, n}));
+        rows.sort(Comparator.comparingInt((Object[] r) -> (int) r[1]).reversed());
+        typeModel.setRows(rows);
+    }
+
+    private void buildNotableEndpoints(List<Endpoint> eps) {
+        List<Object[]> rows = new ArrayList<>();
+        for (Endpoint e : eps) {
+            java.util.TreeSet<String> risky = new java.util.TreeSet<>();
+            for (String name : e.getParamNames()) {
+                for (String cls : ParameterClassifier.classify(name)) {
+                    if (RISKY_CLASSES.contains(cls)) {
+                        risky.add(cls);
+                    }
+                }
+            }
+            String pathNote = pathNote(e);
+            if (risky.isEmpty() && pathNote == null) {
+                continue;
+            }
+            StringBuilder why = new StringBuilder(String.join(", ", risky));
+            if (pathNote != null) {
+                if (why.length() > 0) {
+                    why.append("; ");
+                }
+                why.append(pathNote);
+            }
+            rows.add(new Object[]{e.getMethod(), e.getNormalizedUrl(), why.toString(), risky.size()});
+        }
+        rows.sort(Comparator.comparingInt((Object[] r) -> (int) r[3]).reversed());
+        List<Object[]> trimmed = new ArrayList<>();
+        for (Object[] r : rows) {
+            trimmed.add(new Object[]{r[0], r[1], r[2]});   // drop sort key
+            if (trimmed.size() >= 60) {
+                break;
+            }
+        }
+        notableModel.setRows(trimmed);
+    }
+
+    private void buildClassSummary(List<ParameterInfo> params) {
+        Map<String, Integer> counts = new TreeMap<>();
+        for (ParameterInfo p : params) {
+            for (String cls : ParameterClassifier.classify(p.getName())) {
+                counts.merge(cls, 1, Integer::sum);
+            }
+        }
+        classChips.removeAll();
+        if (counts.isEmpty()) {
+            classChips.add(muted("None"));
+        } else {
+            counts.forEach((cls, n) -> classChips.add(chip(cls + "  " + n, ACCENT)));
+        }
+        classChips.revalidate();
+        classChips.repaint();
+    }
+
+    // ---- helpers --------------------------------------------------------
+
+    private static int[] row(Map<String, int[]> m, String host) {
+        return m.computeIfAbsent(host, k -> new int[7]);
+    }
+
+    private static String hostLabel(String host) {
+        return host == null || host.isBlank() ? "(relative / JS)" : host;
+    }
+
+    private static String hostOf(String url) {
+        if (url == null || url.isBlank()) {
+            return "";
+        }
+        try {
+            URI u = URI.create(url);
+            if (u.getHost() != null) {
+                return u.getHost();
+            }
+        } catch (RuntimeException ignored) {
+            // non-URL location
+        }
+        return "";
+    }
+
+    private static String pathNote(Endpoint e) {
+        String p = (e.getPath() == null ? "" : e.getPath()).toLowerCase(Locale.ROOT);
+        if (p.contains("admin")) {
+            return "admin path";
+        }
+        if (p.contains("graphql")) {
+            return "graphql";
+        }
+        if (p.contains("actuator")) {
+            return "actuator";
+        }
+        if (p.contains("internal")) {
+            return "internal path";
+        }
+        if (p.contains("/api") || p.contains("swagger") || p.contains("api-docs")) {
+            return "api";
+        }
+        return null;
     }
 
     private static JLabel stat() {
@@ -109,15 +304,14 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         p.setPreferredSize(new Dimension(150, 76));
         JLabel t = new JLabel(title.toUpperCase());
         t.setFont(t.getFont().deriveFont(11f));
-        t.setForeground(new Color(0x9aa4b2));
+        t.setForeground(MUTED);
         p.add(value);
         p.add(t);
         return p;
     }
 
-    private static JLabel severityChip(Finding.Severity sev, int count) {
-        JLabel l = new JLabel(sev.name() + "  " + count);
-        Color c = SEV_COLORS.get(sev);
+    private static JLabel chip(String text, Color c) {
+        JLabel l = new JLabel(text);
         l.setOpaque(true);
         l.setBackground(new Color(c.getRed(), c.getGreen(), c.getBlue(), 38));
         l.setForeground(c);
@@ -128,152 +322,55 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         return l;
     }
 
-    @Override
-    public void refreshData() {
-        requests.setText(String.valueOf(store.getRequestsProcessed()));
-        endpoints.setText(String.valueOf(store.snapshotEndpoints().size()));
-        parameters.setText(String.valueOf(store.snapshotParameters().size()));
-        findings.setText(String.valueOf(store.snapshotFindings().size()));
-        jsFiles.setText(String.valueOf(store.snapshotJsAssets().size()));
-        hosts.setText(String.valueOf(store.snapshotTech().size()));
-
-        Map<Finding.Severity, Integer> sevCounts = new EnumMap<>(Finding.Severity.class);
-        for (Finding f : store.snapshotFindings()) {
-            sevCounts.merge(f.getSeverity(), 1, Integer::sum);
-        }
-        severityRow.removeAll();
-        severityRow.add(new JLabel("Findings by severity:"));
-        for (Finding.Severity sev : Finding.Severity.values()) {
-            severityRow.add(severityChip(sev, sevCounts.getOrDefault(sev, 0)));
-        }
-        severityRow.revalidate();
-        severityRow.repaint();
-
-        hostChart.setData(store.hostCounts());
-        rebuildTree();
+    private static JLabel muted(String text) {
+        JLabel l = new JLabel(text);
+        l.setForeground(MUTED);
+        return l;
     }
 
-    // ---- Endpoint directory tree ----------------------------------------
-
-    private void rebuildTree() {
-        Set<List<String>> expanded = captureExpanded();
-        root.removeAllChildren();
-        for (Endpoint e : store.snapshotEndpoints()) {
-            DefaultMutableTreeNode cur = childDir(root, hostOf(e));
-            for (String seg : splitPath(pathOf(e))) {
-                cur = childDir(cur, seg);
-            }
-            String leaf = e.getMethod()
-                    + (e.getLastStatusCode() > 0 ? " (" + e.getLastStatusCode() + ")" : "");
-            cur.add(new DefaultMutableTreeNode(leaf, false));   // method row: not a directory
-        }
-        treeModel.reload();
-        restoreExpanded(expanded);
+    private static JScrollPane table(SimpleModel model) {
+        JTable t = new JTable(model);
+        t.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
+        t.setRowSorter(new TableRowSorter<>(model));
+        return new JScrollPane(t);
     }
 
-    private static String hostOf(Endpoint e) {
-        String h = e.getHost();
-        if (h != null && !h.isBlank()) {
-            return h;
-        }
-        String p = e.getPath();
-        if (p != null && (p.startsWith("http://") || p.startsWith("https://"))) {
-            try {
-                URI u = URI.create(p);
-                if (u.getHost() != null) {
-                    return u.getHost();
-                }
-            } catch (RuntimeException ignored) {
-                // fall through
-            }
-        }
-        return "(relative / JS)";
+    private static JPanel titled(String title, java.awt.Component inner) {
+        JPanel p = new JPanel(new BorderLayout());
+        p.setBorder(BorderFactory.createTitledBorder(title));
+        p.add(inner, BorderLayout.CENTER);
+        return p;
     }
 
-    private static String pathOf(Endpoint e) {
-        String p = e.getPath();
-        if (p == null || p.isBlank()) {
-            return "/";
-        }
-        if (p.startsWith("http://") || p.startsWith("https://")) {
-            try {
-                String path = URI.create(p).getPath();
-                p = (path == null || path.isEmpty()) ? "/" : path;
-            } catch (RuntimeException ignored) {
-                // leave p as-is
-            }
-        }
-        int q = p.indexOf('?');
-        if (q >= 0) {
-            p = p.substring(0, q);
-        }
-        return p.isEmpty() ? "/" : p;
+    private static JPanel sized(JPanel p, int height) {
+        p.setMaximumSize(new Dimension(Integer.MAX_VALUE, height));
+        p.setPreferredSize(new Dimension(p.getPreferredSize().width, height));
+        p.setAlignmentX(LEFT_ALIGNMENT);
+        return p;
     }
 
-    private static List<String> splitPath(String path) {
-        List<String> out = new ArrayList<>();
-        if (path != null) {
-            for (String seg : path.split("/")) {
-                if (!seg.isBlank()) {
-                    out.add(seg);
-                }
-            }
-        }
-        return out;
-    }
+    // ---- read-only aggregate table model --------------------------------
 
-    /** Finds or creates a directory child with the given label (method rows never match). */
-    private static DefaultMutableTreeNode childDir(DefaultMutableTreeNode parent, String label) {
-        for (int i = 0; i < parent.getChildCount(); i++) {
-            DefaultMutableTreeNode c = (DefaultMutableTreeNode) parent.getChildAt(i);
-            if (c.getAllowsChildren() && label.equals(c.getUserObject())) {
-                return c;
-            }
-        }
-        DefaultMutableTreeNode created = new DefaultMutableTreeNode(label);   // directory node
-        parent.add(created);
-        return created;
-    }
+    private static final class SimpleModel extends AbstractTableModel {
+        private final String[] cols;
+        private final Class<?>[] types;
+        private List<Object[]> rows = new ArrayList<>();
 
-    // ---- expansion preservation (best effort, by label path) ------------
+        SimpleModel(String[] cols, Class<?>[] types) {
+            this.cols = cols;
+            this.types = types;
+        }
 
-    private Set<List<String>> captureExpanded() {
-        Set<List<String>> paths = new HashSet<>();
-        Enumeration<TreePath> en = tree.getExpandedDescendants(new TreePath(root));
-        if (en != null) {
-            while (en.hasMoreElements()) {
-                paths.add(labelPath(en.nextElement()));
-            }
+        void setRows(List<Object[]> r) {
+            this.rows = r != null ? r : new ArrayList<>();
+            fireTableDataChanged();
         }
-        return paths;
-    }
 
-    private void restoreExpanded(Set<List<String>> expanded) {
-        if (expanded.isEmpty()) {
-            for (int i = 0; i < root.getChildCount(); i++) {
-                tree.expandPath(new TreePath(
-                        ((DefaultMutableTreeNode) root.getChildAt(i)).getPath()));
-            }
-            return;
-        }
-        expandMatching(root, expanded);
-    }
-
-    private void expandMatching(DefaultMutableTreeNode node, Set<List<String>> expanded) {
-        TreePath tp = new TreePath(node.getPath());
-        if (expanded.contains(labelPath(tp))) {
-            tree.expandPath(tp);
-        }
-        for (int i = 0; i < node.getChildCount(); i++) {
-            expandMatching((DefaultMutableTreeNode) node.getChildAt(i), expanded);
-        }
-    }
-
-    private static List<String> labelPath(TreePath tp) {
-        List<String> labels = new ArrayList<>();
-        for (Object o : tp.getPath()) {
-            labels.add(String.valueOf(((DefaultMutableTreeNode) o).getUserObject()));
-        }
-        return labels;
+        @Override public int getRowCount() { return rows.size(); }
+        @Override public int getColumnCount() { return cols.length; }
+        @Override public String getColumnName(int c) { return cols[c]; }
+        @Override public Class<?> getColumnClass(int c) { return types[c]; }
+        @Override public boolean isCellEditable(int r, int c) { return false; }
+        @Override public Object getValueAt(int r, int c) { return rows.get(r)[c]; }
     }
 }
