@@ -26,12 +26,6 @@ public final class PiiScanner {
     // excluded on both sides so parts of longer numbers/decimals aren't picked up.
     private static final Pattern CARD =
             Pattern.compile("(?<![0-9.])(?:\\d[ -]?){13,19}(?![0-9.])");
-    // Korean business registration number (사업자등록번호): ###-##-#####
-    private static final Pattern BIZ_NO =
-            Pattern.compile("(?<![0-9])(\\d{3})-?(\\d{2})-?(\\d{5})(?![0-9])");
-    // Korean corporate registration number (법인등록번호): ######-#######
-    private static final Pattern CORP_NO =
-            Pattern.compile("(?<![0-9])(\\d{6})-?(\\d{7})(?![0-9])");
 
     private final DataStore store;
 
@@ -48,8 +42,6 @@ public final class PiiScanner {
         newCount += scanRrn(body, url, rr);
         newCount += scanCard(body, url, rr);
         newCount += scanPhone(body, url, rr);
-        newCount += scanBizNo(body, url, rr);
-        newCount += scanCorpNo(body, url, rr);
         return newCount;
     }
 
@@ -93,38 +85,6 @@ public final class PiiScanner {
         while (m.find() && hits < MAX_PER_RULE) {
             hits++;
             if (record("Korean phone number", Finding.Severity.LOW, m.group(), url, rr)) {
-                found++;
-            }
-        }
-        return found;
-    }
-
-    private int scanBizNo(String body, String url, HttpRequestResponse rr) {
-        Matcher m = BIZ_NO.matcher(body);
-        int hits = 0;
-        int found = 0;
-        while (m.find() && hits < MAX_PER_RULE) {
-            hits++;
-            String digits = m.group(1) + m.group(2) + m.group(3);
-            if (validBizNo(digits)
-                    && record("Korean business reg. no. (사업자등록번호)", Finding.Severity.HIGH,
-                            m.group(), url, rr)) {
-                found++;
-            }
-        }
-        return found;
-    }
-
-    private int scanCorpNo(String body, String url, HttpRequestResponse rr) {
-        Matcher m = CORP_NO.matcher(body);
-        int hits = 0;
-        int found = 0;
-        while (m.find() && hits < MAX_PER_RULE) {
-            hits++;
-            String digits = m.group(1) + m.group(2);
-            if (validCorpNo(digits)
-                    && record("Korean corporate reg. no. (법인등록번호)", Finding.Severity.HIGH,
-                            m.group(), url, rr)) {
                 found++;
             }
         }
@@ -227,34 +187,6 @@ public final class PiiScanner {
             alt = !alt;
         }
         return sum % 10 == 0;
-    }
-
-    /** Korean business reg. no. (사업자등록번호): 10 digits, standard weighted checksum. */
-    static boolean validBizNo(String d) {
-        if (d.length() != 10 || allSameDigit(d)) {
-            return false;
-        }
-        int[] w = {1, 3, 7, 1, 3, 7, 1, 3, 5};
-        int sum = 0;
-        for (int i = 0; i < 9; i++) {
-            sum += (d.charAt(i) - '0') * w[i];
-        }
-        sum += ((d.charAt(8) - '0') * 5) / 10;
-        int check = (10 - (sum % 10)) % 10;
-        return check == (d.charAt(9) - '0');
-    }
-
-    /** Korean corporate reg. no. (법인등록번호): 13 digits, alternating 1/2 weighted checksum. */
-    static boolean validCorpNo(String d) {
-        if (d.length() != 13 || allSameDigit(d)) {
-            return false;
-        }
-        int sum = 0;
-        for (int i = 0; i < 12; i++) {
-            sum += (d.charAt(i) - '0') * (i % 2 == 0 ? 1 : 2);
-        }
-        int check = (10 - (sum % 10)) % 10;
-        return check == (d.charAt(12) - '0');
     }
 
     /** Korean RRN: 13 digits, valid MMDD, and the standard weighted checksum. */

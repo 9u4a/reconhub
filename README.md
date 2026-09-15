@@ -28,7 +28,7 @@
 
 - **시크릿/키** — AWS·Google·GitHub·Slack·Stripe·Twilio·SendGrid 등 API 키, JWT, private key,
   Bearer/Basic 인증 헤더, S3/GCS/Azure 스토리지 URL, 일반 `api_key=…` 할당식
-- **PII** — 주민등록번호(날짜·체크섬 검증), 카드번호(Luhn+BIN 검증), **사업자등록번호·법인등록번호(체크섬 검증)**, 휴대전화, 이메일, 내부 IPv4
+- **PII** — 주민등록번호(날짜·체크섬 검증), 카드번호(Luhn+BIN 검증), 휴대전화, 이메일, 내부 IPv4
 - **요청 기반 단서(passive)** — URL(query)에 실린 시크릿/토큰(이름 클래스·JWT·고엔트로피), redirect 파라미터가 `Location` 헤더에 반사되는 **오픈 리다이렉트 후보**, 응답 HTML에 인코딩 없이 반사되는 **파라미터(XSS 테스트 후보, INFO)**
 - **응답 시그니처** — 스택트레이스·SQL 에러·디버그 모드·디렉터리 리스팅
 - **미스컨피그** — CORS(와일드카드/반사 + credentials), 쿠키 HttpOnly/Secure/SameSite 누락, **CSP 약점**
@@ -88,6 +88,9 @@
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 0.19.0
+- **PII 탐지 항목 정리**: **사업자등록번호·법인등록번호**는 취약점이 아닌 식별번호라 Findings에서 제거(주민등록번호·카드번호·휴대전화는 유지).
 
 ### 0.18.0
 - **HTML 리포트 업그레이드**: 상단 sticky **목차/네비**(섹션 점프), **행 검색창**, **심각도 체크박스 필터**(High/Medium/Low/Info), 섹션 **접기/펼치기**, Summary에 **심각도 요약** 추가(외부 라이브러리 없이 인라인 JS/CSS).
