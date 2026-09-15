@@ -2,22 +2,48 @@
 
 ## 개요
 
-모의진단 중 Burp에 쌓인 **Proxy History / Site Map**을 순회하여 진단에 필요한 정보를 자동으로
-추출·정리하고, JavaScript 파일을 수집·분석하며, 결과를 **JSON / HTML 리포트**로 내보내는
-Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽을 발생시키지 않는 **수동 분석**
-방식입니다.
+**ReconHub**는 모의진단 중 Burp에 쌓인 **Proxy History / Site Map**을 순회하여 진단에 필요한 정보를
+자동으로 추출·정리하는 Burp Suite 확장(Montoya API, Java)입니다. 엔드포인트·파라미터 인벤토리화,
+민감정보·미스컨피그 탐지, JavaScript 수집·분석, 기술 핑거프린팅을 수행하고 결과를 **JSON / HTML
+리포트**와 재적재 가능한 **State 백업**으로 내보냅니다.
+
+대상 서버에 직접 트래픽을 발생시키지 않는 **수동(passive) 분석**이 기본이며, 부하를 유발할 수 있는
+기능은 두지 않습니다(모든 분석은 이미 캡처된 트래픽만 사용).
 
 ## 기능
 
+**탭 구성**
+
 | 탭 | 설명 |
 |----|------|
-| **Dashboard** | 요청·엔드포인트·파라미터·Findings·JS·호스트 카운트, 심각도별 요약, 상위 호스트 막대 차트, **수집 엔드포인트 host→경로 디렉터리 트리(접이식)** |
-| **Endpoints** | method + 정규화 URL로 dedup한 엔드포인트 인벤토리(출처: proxy/sitemap/js/**spec**). 행 선택 시 하단에 Request/Response 표시, 우클릭 → **Send to Repeater** |
-| **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie) — **호스트**·경로·유형·**취약점 후보 클래스(IDOR·Redirect/SSRF·File/Path·SQLi·Command·Secret/Token·Debug)**·예시값·반사 여부·Seen. 기본 정렬 host→endpoint. 행 선택 시 매칭 Request/Response 표시 |
-| **Findings** | 시크릿/민감정보(AWS·Google·GitHub·Slack 키, JWT, private key, S3, 이메일, 내부 IP) + **PII(주민등록번호·카드번호(Luhn)·휴대전화)** + 흥미로운 응답(스택트레이스·SQL 에러·디버그·디렉터리 리스팅) + 보안 미스컨피그(CORS·쿠키 플래그·**CSP 약점**) + 권한 값(role/admin/permissions 등) + **API 스펙 노출(OpenAPI/Swagger)·GraphQL introspection** + HTML/JS 주석, 심각도 정렬·**심각도 빠른 필터**. 행 선택 시 **JWT 디코드 탭**(헤더·클레임·만료·alg 경고), 우클릭으로 **트리아지 상태(New/Reviewed/Confirmed/False positive)** 지정·Repeater/Intruder 전송 |
-| **JS Assets** | 수집한 JS를 SHA-256 해시로 dedup 저장, JS 내 엔드포인트·시크릿 추출. 출처 JS 파일 기록 |
+| **Dashboard** | 요청·엔드포인트·파라미터·Findings·JS·호스트 카운트, 심각도별 요약, Top hosts 차트, 수집 엔드포인트를 **host→경로 디렉터리 트리(접이식)**로 개괄 |
+| **Endpoints** | method + 정규화 URL로 dedup한 엔드포인트 인벤토리(출처: proxy/sitemap/js/spec). 행 선택 시 하단에 원문 Request/Response, 우클릭 → Send to Repeater |
+| **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie). 컬럼: Host·Endpoint·Type·Name·Value·**Class(취약점 후보)**·Reflected·Seen. 기본 정렬 host→endpoint, 행 선택 시 매칭 Request/Response |
+| **Findings** | 아래 *탐지 항목*을 심각도 순으로 집계. **심각도 빠른 필터**, 행 선택 시 원문 + **JWT 디코드 탭**, 우클릭으로 **트리아지(New/Reviewed/Confirmed/False positive)** 지정·Repeater/Intruder 전송 |
+| **JS Assets** | 수집 JS를 SHA-256으로 dedup 저장(옵션: 디스크 저장), JS 내 엔드포인트·시크릿 추출. 행 선택 시 메타·저장파일 열기·관련 엔드포인트/Findings |
 | **Tech** | 헤더/쿠키/JS 라이브러리 기반 호스트별 기술 식별 + 보안 헤더 누락 체크리스트 |
-| **Settings** | 스코프 모드/정규식, 패시브 검사·정적자산 제외·자동 Ingest 토글, JS 저장 폴더, 라이브 캡처/시크릿 스캔, **커스텀 탐지 규칙(정규식 추가·삭제, 재시작 후 유지)**, Ingest Site Map(**진행률·취소**), Clear, Export JSON/HTML, **워드리스트 내보내기(Paths/Param names/Hosts)**, State Export/Import(백업·복원) |
+| **Settings** | 스코프·패시브 토글·커스텀 탐지 규칙·Ingest·각종 내보내기·State 백업 (아래 *사용법* 참고) |
+
+**탐지 항목 (Findings)**
+
+- **시크릿/키** — AWS·Google·GitHub·Slack·Stripe·Twilio·SendGrid 등 API 키, JWT, private key,
+  Bearer/Basic 인증 헤더, S3/GCS/Azure 스토리지 URL, 일반 `api_key=…` 할당식
+- **PII** — 주민등록번호(날짜·체크섬 검증), 카드번호(Luhn+BIN 검증), 휴대전화, 이메일, 내부 IPv4
+- **응답 시그니처** — 스택트레이스·SQL 에러·디버그 모드·디렉터리 리스팅
+- **미스컨피그** — CORS(와일드카드/반사 + credentials), 쿠키 HttpOnly/Secure/SameSite 누락, **CSP 약점**
+  (`unsafe-inline`·`unsafe-eval`·와일드카드 소스·`frame-ancestors`/`object-src` 누락)
+- **권한/인가 단서** — `role: admin`, `isAdmin: true`, `permissions/scopes/authorities`, `access_level` 등
+- **API 표면** — OpenAPI/Swagger 스펙 노출(정의된 경로·파라미터를 인벤토리로 흡수), GraphQL introspection
+- **주석** — HTML/JS 주석 중 흥미로운 키워드
+
+> 시크릿·PII 등 민감값은 화면에선 전체 확인·복사가 가능하고, JSON/HTML 리포트에선 마스킹됩니다.
+
+**모든 탭 공통**
+
+- **Search 바** — 한/영 동시 검색, request/response 본문까지 검색, 정규식/대소문자/다중 AND·제외(`-단어`)/컬럼 지정
+- **정렬** — 컬럼 헤더 클릭 시 오름차순 → 내림차순 → 기본(해제) 3단계 순환
+- **CSV…** — 현재 화면(검색·정렬 반영)을 CSV로 저장
+- 행 우클릭 — Copy cell/URL, Open in browser, Send to Repeater/Intruder
 
 ## 사용법
 
@@ -32,13 +58,29 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 **설치**: Burp → **Extensions → Add** → Extension type **Java** → 위 JAR 선택 →
 상단에 **ReconHub** 탭 생성 확인.
 
-**진단 흐름**:
+**기본 진단 흐름**
 
 1. 진단 대상을 **Target → Scope**에 등록(기본 스코프 모드는 스코프 내 트래픽만 처리).
-2. 이미 쌓인 트래픽은 **Settings → Ingest Site Map**으로 일괄 분석.
+   필요 시 **Settings → Include/Exclude 정규식**으로 범위를 세밀 조정.
+2. 이미 쌓인 트래픽은 **Settings → Ingest Site Map**으로 일괄 분석(진행 바·**Cancel** 지원).
+   확장 로드 시 자동 분석하려면 **Auto-ingest site map on load** 토글.
 3. 이후 브라우징하는 신규 트래픽은 **Capture new traffic live** 토글로 자동 반영.
-4. 각 탭에서 확인(행 선택 시 하단에서 원문 Request/Response 확인) 후 **Export JSON / HTML**로 리포트 저장.
-5. 수집한 JS는 **Settings → JS 저장 폴더**(기본 `~/reconhub/js`)에 해시 dedup되어 저장.
+4. 각 탭에서 확인(행 선택 시 하단 원문 Request/Response) → **Findings**는 우클릭으로 트리아지하며 정리.
+5. 특정 요청만 취합하려면 Proxy 등 다른 탭에서 우클릭 → **Send to ReconHub**(스코프 무시).
+
+**내보내기 / 백업** (Settings)
+
+- **Export JSON / HTML** — 공유용 리포트.
+- **워드리스트(Paths / Param names / Hosts)** — ffuf·Intruder용 텍스트(정렬·중복 제거).
+- **State Export / Import** — 수집 데이터 전체를 백업/복원(프로젝트 이동용). 원본 request/response 포함
+  여부 선택 가능하며, Import 시 교체/병합 선택.
+
+**커스터마이징**
+
+- **커스텀 탐지 규칙** — Settings에서 이름·심각도·정규식으로 규칙을 추가/삭제. 내장 시크릿 스캔과 함께
+  동작하고 Burp 재시작 후에도 유지되며, 신규 트래픽과 다음 Ingest부터 적용됩니다.
+- **수집 JS 저장** — **Save collected JS to disk** 활성 시 **JS 저장 폴더**(기본 `~/reconhub/js`)에
+  해시 dedup되어 저장됩니다.
 
 ## 변경 이력
 
