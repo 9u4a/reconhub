@@ -26,13 +26,17 @@
 
 **탐지 항목 (Findings)**
 
-- **시크릿/키** — AWS·Google·GitHub·Slack·Stripe·Twilio·SendGrid 등 API 키, JWT, private key,
-  Bearer/Basic 인증 헤더, S3/GCS/Azure 스토리지 URL, 일반 `api_key=…` 할당식
+- **시크릿/키** — AWS·Google·GitHub·GitLab·Slack·Stripe·Twilio·SendGrid·npm·Shopify·Square·OpenAI·
+  Postman·New Relic·Databricks·Telegram 등 API 키/토큰, JWT, private key, Bearer/Basic 인증 헤더,
+  S3/GCS/Azure 스토리지 URL, 일반 `api_key=…` 할당식
 - **PII** — 주민등록번호(날짜·체크섬 검증), 카드번호(Luhn+BIN 검증), 휴대전화, 이메일, 내부 IPv4
 - **요청 기반 단서(passive)** — URL(query)에 실린 시크릿/토큰(이름 클래스·JWT·고엔트로피), redirect 파라미터가 `Location` 헤더에 반사되는 **오픈 리다이렉트 후보**, 응답 HTML에 인코딩 없이 반사되는 **파라미터(XSS 테스트 후보, INFO)**
 - **응답 시그니처** — 스택트레이스·SQL 에러·디버그 모드·디렉터리 리스팅
 - **미스컨피그** — CORS(와일드카드/반사 + credentials), 쿠키 HttpOnly/Secure/SameSite 누락, **CSP 약점**
-  (`unsafe-inline`·`unsafe-eval`·와일드카드 소스·`frame-ancestors`/`object-src` 누락)
+  (`unsafe-inline`·`unsafe-eval`·와일드카드 소스·`frame-ancestors`/`object-src` 누락), **인증 응답 캐시 가능**
+  (no-store/private 없는 인증 JSON), **혼합 콘텐츠**(https 페이지의 http 하위 리소스)
+- **노출 파일** — 히스토리에 이미 잡힌 `.env`·`.git/`·`.htpasswd`·`wp-config`·`id_rsa`·`docker-compose` 등
+  민감 파일과 `.bak`·`.old`·`.sql`·`.dump` 백업이 2xx로 서빙되는 경우
 - **권한/인가 단서** — `role: admin`, `isAdmin: true`, `permissions/scopes/authorities`, `access_level` 등
 - **API 표면** — OpenAPI/Swagger 스펙 노출(정의된 경로·파라미터를 인벤토리로 흡수), GraphQL introspection
 - **주석** — HTML/JS 주석 중 흥미로운 키워드
@@ -88,6 +92,9 @@
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 0.21.0
+- **탐지 확장(passive)**: 시크릿 제공자 추가(GitLab·npm·Shopify·Square·OpenAI·Postman·New Relic·Databricks·Telegram, 고정밀 prefix 규칙). **노출 민감 파일**(`.env`/`.git`/`.htpasswd`/`wp-config`/`id_rsa`/`docker-compose` 2xx 서빙 → HIGH, `.bak`/`.old`/`.sql`/`.dump` 백업 → MEDIUM), **혼합 콘텐츠**(https 페이지의 http 하위 리소스 → LOW), **인증 응답 캐시 가능**(no-store/private 없는 인증 JSON → LOW) Findings 추가. 모두 이미 캡처된 트래픽만 사용.
 
 ### 0.20.0
 - **Findings 카테고리 분류**: 각 finding을 **Secret/PII/Auth/Misconfig/Info leak/API/Injection/Comment** 카테고리로 자동 분류(`FindingTaxonomy`). Findings 탭에 **Category 컬럼(색상 구분)**과 **카테고리 필터(콤보, 심각도 필터와 동시 적용)** 추가, HTML/Markdown 리포트에도 Category 컬럼과 **카테고리 요약**을 반영.

@@ -10,6 +10,7 @@ import com.reconhub.model.Finding;
 
 import java.net.URI;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
  * Passive request-side checks that need the request parameters (and, when present, the response):
@@ -20,6 +21,20 @@ import java.util.Locale;
 public final class RequestInspector {
 
     private static final int MAX_PER_RESPONSE = 20;
+
+    // Config/credential files that should never be web-served (fired only on a 2xx response).
+    private static final Pattern SENSITIVE_FILE = Pattern.compile(
+            "(?:^|/)(?:\\.env(?:\\.[a-z]+)?|\\.git/(?:config|head)?|\\.svn/|\\.htpasswd|\\.htaccess|"
+            + "wp-config\\.php(?:\\.(?:bak|old|save|orig|txt))?|id_rsa|id_dsa|\\.ds_store|"
+            + "\\.aws/credentials|\\.npmrc|\\.pypirc|docker-compose\\.ya?ml)(?:$|[?#])",
+            Pattern.CASE_INSENSITIVE);
+    // Source/DB backups that leak code or data.
+    private static final Pattern BACKUP_FILE = Pattern.compile(
+            "\\.(?:bak|old|orig|save|swp|swo|sql|sql\\.gz|dump|backup)(?:$|[?#])",
+            Pattern.CASE_INSENSITIVE);
+    // Active/passive sub-resources loaded over http on an https page (mixed content).
+    private static final Pattern MIXED_CONTENT =
+            Pattern.compile("(?i)(?:src|srcset)\\s*=\\s*[\"']http://");
 
     private final DataStore store;
 
@@ -36,6 +51,12 @@ public final class RequestInspector {
         String path = pathOf(url);
         boolean html = contentType != null && contentType.toLowerCase(Locale.ROOT).contains("html");
         int status = response != null ? response.statusCode() : 0;
+
+        checkSensitiveFile(url, path, status, rr);
+        if (html && body != null && url.startsWith("https://") && MIXED_CONTENT.matcher(body).find()) {
+            add(Finding.Severity.LOW, "Mixed content", "mixed|" + host, url,
+                    "http:// sub-resource on https page", rr);
+        }
         String location = response != null ? response.headerValue("Location") : null;
         int emitted = 0;
 
@@ -81,6 +102,20 @@ public final class RequestInspector {
                     emitted++;
                 }
             }
+        }
+    }
+
+    /** Flags config/credential/backup files that were actually served (2xx). */
+    private void checkSensitiveFile(String url, String path, int status, HttpRequestResponse rr) {
+        if (status < 200 || status >= 300 || path == null || path.isEmpty()) {
+            return;
+        }
+        if (SENSITIVE_FILE.matcher(path).find()) {
+            add(Finding.Severity.HIGH, "Exposed sensitive file", "file|" + url, url,
+                    "served: " + path, rr);
+        } else if (BACKUP_FILE.matcher(path).find()) {
+            add(Finding.Severity.MEDIUM, "Exposed backup file", "backup|" + url, url,
+                    "served: " + path, rr);
         }
     }
 

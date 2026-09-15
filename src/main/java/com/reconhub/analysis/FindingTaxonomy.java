@@ -40,7 +40,7 @@ public final class FindingTaxonomy {
         }
         String t = type.toLowerCase(Locale.ROOT);
 
-        if (has(t, "cors", "csp", "cookie")) {
+        if (has(t, "cors", "csp", "cookie", "mixed content", "cacheable")) {
             return Category.MISCONFIG;
         }
         if (has(t, "graphql", "api spec", "spec exposed")) {
@@ -58,7 +58,7 @@ public final class FindingTaxonomy {
         }
         if (has(t, "stack", "trace", "traceback", "exception", "error", "debug",
                 "directory listing", "internal path", "var_dump", "print_r",
-                "s3", "blob", "storage", "private ipv4")) {
+                "s3", "blob", "storage", "private ipv4", "exposed", "backup")) {
             return Category.INFO_LEAK;
         }
         if (has(t, "comment")) {

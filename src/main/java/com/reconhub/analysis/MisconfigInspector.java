@@ -32,6 +32,30 @@ public final class MisconfigInspector {
         checkCors(request, response, url);
         checkCookies(host, response, url);
         checkCsp(host, response, url);
+        checkCacheable(host, request, response, url);
+    }
+
+    /** Authenticated JSON responses without a private/no-store cache directive may be cached. */
+    private void checkCacheable(String host, HttpRequest request, HttpResponse response, String url) {
+        if (request == null || response.statusCode() != 200) {
+            return;
+        }
+        boolean authed = request.headerValue("Authorization") != null
+                || request.headerValue("Cookie") != null;
+        String ct = response.headerValue("Content-Type");
+        boolean json = ct != null && ct.toLowerCase(Locale.ROOT).contains("json");
+        if (!authed || !json) {
+            return;
+        }
+        String cc = response.headerValue("Cache-Control");
+        String lower = cc == null ? "" : cc.toLowerCase(Locale.ROOT);
+        boolean safe = lower.contains("no-store") || lower.contains("private")
+                || lower.contains("no-cache");
+        if (!safe) {
+            add(Finding.Severity.LOW, "Sensitive response cacheable",
+                    host + "|cache|" + url, url,
+                    cc == null ? "no Cache-Control" : "Cache-Control: " + cc);
+        }
     }
 
     private void checkCsp(String host, HttpResponse response, String url) {
