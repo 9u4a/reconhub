@@ -5,13 +5,16 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Endpoint;
 
+import java.awt.Component;
+import java.awt.Font;
 import java.util.List;
 
 /** Table of deduplicated endpoints with the request/response viewer and shared row menu. */
 public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
 
     private static final String[] COLS =
-            {"Method", "Host", "Path", "Status", "Content-Type", "Params", "Source"};
+            {"Method", "Host", "Path", "Status", "Content-Type", "Params", "Auth", "Source"};
+    private static final int COL_AUTH = 6;
 
     private final DataStore store;
     private final MessageViewer viewer;
@@ -69,7 +72,7 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
     @Override protected String[] columns() { return COLS; }
 
     @Override protected int[] columnWidths() {
-        return new int[]{60, 160, 340, 60, 160, 60, 90};
+        return new int[]{60, 160, 320, 60, 150, 60, 60, 90};
     }
 
     @Override protected Object valueAt(Endpoint e, int c) {
@@ -80,9 +83,25 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
             case 3 -> e.getLastStatusCode() == 0 ? "" : e.getLastStatusCode();
             case 4 -> shortCt(e.getContentType());
             case 5 -> e.getParamCount();
-            case 6 -> String.join(",", e.getSources());
+            case COL_AUTH -> e.authStatus();
+            case 7 -> String.join(",", e.getSources());
             default -> "";
         };
+    }
+
+    @Override
+    protected void styleCell(Component comp, Endpoint e, int viewColumn, boolean selected) {
+        if (e == null || selected || viewColumn != COL_AUTH) {
+            return;
+        }
+        // Highlight endpoints observed WITHOUT credentials (potential unauthenticated access).
+        String auth = e.authStatus();
+        boolean anon = auth.equals("anon") || auth.equals("both");
+        boolean twoxx = e.getLastStatusCode() >= 200 && e.getLastStatusCode() < 300;
+        if (anon && twoxx) {
+            comp.setForeground(SwingColors.severityFg(com.reconhub.model.Finding.Severity.MEDIUM));
+            comp.setFont(comp.getFont().deriveFont(Font.BOLD));
+        }
     }
 
     private static String shortCt(String ct) {

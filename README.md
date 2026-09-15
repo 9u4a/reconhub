@@ -17,7 +17,7 @@
 | 탭 | 설명 |
 |----|------|
 | **Dashboard** | 카운트(요청·엔드포인트·파라미터·Findings·JS·호스트)와 심각도 요약을 **한 줄 컴팩트 스트립**(좁은 폭에서 자동 줄바꿈)으로, **호스트 스코어카드(좌: 호스트·엔드포인트·파라미터 목록 / 행 선택 시 우: 심각도별 칩·실제 누락 보안헤더 이름)**, **Top Findings(유형별 건수)**, **주목 엔드포인트(고위험 파라미터·admin/api 경로)**, Top hosts 차트, **파라미터 클래스 요약**. 각 표는 **우클릭으로 해당 항목을 다른 탭에서 필터링해 보기**(호스트→Endpoints/Parameters/Findings, 유형→Findings, 엔드포인트→Endpoints) 및 Copy·브라우저 열기 |
-| **Endpoints** | method + 정규화 URL로 dedup한 엔드포인트 인벤토리(출처: proxy/sitemap/js/spec). 행 선택 시 하단에 원문 Request/Response, 우클릭 → Send to Repeater |
+| **Endpoints** | method + 정규화 URL로 dedup한 엔드포인트 인벤토리(출처: proxy/sitemap/js/spec). 컬럼: Method·Host·Path·Status·Content-Type·Params·**Auth(auth/anon/both — 인증 없이 관찰된 2xx는 경고색)**·Source. 행 선택 시 하단에 원문 Request/Response, 우클릭 → Send to Repeater |
 | **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie). 컬럼: Host·Endpoint·Type·Name·Value·**Class(취약점 후보)**·Reflected·Seen. 기본 정렬 host→endpoint, 행 선택 시 매칭 Request/Response |
 | **Findings** | 아래 *탐지 항목*을 심각도 순으로 집계. **심각도 빠른 필터**, 행 선택 시 원문 + **JWT 디코드 탭**, 우클릭으로 **트리아지(New/Reviewed/Confirmed/False positive)** 지정·Repeater/Intruder 전송 |
 | **JS Assets** | 수집 JS를 SHA-256으로 dedup 저장(옵션: 디스크 저장), JS 내 엔드포인트·시크릿 추출. 행 선택 시 메타·저장파일 열기·관련 엔드포인트/Findings |
@@ -44,7 +44,7 @@
 - **Search 바** — 한/영 동시 검색, request/response 본문까지 검색, 정규식/대소문자/다중 AND·제외(`-단어`)/컬럼 지정
 - **정렬** — 컬럼 헤더 클릭 시 오름차순 → 내림차순 → 기본(해제) 3단계 순환
 - **CSV…** — 현재 화면(검색·정렬 반영)을 CSV로 저장
-- 행 우클릭 — Copy cell/URL, Open in browser, Send to Repeater/Intruder
+- 행 우클릭 — Copy cell/URL, Open in browser, Send to Repeater/Intruder, **Copy as curl**
 
 ## 사용법
 
@@ -86,6 +86,10 @@
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 1.17.0
+- **엔드포인트 인증 관찰(접근제어 단서)**: 각 엔드포인트가 **Authorization/Cookie와 함께(auth) / 없이(anon) / 둘 다(both)** 관찰됐는지 기록해 Endpoints 탭 **Auth 컬럼**으로 표시. 인증 없이 2xx로 관찰된 엔드포인트는 경고색으로 강조되어(정렬 가능) 미인증 접근·IDOR 테스트 후보를 빠르게 식별. State 백업에 포함.
+- **Copy as curl**: 모든 탭 행 우클릭에 추가 — 캡처된 요청을 `curl` 명령 문자열로 클립보드에 복사(헤더·본문 포함, 트래픽 발생 없음).
 
 ### 1.16.0
 - **요청 기반 탐지 추가(passive)**: URL query에 노출된 시크릿/토큰(이름 클래스·JWT·고엔트로피) → `Sensitive data in URL query`(MEDIUM), redirect 계열 파라미터 값이 3xx `Location` 헤더에 반사 → `Open redirect candidate`(MEDIUM), 응답 HTML에 인코딩 없이 반사되는 파라미터 값 → `Reflected parameter (XSS candidate)`(INFO). 모두 dedup·응답당 상한으로 노이즈 제한, 이미 캡처된 요청/응답만 사용.

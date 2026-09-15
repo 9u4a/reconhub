@@ -28,6 +28,8 @@ public final class Endpoint {
     private final Set<String> origins = Collections.newSetFromMap(new ConcurrentHashMap<>()); // JS files a JS-link was found in
     private final long firstSeenEpochMs;
     private volatile int observations;
+    private volatile boolean authObserved;    // seen at least once with Authorization/Cookie
+    private volatile boolean anonObserved;    // seen at least once with no credentials
     private volatile HttpRequestResponse messages;   // representative request/response (latest, if any)
 
     public Endpoint(String method, String host, String path, String normalizedUrl) {
@@ -70,6 +72,15 @@ public final class Endpoint {
         }
     }
 
+    /** Records whether a given observation of this endpoint carried credentials. */
+    public void recordAuth(boolean authed) {
+        if (authed) {
+            this.authObserved = true;
+        } else {
+            this.anonObserved = true;
+        }
+    }
+
     public void addParamNames(Set<String> names) {
         if (names != null) {
             paramNames.addAll(names);
@@ -93,6 +104,8 @@ public final class Endpoint {
     public void setLastStatusCode(int code) { this.lastStatusCode = code; }
     public void setContentType(String ct) { this.contentType = ct == null ? "" : ct; }
     public void setObservations(int n) { this.observations = n; }
+    public void setAuthObserved(boolean b) { this.authObserved = b; }
+    public void setAnonObserved(boolean b) { this.anonObserved = b; }
     public void setMessages(HttpRequestResponse m) { this.messages = m; }
 
     public String getMethod() { return method; }
@@ -107,5 +120,22 @@ public final class Endpoint {
     public Set<String> getOrigins() { return new TreeSet<>(origins); }
     public long getFirstSeenEpochMs() { return firstSeenEpochMs; }
     public int getObservations() { return observations; }
+    public boolean isAuthObserved() { return authObserved; }
+    public boolean isAnonObserved() { return anonObserved; }
+
+    /** Credential exposure of this endpoint's observations: auth / anon / both / (none seen). */
+    public String authStatus() {
+        if (authObserved && anonObserved) {
+            return "both";
+        }
+        if (authObserved) {
+            return "auth";
+        }
+        if (anonObserved) {
+            return "anon";
+        }
+        return "";
+    }
+
     public HttpRequestResponse getMessages() { return messages; }
 }

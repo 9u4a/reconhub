@@ -227,8 +227,12 @@ public final class TrafficIngestor implements HttpHandler {
         }
 
         String endpointKey = ep.normalizedUrl();
-        store.recordEndpoint(ep.method(), ep.host(), ep.path(), ep.normalizedUrl(),
-                status, contentType, source, ep.paramNames(), rr, java.util.Set.of());
+        com.reconhub.model.Endpoint endpoint = store.recordEndpoint(ep.method(), ep.host(), ep.path(),
+                ep.normalizedUrl(), status, contentType, source, ep.paramNames(), rr, java.util.Set.of());
+        // Track whether this observation carried credentials (Authorization or any Cookie).
+        boolean authed = request.headerValue("Authorization") != null
+                || request.headerValue("Cookie") != null;
+        endpoint.recordAuth(authed);
         store.countRequest(ep.host(), status, contentType);
 
         parameterExtractor.extract(request, endpointKey, ep.path(), responseBody, rr);

@@ -66,6 +66,7 @@ public final class StateSerializer {
     private static final class EndpointDto {
         String method, host, path, normalizedUrl, contentType;
         int status, observations;
+        boolean authObserved, anonObserved;
         long firstSeen;
         List<String> paramNames, sources, origins;
         String reqB64, respB64;
@@ -122,6 +123,8 @@ public final class StateSerializer {
             d.status = e.getLastStatusCode();
             d.contentType = e.getContentType();
             d.observations = e.getObservations();
+            d.authObserved = e.isAuthObserved();
+            d.anonObserved = e.isAnonObserved();
             d.firstSeen = e.getFirstSeenEpochMs();
             d.paramNames = new ArrayList<>(e.getParamNames());
             d.sources = new ArrayList<>(e.getSources());
@@ -230,6 +233,8 @@ public final class StateSerializer {
                 e.setLastStatusCode(d.status);
                 e.setContentType(d.contentType);
                 e.setObservations(d.observations);
+                e.setAuthObserved(d.authObserved);
+                e.setAnonObserved(d.anonObserved);
                 e.addParamNames(new TreeSet<>(nz(d.paramNames)));
                 e.addSources(new TreeSet<>(nz(d.sources)));
                 e.addOrigins(new TreeSet<>(nz(d.origins)));

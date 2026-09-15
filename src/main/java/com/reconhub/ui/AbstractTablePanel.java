@@ -1,6 +1,7 @@
 package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 
@@ -283,6 +284,8 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
                 () -> sendToRepeater(row));
         add(menu, "Send to Intruder", row != null && requestFor(row) != null,
                 () -> sendToIntruder(row));
+        add(menu, "Copy as curl", row != null && requestFor(row) != null,
+                () -> copy(toCurl(requestFor(row))));
         extraMenuItems(menu, row);
         return menu;
     }
@@ -338,6 +341,31 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         if (req != null) {
             api.intruder().sendToIntruder(req);
         }
+    }
+
+    /** Builds a copy-pasteable curl command for a captured request (no traffic is sent). */
+    private static String toCurl(HttpRequest req) {
+        if (req == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder("curl -X ").append(req.method())
+                .append(" '").append(shq(req.url())).append('\'');
+        for (HttpHeader h : req.headers()) {
+            if ("Content-Length".equalsIgnoreCase(h.name())) {
+                continue;   // curl sets this itself
+            }
+            sb.append(" -H '").append(shq(h.name() + ": " + h.value())).append('\'');
+        }
+        String body = req.bodyToString();
+        if (body != null && !body.isEmpty()) {
+            sb.append(" --data '").append(shq(body)).append('\'');
+        }
+        return sb.toString();
+    }
+
+    /** Escapes a value for single-quoted POSIX shell context. */
+    private static String shq(String s) {
+        return s == null ? "" : s.replace("'", "'\\''");
     }
 
     private void openBrowser(String url) {
