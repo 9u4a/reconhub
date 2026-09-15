@@ -235,6 +235,19 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         ((JPanel) getComponent(0)).add(c);
     }
 
+    /**
+     * Drives the search bar programmatically (used by cross-tab navigation from the Dashboard):
+     * resets to an "All"-field, non-regex, plain-substring search for {@code query}.
+     */
+    public void searchFor(String query) {
+        if (fieldBox.getItemCount() > 0) {
+            fieldBox.setSelectedIndex(0);   // "All"
+        }
+        regexBox.setSelected(false);
+        searchField.setText(query == null ? "" : query);
+        applySearch();
+    }
+
     // ---- Context menu ---------------------------------------------------
 
     private void installContextMenu() {

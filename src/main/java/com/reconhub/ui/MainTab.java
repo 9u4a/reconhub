@@ -51,6 +51,22 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         tabs.addTab("Settings", settingsPanel);
         add(tabs, BorderLayout.CENTER);
 
+        // Let dashboard rows jump to a filtered view of another tab.
+        dashboard.setNavigator(new DashboardPanel.Navigator() {
+            @Override public void filterEndpoints(String q) {
+                tabs.setSelectedComponent(endpoints);
+                endpoints.searchFor(q);
+            }
+            @Override public void filterParameters(String q) {
+                tabs.setSelectedComponent(parameters);
+                parameters.searchFor(q);
+            }
+            @Override public void filterFindings(String q) {
+                tabs.setSelectedComponent(findings);
+                findings.searchFor(q);
+            }
+        });
+
         refreshTimer = new Timer(300, e -> refreshAll());
         refreshTimer.setRepeats(false);
 
