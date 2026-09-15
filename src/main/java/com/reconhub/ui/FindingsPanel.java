@@ -2,10 +2,12 @@ package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
+import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.JwtDecoder;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Finding;
 
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPopupMenu;
@@ -23,8 +25,9 @@ import java.util.Set;
 public final class FindingsPanel extends AbstractTablePanel<Finding> {
 
     private static final String[] COLS =
-            {"Severity", "Type", "Evidence", "Location", "Value", "Seen", "Status"};
-    private static final int COL_STATUS = 6;
+            {"Severity", "Category", "Type", "Evidence", "Location", "Value", "Seen", "Status"};
+    private static final int COL_CATEGORY = 1;
+    private static final int COL_STATUS = 7;
 
     private final DataStore store;
     private final MessageViewer viewer;
@@ -34,6 +37,8 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
 
     /** Severity quick filter; empty = show all. */
     private final Set<Finding.Severity> activeSeverities = EnumSet.noneOf(Finding.Severity.class);
+    /** Category filter; null = show all. */
+    private FindingTaxonomy.Category activeCategory;
 
     public FindingsPanel(DataStore store, MontoyaApi api) {
         super(api);
@@ -48,6 +53,20 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         detailTabs.addTab("Message", viewer);
         detailTabs.addTab("JWT", new JScrollPane(jwtArea));
         installDetail(detailTabs, viewer);
+
+        addToToolbar(new JLabel("  Category:"));
+        JComboBox<String> catBox = new JComboBox<>();
+        catBox.addItem("All");
+        for (FindingTaxonomy.Category c : FindingTaxonomy.Category.values()) {
+            catBox.addItem(c.label());
+        }
+        catBox.setToolTipText("Show only this finding category");
+        catBox.addActionListener(e -> {
+            int i = catBox.getSelectedIndex();
+            activeCategory = i <= 0 ? null : FindingTaxonomy.Category.values()[i - 1];
+            reapplyFilter();
+        });
+        addToToolbar(catBox);
 
         addToToolbar(new JLabel("  Severity:"));
         for (Finding.Severity sev : Finding.Severity.values()) {
@@ -67,7 +86,13 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
 
     @Override
     protected boolean rowIncluded(Finding f) {
-        return f == null || activeSeverities.isEmpty() || activeSeverities.contains(f.getSeverity());
+        if (f == null) {
+            return true;
+        }
+        boolean sevOk = activeSeverities.isEmpty() || activeSeverities.contains(f.getSeverity());
+        boolean catOk = activeCategory == null
+                || FindingTaxonomy.categoryOf(f.getType()) == activeCategory;
+        return sevOk && catOk;
     }
 
     @Override
@@ -113,10 +138,14 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         }
         Finding.Triage triage = f.getTriage();
         if (!selected) {
-            // False positives are dimmed; everything else keeps its severity color.
-            comp.setForeground(triage == Finding.Triage.FALSE_POSITIVE
-                    ? SwingColors.severityFg(Finding.Severity.INFO)
-                    : SwingColors.severityFg(f.getSeverity()));
+            if (triage == Finding.Triage.FALSE_POSITIVE) {
+                comp.setForeground(SwingColors.severityFg(Finding.Severity.INFO));
+            } else if (viewColumn == COL_CATEGORY) {
+                // The Category cell carries its own category color.
+                comp.setForeground(SwingColors.categoryFg(FindingTaxonomy.categoryOf(f.getType())));
+            } else {
+                comp.setForeground(SwingColors.severityFg(f.getSeverity()));
+            }
         }
         // Bold the Severity column always; bold the whole row when Confirmed.
         boolean bold = viewColumn == 0 || triage == Finding.Triage.CONFIRMED;
@@ -124,9 +153,9 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         // Hover tooltip carries the full, untruncated text so a narrow column hides nothing.
         if (comp instanceof JComponent jc) {
             String tip = switch (viewColumn) {
-                case 2 -> f.getEvidence();
-                case 3 -> f.getLocationUrl();
-                case 4 -> fullValue(f);
+                case 3 -> f.getEvidence();
+                case 4 -> f.getLocationUrl();
+                case 5 -> fullValue(f);
                 default -> null;
             };
             jc.setToolTipText(tip == null || tip.isBlank() ? null : tip);
@@ -184,17 +213,18 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     @Override protected String[] columns() { return COLS; }
 
     @Override protected int[] columnWidths() {
-        return new int[]{80, 170, 300, 250, 280, 50, 100};
+        return new int[]{80, 95, 200, 240, 240, 240, 50, 90};
     }
 
     @Override protected Object valueAt(Finding f, int c) {
         return switch (c) {
             case 0 -> f.getSeverity().name();
-            case 1 -> f.getType();
-            case 2 -> f.getEvidence();
-            case 3 -> f.getLocationUrl();
-            case 4 -> fullValue(f);
-            case 5 -> f.getTimesSeen();
+            case COL_CATEGORY -> FindingTaxonomy.labelOf(f.getType());
+            case 2 -> f.getType();
+            case 3 -> f.getEvidence();
+            case 4 -> f.getLocationUrl();
+            case 5 -> fullValue(f);
+            case 6 -> f.getTimesSeen();
             case COL_STATUS -> label(f.getTriage());
             default -> "";
         };

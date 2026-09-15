@@ -93,7 +93,7 @@ public final class PiiScanner {
 
     private boolean record(String type, Finding.Severity sev, String match, String url,
                            HttpRequestResponse rr) {
-        Finding f = new Finding(type, sev, match, url, "PII detected in response", true);
+        Finding f = new Finding(type, sev, match, url, "", true);
         f.setMessages(rr);
         return store.recordFinding(f);
     }

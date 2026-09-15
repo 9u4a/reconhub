@@ -58,12 +58,11 @@ public final class ApiSpecAnalyzer {
         // --- GraphQL ------------------------------------------------------
         if (url.toLowerCase(Locale.ROOT).contains("graphql")) {
             record(new Finding("GraphQL endpoint", Finding.Severity.INFO,
-                    "graphql|" + hostKey(url), url, "GraphQL endpoint observed in traffic", false), rr);
+                    "graphql|" + hostKey(url), url, "graphql", false), rr);
         }
         if (jsonish && body.contains("\"__schema\"") && body.contains("\"types\"")) {
             record(new Finding("GraphQL introspection enabled", Finding.Severity.MEDIUM,
-                    "gql-introspection|" + hostKey(url), url,
-                    "Response exposes __schema (GraphQL introspection is enabled)", false), rr);
+                    "gql-introspection|" + hostKey(url), url, "introspection on", false), rr);
         }
     }
 
@@ -118,7 +117,7 @@ public final class ApiSpecAnalyzer {
 
         if (endpointCount > 0) {
             record(new Finding("API spec exposed", Finding.Severity.INFO, "spec|" + specUrl, specUrl,
-                    kind.trim() + " document defines " + endpointCount + " operation(s)", false), rr);
+                    kind.trim() + ", " + endpointCount + " ops", false), rr);
         }
     }
 

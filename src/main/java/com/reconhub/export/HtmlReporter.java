@@ -1,5 +1,6 @@
 package com.reconhub.export;
 
+import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.ParameterClassifier;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Endpoint;
@@ -81,6 +82,22 @@ public final class HtmlReporter {
             b.append("<span class=\"sev ").append(s.name()).append("\">").append(s.name())
                     .append(' ').append(sev.getOrDefault(s, 0)).append("</span>");
         }
+        b.append("</div>");
+
+        // Category summary.
+        java.util.EnumMap<FindingTaxonomy.Category, Integer> cat =
+                new java.util.EnumMap<>(FindingTaxonomy.Category.class);
+        for (Finding f : shown) {
+            cat.merge(FindingTaxonomy.categoryOf(f.getType()), 1, Integer::sum);
+        }
+        b.append("<div class=\"sevsummary\">");
+        for (FindingTaxonomy.Category c : FindingTaxonomy.Category.values()) {
+            int n = cat.getOrDefault(c, 0);
+            if (n > 0) {
+                b.append("<span class=\"cat ").append(c.name()).append("\">")
+                        .append(esc(c.label())).append(' ').append(n).append("</span>");
+            }
+        }
         b.append("</div></section>");
     }
 
@@ -100,13 +117,18 @@ public final class HtmlReporter {
             b.append("<p class=\"muted\">No findings.</p></section>");
             return;
         }
-        b.append("<table id=\"findings-table\"><thead><tr><th>Severity</th><th>Type</th><th>Value</th>"
-                + "<th>Location</th><th>Evidence</th><th>Seen</th><th>Status</th></tr></thead><tbody>");
+        b.append("<table id=\"findings-table\"><thead><tr><th>Severity</th><th>Category</th>"
+                + "<th>Type</th><th>Value</th><th>Location</th><th>Evidence</th><th>Seen</th>"
+                + "<th>Status</th></tr></thead><tbody>");
         for (Finding f : findings) {
+            FindingTaxonomy.Category c = FindingTaxonomy.categoryOf(f.getType());
             b.append("<tr data-sev=\"").append(f.getSeverity().name())
+                    .append("\" data-cat=\"").append(c.name())
                     .append("\" data-triage=\"").append(f.getTriage().name()).append("\">")
                     .append("<td><span class=\"sev ").append(f.getSeverity().name()).append("\">")
-                    .append(f.getSeverity().name()).append("</span></td><td>")
+                    .append(f.getSeverity().name()).append("</span></td>")
+                    .append("<td><span class=\"cat ").append(c.name()).append("\">")
+                    .append(esc(c.label())).append("</span></td><td>")
                     .append(esc(f.getType())).append("</td><td><code>")
                     .append(esc(f.getMasked())).append("</code></td><td><code>")
                     .append(esc(f.getLocationUrl())).append("</code></td><td class=\"muted\">")

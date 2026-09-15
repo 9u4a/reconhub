@@ -1,5 +1,6 @@
 package com.reconhub.ui;
 
+import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.model.Finding;
 
 import javax.swing.BorderFactory;
@@ -16,6 +17,7 @@ final class SwingColors {
     static final Color INFO = new Color(0x7a8698);
     static final Color WARN = new Color(0xffb020);
     static final Color OK = new Color(0x3fb950);
+    static final Color MUTED = new Color(0x9aa4b2);
 
     private SwingColors() {}
 
@@ -25,6 +27,21 @@ final class SwingColors {
             case MEDIUM -> MEDIUM;
             case LOW -> LOW;
             case INFO -> INFO;
+        };
+    }
+
+    /** Distinct color per finding category (for the Category column chip). */
+    static Color categoryFg(FindingTaxonomy.Category c) {
+        return switch (c) {
+            case SECRET -> new Color(0xff5c5c);
+            case PII -> new Color(0xff7ab8);
+            case AUTH -> new Color(0xc586ff);
+            case MISCONFIG -> new Color(0xffb020);
+            case INFO_LEAK -> new Color(0x4da3ff);
+            case API -> new Color(0x3fb950);
+            case INJECTION -> new Color(0xff9d4d);
+            case COMMENT -> new Color(0x9aa4b2);
+            case OTHER -> new Color(0x9aa4b2);
         };
     }
 

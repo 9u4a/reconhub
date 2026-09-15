@@ -43,29 +43,24 @@ public final class MisconfigInspector {
         boolean scriptCritical = lower.contains("script-src") || lower.contains("default-src");
 
         if (scriptCritical && lower.contains("'unsafe-inline'")) {
-            add(Finding.Severity.MEDIUM, "CSP allows 'unsafe-inline'",
-                    host + "|csp|unsafe-inline", url,
-                    "Content-Security-Policy permits 'unsafe-inline' (weakens XSS protection)");
+            add(Finding.Severity.MEDIUM, "CSP unsafe-inline",
+                    host + "|csp|unsafe-inline", url, "unsafe-inline");
         }
         if (scriptCritical && lower.contains("'unsafe-eval'")) {
-            add(Finding.Severity.MEDIUM, "CSP allows 'unsafe-eval'",
-                    host + "|csp|unsafe-eval", url,
-                    "Content-Security-Policy permits 'unsafe-eval'");
+            add(Finding.Severity.MEDIUM, "CSP unsafe-eval",
+                    host + "|csp|unsafe-eval", url, "unsafe-eval");
         }
         if (hasWildcardSource(lower)) {
-            add(Finding.Severity.MEDIUM, "CSP wildcard source",
-                    host + "|csp|wildcard", url,
-                    "Content-Security-Policy uses a wildcard (*) source in script-src/default-src");
+            add(Finding.Severity.MEDIUM, "CSP wildcard src",
+                    host + "|csp|wildcard", url, "wildcard src");
         }
         if (!lower.contains("frame-ancestors")) {
-            add(Finding.Severity.LOW, "CSP missing frame-ancestors",
-                    host + "|csp|frame-ancestors", url,
-                    "Content-Security-Policy has no frame-ancestors (clickjacking not restricted by CSP)");
+            add(Finding.Severity.LOW, "CSP no frame-ancestors",
+                    host + "|csp|frame-ancestors", url, "no frame-ancestors");
         }
         if (!lower.contains("object-src") && !lower.contains("default-src")) {
-            add(Finding.Severity.LOW, "CSP missing object-src",
-                    host + "|csp|object-src", url,
-                    "Content-Security-Policy has neither object-src nor default-src");
+            add(Finding.Severity.LOW, "CSP no object-src",
+                    host + "|csp|object-src", url, "no object-src");
         }
     }
 
@@ -94,18 +89,17 @@ public final class MisconfigInspector {
         String origin = request != null ? request.headerValue("Origin") : null;
 
         if ("*".equals(acao.trim()) && credentials) {
-            add(Finding.Severity.HIGH, "CORS: wildcard origin with credentials",
-                    "acao=*|cred", url, "Access-Control-Allow-Origin: * with Allow-Credentials: true");
+            add(Finding.Severity.HIGH, "CORS wildcard +creds",
+                    "acao=*|cred", url, "ACAO=* +creds");
         } else if (origin != null && origin.equalsIgnoreCase(acao.trim()) && credentials) {
-            add(Finding.Severity.HIGH, "CORS: reflected origin with credentials",
-                    "acao=reflected|" + acao, url,
-                    "ACAO reflects request Origin (" + acao + ") with Allow-Credentials: true");
+            add(Finding.Severity.HIGH, "CORS reflected +creds",
+                    "acao=reflected|" + acao, url, "ACAO reflects Origin +creds");
         } else if ("*".equals(acao.trim())) {
-            add(Finding.Severity.LOW, "CORS: wildcard origin",
-                    "acao=*", url, "Access-Control-Allow-Origin: *");
+            add(Finding.Severity.LOW, "CORS wildcard",
+                    "acao=*", url, "ACAO=*");
         } else if (origin != null && origin.equalsIgnoreCase(acao.trim())) {
-            add(Finding.Severity.LOW, "CORS: reflected origin",
-                    "acao=reflected|" + acao, url, "ACAO reflects request Origin: " + acao);
+            add(Finding.Severity.LOW, "CORS reflected",
+                    "acao=reflected|" + acao, url, "ACAO reflects Origin");
         }
     }
 
@@ -118,16 +112,16 @@ public final class MisconfigInspector {
             String name = cookieName(sc);
             String lower = sc.toLowerCase(Locale.ROOT);
             if (!lower.contains("httponly")) {
-                add(Finding.Severity.LOW, "Cookie without HttpOnly",
-                        host + "|" + name + "|httponly", url, "Set-Cookie " + name + " missing HttpOnly");
+                add(Finding.Severity.LOW, "Cookie no HttpOnly",
+                        host + "|" + name + "|httponly", url, name + ": no HttpOnly");
             }
             if (!lower.contains("secure")) {
-                add(Finding.Severity.LOW, "Cookie without Secure",
-                        host + "|" + name + "|secure", url, "Set-Cookie " + name + " missing Secure");
+                add(Finding.Severity.LOW, "Cookie no Secure",
+                        host + "|" + name + "|secure", url, name + ": no Secure");
             }
             if (!lower.contains("samesite")) {
-                add(Finding.Severity.INFO, "Cookie without SameSite",
-                        host + "|" + name + "|samesite", url, "Set-Cookie " + name + " missing SameSite");
+                add(Finding.Severity.INFO, "Cookie no SameSite",
+                        host + "|" + name + "|samesite", url, name + ": no SameSite");
             }
         }
     }

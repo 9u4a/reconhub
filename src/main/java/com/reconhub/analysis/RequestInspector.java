@@ -54,9 +54,8 @@ public final class RequestInspector {
             if (type == HttpParameterType.URL
                     && (isSensitiveName(name)
                         || (value != null && (JwtDecoder.isJwt(value) || highEntropy(value))))) {
-                if (add(Finding.Severity.MEDIUM, "Sensitive data in URL query",
-                        host + "|" + name, url,
-                        "Query parameter '" + name + "' may carry a secret/token in the URL", rr)) {
+                if (add(Finding.Severity.MEDIUM, "Secret in URL",
+                        host + "|" + name, url, "'" + name + "' in URL", rr)) {
                     emitted++;
                 }
                 continue;
@@ -66,9 +65,8 @@ public final class RequestInspector {
             if (status >= 300 && status < 400 && location != null && !location.isBlank()
                     && value != null && value.length() >= 4
                     && isRedirectName(name) && location.contains(value)) {
-                if (add(Finding.Severity.MEDIUM, "Open redirect candidate (param in Location)",
-                        host + "|" + path + "|" + name, url,
-                        "Redirect param '" + name + "' value appears in Location: " + location, rr)) {
+                if (add(Finding.Severity.MEDIUM, "Open redirect (candidate)",
+                        host + "|" + path + "|" + name, url, "'" + name + "' → Location", rr)) {
                     emitted++;
                 }
                 continue;
@@ -78,9 +76,8 @@ public final class RequestInspector {
             if (html && body != null && value != null && value.length() >= 6
                     && (type == HttpParameterType.URL || type == HttpParameterType.BODY)
                     && distinctive(value) && body.contains(value)) {
-                if (add(Finding.Severity.INFO, "Reflected parameter (XSS candidate)",
-                        host + "|" + path + "|" + name, url,
-                        "Parameter '" + name + "' value reflected unencoded in the HTML response", rr)) {
+                if (add(Finding.Severity.INFO, "Reflected param (XSS?)",
+                        host + "|" + path + "|" + name, url, "'" + name + "' reflected", rr)) {
                     emitted++;
                 }
             }

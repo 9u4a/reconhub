@@ -1,5 +1,6 @@
 package com.reconhub.export;
 
+import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.ParameterClassifier;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Endpoint;
@@ -79,10 +80,11 @@ public final class MarkdownReporter {
             b.append("_No findings._\n\n");
             return;
         }
-        b.append("| Severity | Type | Value | Location | Evidence | Seen | Status |\n"
-                + "| --- | --- | --- | --- | --- | --- | --- |\n");
+        b.append("| Severity | Category | Type | Value | Location | Evidence | Seen | Status |\n"
+                + "| --- | --- | --- | --- | --- | --- | --- | --- |\n");
         for (Finding f : findings) {
             b.append("| ").append(f.getSeverity().name())
+                    .append(" | ").append(md(FindingTaxonomy.labelOf(f.getType())))
                     .append(" | ").append(md(f.getType()))
                     .append(" | ").append(code(f.getMasked()))
                     .append(" | ").append(code(f.getLocationUrl()))

@@ -64,14 +64,27 @@
   /* Only long opaque tokens/URLs may break mid-"word"; plain text wraps between words. */
   code { font-family: "SF Mono", Consolas, monospace; font-size: 12px; color: #c9d4e3;
     white-space: pre-wrap; word-break: break-all; overflow-wrap: anywhere; }
-  /* Findings table: fixed column budget so rows stay aligned and Type reads on few lines. */
+  /* Findings table: fixed column budget so rows stay aligned and Type reads on few lines.
+     Columns: 1 Severity, 2 Category, 3 Type, 4 Value, 5 Location, 6 Evidence, 7 Seen, 8 Status. */
   #findings-table { table-layout: fixed; }
-  #findings-table th:nth-child(1), #findings-table td:nth-child(1) { width: 88px; white-space: nowrap; }
-  #findings-table th:nth-child(2), #findings-table td:nth-child(2) { width: 17%; }
+  #findings-table th:nth-child(1), #findings-table td:nth-child(1) { width: 86px; white-space: nowrap; }
+  #findings-table th:nth-child(2), #findings-table td:nth-child(2) { width: 92px; white-space: nowrap; }
   #findings-table th:nth-child(3), #findings-table td:nth-child(3) { width: 15%; }
-  #findings-table th:nth-child(4), #findings-table td:nth-child(4) { width: 20%; }
-  #findings-table th:nth-child(6), #findings-table td:nth-child(6) { width: 54px; white-space: nowrap; }
-  #findings-table th:nth-child(7), #findings-table td:nth-child(7) { width: 92px; white-space: nowrap; }
+  #findings-table th:nth-child(4), #findings-table td:nth-child(4) { width: 15%; }
+  #findings-table th:nth-child(5), #findings-table td:nth-child(5) { width: 18%; }
+  #findings-table th:nth-child(7), #findings-table td:nth-child(7) { width: 52px; white-space: nowrap; }
+  #findings-table th:nth-child(8), #findings-table td:nth-child(8) { width: 90px; white-space: nowrap; }
+  /* Category tag colors. */
+  .cat { font-weight: 700; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+    white-space: nowrap; }
+  .cat.SECRET { background: rgba(255,92,92,.14); color: #ff5c5c; }
+  .cat.PII { background: rgba(255,122,184,.14); color: #ff7ab8; }
+  .cat.AUTH { background: rgba(197,134,255,.14); color: #c586ff; }
+  .cat.MISCONFIG { background: rgba(255,176,32,.14); color: #ffb020; }
+  .cat.INFO_LEAK { background: rgba(77,163,255,.14); color: #4da3ff; }
+  .cat.API { background: rgba(63,185,80,.14); color: #3fb950; }
+  .cat.INJECTION { background: rgba(255,157,77,.14); color: #ff9d4d; }
+  .cat.COMMENT, .cat.OTHER { background: rgba(154,164,178,.14); color: #9aa4b2; }
   .sev { font-weight: 700; padding: 2px 8px; border-radius: 999px; font-size: 11px; }
   .sev.HIGH { background: rgba(255,92,92,.15); color: var(--high); }
   .sev.MEDIUM { background: rgba(255,176,32,.15); color: var(--medium); }

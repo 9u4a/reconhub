@@ -14,7 +14,7 @@ import java.util.regex.Matcher;
 public final class SecretScanner {
 
     private static final int MAX_MATCHES_PER_RULE = 25;   // cap noise from one body
-    private static final int EVIDENCE_RADIUS = 40;
+    private static final int EVIDENCE_RADIUS = 24;         // short surrounding context
 
     private final DataStore store;
     private final List<PatternRegistry.SecretRule> rules;
