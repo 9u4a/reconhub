@@ -9,6 +9,7 @@ import burp.api.montoya.http.handler.ResponseReceivedAction;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
+import com.reconhub.analysis.ApiSpecAnalyzer;
 import com.reconhub.analysis.CommentExtractor;
 import com.reconhub.analysis.EndpointExtractor;
 import com.reconhub.analysis.JsAnalyzer;
@@ -44,6 +45,7 @@ public final class TrafficIngestor implements HttpHandler {
     private final TechFingerprinter techFingerprinter;
     private final MisconfigInspector misconfigInspector;
     private final CommentExtractor commentExtractor;
+    private final ApiSpecAnalyzer apiSpecAnalyzer;
 
     private final ExecutorService executor =
             Executors.newSingleThreadExecutor(r -> {
@@ -67,6 +69,7 @@ public final class TrafficIngestor implements HttpHandler {
         this.jsAnalyzer = new JsAnalyzer(store, patterns, secretScanner, commentExtractor, settings);
         this.techFingerprinter = new TechFingerprinter(store, patterns);
         this.misconfigInspector = new MisconfigInspector(store);
+        this.apiSpecAnalyzer = new ApiSpecAnalyzer(store);
     }
 
     // ---- Bulk sweep of the existing site map ----------------------------
@@ -190,6 +193,8 @@ public final class TrafficIngestor implements HttpHandler {
                 secretScanner.scan(responseBody, url, rr);
             }
             techFingerprinter.fingerprint(ep.host(), response, contentType);
+            // Passive API-surface discovery (OpenAPI/Swagger/GraphQL) from the captured body.
+            apiSpecAnalyzer.analyze(url, contentType, responseBody, rr);
             if (isJavaScript(url, contentType)) {
                 jsAnalyzer.analyze(url, responseBody, rr);
             }

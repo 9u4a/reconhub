@@ -12,9 +12,9 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 | 탭 | 설명 |
 |----|------|
 | **Dashboard** | 요청·엔드포인트·파라미터·Findings·JS·호스트 카운트, 심각도별 요약, 상위 호스트/상태코드/콘텐츠타입 막대 차트 |
-| **Endpoints** | method + 정규화 URL로 dedup한 엔드포인트 인벤토리. 행 선택 시 하단에 Request/Response 표시, 우클릭 → **Send to Repeater** |
+| **Endpoints** | method + 정규화 URL로 dedup한 엔드포인트 인벤토리(출처: proxy/sitemap/js/**spec**). 행 선택 시 하단에 Request/Response 표시, 우클릭 → **Send to Repeater** |
 | **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie) — 경로·유형·**취약점 후보 클래스(IDOR·Redirect/SSRF·File/Path·SQLi·Command·Secret/Token·Debug)**·예시값·반사 여부·Seen. 행 선택 시 매칭 Request/Response 표시 |
-| **Findings** | 시크릿/민감정보(AWS·Google·GitHub·Slack 키, JWT, private key, S3, 이메일, 내부 IP) + 흥미로운 응답(스택트레이스·SQL 에러·디버그·디렉터리 리스팅) + 보안 미스컨피그(CORS·쿠키 플래그) + 권한 값(role/admin/permissions 등) + HTML/JS 주석, 심각도 정렬. 행 우클릭으로 Repeater/Intruder 전송 |
+| **Findings** | 시크릿/민감정보(AWS·Google·GitHub·Slack 키, JWT, private key, S3, 이메일, 내부 IP) + 흥미로운 응답(스택트레이스·SQL 에러·디버그·디렉터리 리스팅) + 보안 미스컨피그(CORS·쿠키 플래그) + 권한 값(role/admin/permissions 등) + **API 스펙 노출(OpenAPI/Swagger)·GraphQL introspection** + HTML/JS 주석, 심각도 정렬. 행 우클릭으로 Repeater/Intruder 전송 |
 | **JS Assets** | 수집한 JS를 SHA-256 해시로 dedup 저장, JS 내 엔드포인트·시크릿 추출. 출처 JS 파일 기록 |
 | **Tech** | 헤더/쿠키/JS 라이브러리 기반 호스트별 기술 식별 + 보안 헤더 누락 체크리스트 |
 | **Settings** | 스코프 모드/정규식, 패시브 검사·정적자산 제외·자동 Ingest 토글, JS 저장 폴더, 라이브 캡처/시크릿 스캔, Ingest Site Map, Clear, Export JSON/HTML, State Export/Import(백업·복원) |
@@ -43,6 +43,9 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 1.8.0
+- **API 스펙·GraphQL 인식(passive)**: 히스토리에 이미 잡힌 **OpenAPI/Swagger JSON**을 파싱해 정의된 경로·메서드를 엔드포인트(출처 `spec`)로, query/header/cookie 파라미터를 Parameters 탭으로 흡수. 문서에만 있고 실제로 눌러보지 않은 경로 발견에 유용. **GraphQL** 엔드포인트 관찰 시 표시하고, 응답에 `__schema`가 노출되면(introspection 활성) MEDIUM Findings로 보고. 캡처된 응답만 사용(추가 요청 없음).
 
 ### 1.7.0
 - **파라미터 취약점 후보 자동 분류**: 파라미터 이름을 규칙(`patterns/param-classes.json`) 기반으로 IDOR·Redirect/SSRF·File/Path·SQLi/Sort·Command·Secret/Token·Debug 후보로 태깅. Parameters 탭에 **Class 컬럼**(강조·툴팁) 추가, 검색·JSON·HTML 리포트에도 반영. 완전 passive(캡처된 이름만 분류, 추가 요청 없음).
