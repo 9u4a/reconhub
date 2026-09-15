@@ -47,7 +47,8 @@ public final class BarChartPanel extends JPanel {
         this.bars = list;
         this.max = m;
         int rows = Math.max(1, list.size());
-        setPreferredSize(new Dimension(320, 34 + rows * 26));
+        int titleH = (title == null || title.isBlank()) ? 10 : 34;
+        setPreferredSize(new Dimension(320, titleH + rows * 26));
         revalidate();
         repaint();
     }
@@ -65,10 +66,12 @@ public final class BarChartPanel extends JPanel {
         Color fg = getForeground();
         Color muted = blend(fg, getBackground(), 0.45f);
 
-        g.setColor(fg);
-        g.setFont(getFont().deriveFont(Font.BOLD, 13f));
-        g.drawString(title, pad, y + 12);
-        y += 26;
+        if (title != null && !title.isBlank()) {
+            g.setColor(fg);
+            g.setFont(getFont().deriveFont(Font.BOLD, 13f));
+            g.drawString(title, pad, y + 12);
+            y += 26;
+        }
 
         if (bars.isEmpty()) {
             g.setColor(muted);

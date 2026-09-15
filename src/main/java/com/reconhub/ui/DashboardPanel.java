@@ -62,12 +62,13 @@ public final class DashboardPanel extends JPanel implements Refreshable {
     private final JLabel jsFiles = stat();
     private final JLabel hosts = stat();
 
-    private final JPanel severityRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
-    private final BarChartPanel hostChart = new BarChartPanel("Top hosts", 10, ACCENT);
-    private final JPanel classChips = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+    private final JPanel severityRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
+    private final BarChartPanel hostChart = new BarChartPanel("", 8, ACCENT);
+    private final JPanel classChips = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
 
     private final SimpleModel hostModel = new SimpleModel(
-            new String[]{"Host", "Endpoints", "Params", "H", "M", "L", "I", "Miss hdr"},
+            new String[]{"Host", "Endpoints", "Params", "High", "Medium", "Low", "Info",
+                    "Missing headers"},
             new Class<?>[]{String.class, Integer.class, Integer.class, Integer.class,
                     Integer.class, Integer.class, Integer.class, Integer.class});
     private final SimpleModel typeModel = new SimpleModel(
@@ -77,15 +78,19 @@ public final class DashboardPanel extends JPanel implements Refreshable {
             new String[]{"Method", "URL", "Why"},
             new Class<?>[]{String.class, String.class, String.class});
 
+    private final JTable hostTable = new JTable(hostModel);
+    private final JTable typeTable = new JTable(typeModel);
+    private final JTable notableTable = new JTable(notableModel);
+
     public DashboardPanel(DataStore store) {
         this.store = store;
-        setLayout(new BorderLayout(0, 10));
-        setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        setLayout(new BorderLayout(0, 16));
+        setBorder(BorderFactory.createEmptyBorder(18, 18, 18, 18));
 
         JPanel north = new JPanel();
         north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
 
-        JPanel cards = new JPanel(new GridLayout(1, 6, 10, 10));
+        JPanel cards = new JPanel(new GridLayout(1, 6, 12, 12));
         cards.add(card("Requests", requests));
         cards.add(card("Endpoints", endpoints));
         cards.add(card("Parameters", parameters));
@@ -96,26 +101,49 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         north.add(cards);
 
         severityRow.setAlignmentX(LEFT_ALIGNMENT);
+        severityRow.setBorder(BorderFactory.createEmptyBorder(8, 0, 0, 0));
         north.add(severityRow);
         add(north, BorderLayout.NORTH);
+
+        configureTables();
 
         JPanel body = new JPanel();
         body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
 
-        JPanel row1 = new JPanel(new GridLayout(1, 2, 12, 0));
-        row1.add(hostChart);
-        row1.add(titled("Parameter classes", classChips));
-        body.add(sized(row1, 210));
+        // Host scorecard: the primary triage view, full width and prominent.
+        body.add(sized(titled("Host scorecard", new JScrollPane(hostTable)), 250));
+        body.add(Box.createVerticalStrut(16));
 
-        body.add(sized(titled("Host scorecard", table(hostModel)), 200));
+        JPanel row2 = new JPanel(new GridLayout(1, 2, 16, 0));
+        row2.add(titled("Top findings", new JScrollPane(typeTable)));
+        row2.add(titled("Notable endpoints  (risky params / admin·api paths)",
+                new JScrollPane(notableTable)));
+        body.add(sized(row2, 240));
+        body.add(Box.createVerticalStrut(16));
 
-        JPanel row2 = new JPanel(new GridLayout(1, 2, 12, 0));
-        row2.add(titled("Top findings", table(typeModel)));
-        row2.add(titled("Notable endpoints (risky params / admin paths)", table(notableModel)));
-        body.add(sized(row2, 220));
+        JPanel row3 = new JPanel(new GridLayout(1, 2, 16, 0));
+        row3.add(titled("Top hosts", hostChart));
+        row3.add(titled("Parameter classes", classChips));
+        body.add(sized(row3, 260));
         body.add(Box.createVerticalGlue());
 
         add(new JScrollPane(body), BorderLayout.CENTER);
+    }
+
+    private void configureTables() {
+        styleTable(hostTable);
+        styleTable(typeTable);
+        styleTable(notableTable);
+        // Color the severity count columns (High/Medium/Low/Info) of the scorecard.
+        SeverityCountRenderer sr = new SeverityCountRenderer();
+        for (int col = 3; col <= 6; col++) {
+            hostTable.getColumnModel().getColumn(col).setCellRenderer(sr);
+        }
+        int[] hw = {220, 90, 80, 60, 80, 60, 60, 130};
+        for (int i = 0; i < hw.length; i++) {
+            hostTable.getColumnModel().getColumn(i).setPreferredWidth(hw[i]);
+        }
+        typeTable.getColumnModel().getColumn(1).setMaxWidth(90);
     }
 
     // ---- refresh --------------------------------------------------------
@@ -328,16 +356,23 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         return l;
     }
 
-    private static JScrollPane table(SimpleModel model) {
-        JTable t = new JTable(model);
+    private static void styleTable(JTable t) {
         t.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
-        t.setRowSorter(new TableRowSorter<>(model));
-        return new JScrollPane(t);
+        t.setRowSorter(new TableRowSorter<>(t.getModel()));
+        t.setRowHeight(24);
+        t.setShowGrid(false);
+        t.setIntercellSpacing(new Dimension(0, 0));
+        t.getTableHeader().setFont(t.getFont().deriveFont(Font.BOLD, 12.5f));
+        t.getTableHeader().setReorderingAllowed(false);
+        t.setFont(t.getFont().deriveFont(13f));
     }
 
     private static JPanel titled(String title, java.awt.Component inner) {
         JPanel p = new JPanel(new BorderLayout());
-        p.setBorder(BorderFactory.createTitledBorder(title));
+        javax.swing.border.TitledBorder tb = BorderFactory.createTitledBorder(title);
+        tb.setTitleFont(p.getFont().deriveFont(Font.BOLD, 15f));
+        p.setBorder(BorderFactory.createCompoundBorder(tb,
+                BorderFactory.createEmptyBorder(6, 8, 8, 8)));
         p.add(inner, BorderLayout.CENTER);
         return p;
     }
@@ -347,6 +382,29 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         p.setPreferredSize(new Dimension(p.getPreferredSize().width, height));
         p.setAlignmentX(LEFT_ALIGNMENT);
         return p;
+    }
+
+    /** Renders scorecard severity counts in the matching severity color (bold when non-zero). */
+    private static final class SeverityCountRenderer extends javax.swing.table.DefaultTableCellRenderer {
+        private static final Finding.Severity[] BY_COL =
+                {Finding.Severity.HIGH, Finding.Severity.MEDIUM, Finding.Severity.LOW, Finding.Severity.INFO};
+
+        SeverityCountRenderer() {
+            setHorizontalAlignment(CENTER);
+        }
+
+        @Override
+        public java.awt.Component getTableCellRendererComponent(JTable t, Object value,
+                boolean sel, boolean focus, int row, int col) {
+            super.getTableCellRendererComponent(t, value, sel, focus, row, col);
+            int n = value instanceof Integer i ? i : 0;
+            Finding.Severity sev = BY_COL[col - 3];
+            if (!sel) {
+                setForeground(n > 0 ? SEV_COLORS.get(sev) : MUTED);
+            }
+            setFont(getFont().deriveFont(n > 0 ? Font.BOLD : Font.PLAIN));
+            return this;
+        }
     }
 
     // ---- read-only aggregate table model --------------------------------
