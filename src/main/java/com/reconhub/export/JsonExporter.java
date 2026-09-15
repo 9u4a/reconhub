@@ -2,6 +2,7 @@ package com.reconhub.export;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.reconhub.analysis.ParameterClassifier;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
@@ -80,6 +81,7 @@ public final class JsonExporter {
             m.put("endpoint", p.getEndpointPath());
             m.put("type", p.getLocation().name());
             m.put("name", p.getName());
+            m.put("classes", ParameterClassifier.classify(p.getName()));
             m.put("exampleValue", p.getExampleValue());
             m.put("reflected", p.isReflected());
             m.put("seen", p.getSeen());

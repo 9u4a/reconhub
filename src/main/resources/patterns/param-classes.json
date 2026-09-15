@@ -1,0 +1,12 @@
+{
+  "_comment": "Passive parameter-name classification. Each rule tags a parameter whose NAME matches the regex with a vulnerability-class hint (recon triage only; no traffic is generated). Tune/add rules freely.",
+  "classes": [
+    { "name": "IDOR",          "regex": "(?i)^(id|uid|u?id|pid|no|num|seq|idx|pk|user_?id|account_?id|member_?id|order_?id|doc_?id|file_?id|record_?id|object_?id|group_?id|profile_?id)$" },
+    { "name": "Redirect/SSRF", "regex": "(?i)(^|_)(redirect|redir|return|returnurl|goto|next|url|uri|dest|destination|continue|callback|forward|link|site|domain|host|target|proxy|fetch|feed|webhook|image_?url|img_?url)($|_)" },
+    { "name": "File/Path",     "regex": "(?i)(^|_)(file|filename|filepath|path|dir|folder|download|upload|load|read|template|include|require|page|doc|document|attachment|name)($|_)" },
+    { "name": "SQLi/Sort",     "regex": "(?i)(^|_)(order|orderby|order_?by|sort|sortby|sort_?by|filter|column|col|field|table|where|group_?by|having|select|limit|offset|q|query|search|keyword)($|_)" },
+    { "name": "Command",       "regex": "(?i)(^|_)(cmd|command|exec|execute|run|ping|shell|code|func|function|action|op|operation|method|task|do)($|_)" },
+    { "name": "Secret/Token",  "regex": "(?i)(^|_)(token|auth|authorization|apikey|api_?key|access_?token|refresh_?token|session|sid|jwt|secret|password|passwd|pwd|key|signature|sig|hash|nonce)($|_)" },
+    { "name": "Debug",         "regex": "(?i)(^|_)(debug|test|dev|staging|verbose|trace|mock|sandbox|preview)($|_)" }
+  ]
+}

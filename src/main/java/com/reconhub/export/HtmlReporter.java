@@ -1,5 +1,6 @@
 package com.reconhub.export;
 
+import com.reconhub.analysis.ParameterClassifier;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
@@ -119,12 +120,17 @@ public final class HtmlReporter {
             b.append("<p class=\"muted\">No parameters.</p></section>");
             return;
         }
-        b.append("<table><thead><tr><th>Endpoint</th><th>Type</th><th>Name</th><th>Example</th>"
-                + "<th>Reflected</th><th>Seen</th></tr></thead><tbody>");
+        b.append("<table><thead><tr><th>Endpoint</th><th>Type</th><th>Name</th><th>Class</th>"
+                + "<th>Example</th><th>Reflected</th><th>Seen</th></tr></thead><tbody>");
         for (ParameterInfo p : params) {
             b.append("<tr><td><code>").append(esc(p.getEndpointPath())).append("</code></td><td><code>")
                     .append(p.getLocation().name()).append("</code></td><td>")
-                    .append(esc(p.getName())).append("</td><td class=\"muted\"><code>")
+                    .append(esc(p.getName())).append("</td><td>");
+            for (String cls : ParameterClassifier.classify(p.getName())) {
+                b.append("<span class=\"tag\" style=\"color:var(--low)\">").append(esc(cls))
+                        .append("</span>");
+            }
+            b.append("</td><td class=\"muted\"><code>")
                     .append(esc(p.getExampleValue())).append("</code></td><td>")
                     .append(p.isReflected() ? "<span class=\"yes\">yes</span>" : "&ndash;")
                     .append("</td><td>").append(p.getSeen()).append("</td></tr>");

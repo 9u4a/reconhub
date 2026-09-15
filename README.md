@@ -13,7 +13,7 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 |----|------|
 | **Dashboard** | 요청·엔드포인트·파라미터·Findings·JS·호스트 카운트, 심각도별 요약, 상위 호스트/상태코드/콘텐츠타입 막대 차트 |
 | **Endpoints** | method + 정규화 URL로 dedup한 엔드포인트 인벤토리. 행 선택 시 하단에 Request/Response 표시, 우클릭 → **Send to Repeater** |
-| **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie) — 경로·유형·예시값·반사 여부·Seen. 행 선택 시 매칭 Request/Response 표시 |
+| **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie) — 경로·유형·**취약점 후보 클래스(IDOR·Redirect/SSRF·File/Path·SQLi·Command·Secret/Token·Debug)**·예시값·반사 여부·Seen. 행 선택 시 매칭 Request/Response 표시 |
 | **Findings** | 시크릿/민감정보(AWS·Google·GitHub·Slack 키, JWT, private key, S3, 이메일, 내부 IP) + 흥미로운 응답(스택트레이스·SQL 에러·디버그·디렉터리 리스팅) + 보안 미스컨피그(CORS·쿠키 플래그) + 권한 값(role/admin/permissions 등) + HTML/JS 주석, 심각도 정렬. 행 우클릭으로 Repeater/Intruder 전송 |
 | **JS Assets** | 수집한 JS를 SHA-256 해시로 dedup 저장, JS 내 엔드포인트·시크릿 추출. 출처 JS 파일 기록 |
 | **Tech** | 헤더/쿠키/JS 라이브러리 기반 호스트별 기술 식별 + 보안 헤더 누락 체크리스트 |
@@ -43,6 +43,9 @@ Burp Suite 확장(Montoya API, Java)입니다. 대상 서버에 직접 트래픽
 ## 변경 이력
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
+
+### 1.7.0
+- **파라미터 취약점 후보 자동 분류**: 파라미터 이름을 규칙(`patterns/param-classes.json`) 기반으로 IDOR·Redirect/SSRF·File/Path·SQLi/Sort·Command·Secret/Token·Debug 후보로 태깅. Parameters 탭에 **Class 컬럼**(강조·툴팁) 추가, 검색·JSON·HTML 리포트에도 반영. 완전 passive(캡처된 이름만 분류, 추가 요청 없음).
 
 ### 1.6.2
 - **Findings 값 전체 표시·복사**: Value 컬럼을 마스킹 없이 **원본 값 전체**로 표시하고, 셀이 좁아 잘리면 마우스오버 툴팁으로 전체 값을 확인. 우클릭 **Copy cell**로 값 전체 복사 가능(Location/Evidence도 툴팁 제공). ※ JSON/HTML 리포트 export의 값은 기존대로 마스킹 유지.
