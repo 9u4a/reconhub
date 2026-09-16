@@ -48,7 +48,14 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         tabs.addTab("Findings", findings);
         tabs.addTab("JS Assets", jsAssets);
         tabs.addTab("Tech", tech);
-        tabs.addTab("Settings", settingsPanel);
+        // Settings is a tall stack of sections — scroll it so lower sections stay reachable at
+        // any window height / half width.
+        javax.swing.JScrollPane settingsScroll = new javax.swing.JScrollPane(settingsPanel,
+                javax.swing.JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+                javax.swing.JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        settingsScroll.getVerticalScrollBar().setUnitIncrement(16);
+        settingsScroll.setBorder(null);
+        tabs.addTab("Settings", settingsScroll);
         add(tabs, BorderLayout.CENTER);
 
         // Let dashboard/findings rows jump to a filtered view of another tab.

@@ -94,6 +94,11 @@
 
 버전은 [시맨틱 버저닝](https://semver.org/lang/ko/)(`MAJOR.MINOR.PATCH`)을 따른다.
 
+### 0.24.0
+- **Dashboard 표 정렬 3단계 순환**: 호스트 스코어카드·Top findings·주목 엔드포인트 표의 컬럼 헤더 클릭도 **오름차순 → 내림차순 → 기본(해제)** 3단계로 순환(기존 데이터 탭과 동일하게 통일).
+- **CSV 버튼 위치 고정**: 각 탭 상단 툴바에서 **CSV…** 버튼을 **우측 끝으로 고정**(검색·필터는 좌측, 내보내기는 우측)해 위치를 일관되게 유지.
+- **Settings 가시성 개선**: Settings 탭을 **스크롤 가능**하게 해 창이 작거나 절반 폭이어도 하단 섹션까지 모두 접근 가능. 섹션 헤더를 **악센트 색 + 구분선(전체 폭)**으로 강조해 스캔하기 쉽게 개선.
+
 ### 0.23.0
 - **리포트 강화**: HTML/Markdown 리포트에 **호스트별 위험 스코어카드**(호스트별 엔드포인트·High/Medium/Low/Info 건수·가중 점수, 점수 내림차순) 추가. HTML은 목차에 Host risk 링크 포함.
 - **SARIF 2.1.0 내보내기**: Settings에 **Export SARIF…** 추가 — CI/코드 스캐닝 수집용. 심각도→level(error/warning/note) 매핑, 규칙(유형)·위치(URL)·안정적 partialFingerprint 포함, **시크릿 원문은 미포함**(마스킹 값·해시 fingerprint). Confirmed only/Exclude FP 옵션 반영.

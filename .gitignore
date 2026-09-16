@@ -19,3 +19,9 @@ output/
 collected-js/
 *-report.json
 *-report.html
+
+# Local screenshots / scratch images (not part of the extension)
+*.png
+*.jpg
+*.jpeg
+*.gif

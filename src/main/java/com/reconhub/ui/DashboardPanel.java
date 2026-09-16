@@ -20,7 +20,6 @@ import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.table.AbstractTableModel;
-import javax.swing.table.TableRowSorter;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -612,7 +611,8 @@ public final class DashboardPanel extends JPanel implements Refreshable {
 
     private static void styleTable(JTable t) {
         t.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
-        t.setRowSorter(new TableRowSorter<>(t.getModel()));
+        // Header clicks cycle ascending -> descending -> unsorted (default order).
+        t.setRowSorter(new TriStateRowSorter<>(t.getModel()));
         t.setRowHeight(24);
         t.setShowGrid(false);
         t.setIntercellSpacing(new Dimension(0, 0));

@@ -544,11 +544,20 @@ public final class SettingsPanel extends JPanel {
         status.setText(s);
     }
 
+    private static final java.awt.Color ACCENT = new java.awt.Color(0x4da3ff);
+    private static final java.awt.Color RULE = new java.awt.Color(0x2a313b);
+
+    /** A prominent, full-width section header: accent title over a separator line. */
     private static JLabel section(String title) {
-        JLabel l = new JLabel(title);
-        l.setFont(l.getFont().deriveFont(java.awt.Font.BOLD, 13f));
-        l.setBorder(BorderFactory.createEmptyBorder(4, 0, 6, 0));
+        JLabel l = new JLabel(title.toUpperCase());
+        l.setFont(l.getFont().deriveFont(java.awt.Font.BOLD, 13.5f));
+        l.setForeground(ACCENT);
+        l.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createMatteBorder(0, 0, 1, 0, RULE),
+                BorderFactory.createEmptyBorder(8, 0, 5, 0)));
         l.setAlignmentX(Component.LEFT_ALIGNMENT);
+        // Stretch full width in the Y-axis BoxLayout so the underline spans the panel.
+        l.setMaximumSize(new Dimension(Integer.MAX_VALUE, l.getPreferredSize().height));
         return l;
     }
 

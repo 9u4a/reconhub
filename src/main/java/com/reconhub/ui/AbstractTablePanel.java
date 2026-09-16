@@ -20,14 +20,11 @@ import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.RowFilter;
-import javax.swing.RowSorter;
-import javax.swing.SortOrder;
 import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
-import javax.swing.table.TableRowSorter;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -68,24 +65,7 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
     private final Model model = new Model();
     protected final JTable table = new JTable(model);
     // Sorting cycles ascending -> descending -> unsorted (default order) on repeated header clicks.
-    private final TableRowSorter<Model> sorter = new TableRowSorter<>(model) {
-        @Override
-        public void toggleSortOrder(int column) {
-            List<? extends SortKey> keys = getSortKeys();
-            if (!keys.isEmpty() && keys.get(0).getColumn() == column) {
-                SortOrder cur = keys.get(0).getSortOrder();
-                if (cur == SortOrder.ASCENDING) {
-                    setSortKeys(List.of(new RowSorter.SortKey(column, SortOrder.DESCENDING)));
-                    return;
-                }
-                if (cur == SortOrder.DESCENDING) {
-                    setSortKeys(null);   // third click: back to unsorted
-                    return;
-                }
-            }
-            setSortKeys(List.of(new RowSorter.SortKey(column, SortOrder.ASCENDING)));
-        }
-    };
+    private final TriStateRowSorter<Model> sorter = new TriStateRowSorter<>(model);
 
     private final JTextField searchField = new JTextField(30);
     private final JComboBox<String> fieldBox = new JComboBox<>();
@@ -94,6 +74,7 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
     private final JCheckBox caseBox = new JCheckBox("Aa", false);
     private final JLabel countLabel = new JLabel("0 rows");
     private final JScrollPane scrollPane = new JScrollPane(table);
+    private final JPanel toolbarLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 6));
 
     private final Timer debounce = new Timer(200, e -> applySearch());
     private final Map<T, String> bodyCache = new IdentityHashMap<>();
@@ -104,24 +85,31 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         setLayout(new BorderLayout());
         debounce.setRepeats(false);
 
-        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 6));
-        top.add(new JLabel("Search:"));
-        top.add(searchField);
+        // Left cluster: search controls + subclass quick-filters + row count.
+        toolbarLeft.add(new JLabel("Search:"));
+        toolbarLeft.add(searchField);
         fieldBox.addItem("All");
         for (String c : columns()) {
             fieldBox.addItem(c);
         }
-        top.add(fieldBox);
+        toolbarLeft.add(fieldBox);
         bodyBox.setVisible(supportsBodySearch());
-        top.add(bodyBox);
-        top.add(regexBox);
-        top.add(caseBox);
+        toolbarLeft.add(bodyBox);
+        toolbarLeft.add(regexBox);
+        toolbarLeft.add(caseBox);
+        toolbarLeft.add(Box.createHorizontalStrut(10));
+        toolbarLeft.add(countLabel);
+
+        // Right cluster: the CSV export button, pinned to the far right edge.
         JButton csvButton = new JButton("CSV…");
         csvButton.setToolTipText("Export the current (filtered/sorted) view to CSV");
         csvButton.addActionListener(e -> exportCsv());
-        top.add(csvButton);
-        top.add(Box.createHorizontalStrut(10));
-        top.add(countLabel);
+        JPanel toolbarRight = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 6));
+        toolbarRight.add(csvButton);
+
+        JPanel top = new JPanel(new BorderLayout());
+        top.add(toolbarLeft, BorderLayout.CENTER);
+        top.add(toolbarRight, BorderLayout.EAST);
         add(top, BorderLayout.NORTH);
 
         bodyBox.setToolTipText("Search inside request/response body (where available)");
@@ -232,8 +220,20 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         return null;
     }
 
+    /** Adds a subclass quick-filter to the left toolbar cluster, kept before the row-count label. */
     protected void addToToolbar(Component c) {
-        ((JPanel) getComponent(0)).add(c);
+        int idx = toolbarLeft.getComponentCount();
+        // keep the strut + count label as the trailing items of the left cluster
+        while (idx > 0) {
+            Component prev = toolbarLeft.getComponent(idx - 1);
+            if (prev == countLabel || prev instanceof Box.Filler) {
+                idx--;
+            } else {
+                break;
+            }
+        }
+        toolbarLeft.add(c, idx);
+        toolbarLeft.revalidate();
     }
 
     /**
