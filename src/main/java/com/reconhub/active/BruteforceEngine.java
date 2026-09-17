@@ -25,14 +25,18 @@ import java.util.concurrent.atomic.AtomicInteger;
  * target before running) and the target must pass {@link ScopeFilter}; every send goes through
  * {@link Throttler}, the only choke point that talks to the target.
  *
- * <p>Detection: a soft-404 baseline (one random nonexistent path) is fetched first; a probe response
- * matching that baseline's status and body length (within 3%) is treated as a false hit and skipped.
- * A real hit ({@code status} in {200,201,204,301,302,307,401,403}) is recorded via
- * {@link DataStore#recordEndpoint} (source {@code "bruteforce"}) — no separate results grid — and, for
- * {@code exposed}/{@code admin}/{@code api}-tagged paths, also as a {@link Finding} so it surfaces in
- * triage. Every probe (payload path sent + response status/length) is reported to the
- * {@link Listener#onLog} callback so the Bruteforce tab's activity log shows exactly what was sent and
- * what came back.
+ * <p>Detection: the soft-404 baseline is fetched <em>twice</em> (two different random nonexistent
+ * paths) to measure the page's own self-similarity via {@link PageComparator} — a "not found" page
+ * that embeds anything path-dependent (the requested path echoed back, a token, a timestamp) still
+ * self-similarity-matches, so the resulting threshold correctly treats that page as "no different" on
+ * every genuine miss, instead of a raw byte-length tolerance misfiring on nearly every probe. A probe
+ * is a real hit when its status differs from baseline, OR its body similarity to baseline falls below
+ * the threshold, AND the status is one of {200,201,204,301,302,307,401,403}. Confirmed hits are
+ * recorded via {@link DataStore#recordEndpoint} (source {@code "bruteforce"}) — no separate results
+ * grid — and, for {@code exposed}/{@code admin}/{@code api}-tagged paths, also as a {@link Finding} so
+ * they surface in triage; they're also kept on the {@link BruteforceJob} itself for the Bruteforce
+ * tab's Hits view. Every probe (payload path sent + response status/length) is reported to the
+ * {@link Listener#onLog} callback so the Activity log shows exactly what was sent and what came back.
  */
 public final class BruteforceEngine {
 
@@ -45,7 +49,6 @@ public final class BruteforceEngine {
 
     private static final Set<Integer> INTERESTING_STATUS =
             Set.of(200, 201, 204, 301, 302, 307, 401, 403);
-    private static final double LEN_TOLERANCE = 0.03;
 
     private final MontoyaApi api;
     private final DataStore store;
@@ -85,9 +88,9 @@ public final class BruteforceEngine {
     public List<KnownPaths.Entry> getWordlist() { return wordlist; }
     public List<BruteforceJob> jobs() { return jobs; }
 
-    /** Rough request count a run would send (wordlist size + 1 baseline probe), capped by the budget. */
+    /** Rough request count a run would send (wordlist size + 2 baseline probes), capped by the budget. */
     public int estimateRequests() {
-        return Math.min(wordlist.size() + 1, settings.getBruteforceMaxRequestsPerHost());
+        return Math.min(wordlist.size() + 2, settings.getBruteforceMaxRequestsPerHost());
     }
 
     /**
@@ -114,7 +117,7 @@ public final class BruteforceEngine {
         if (host == null || host.isBlank()) {
             return null;
         }
-        BruteforceJob job = new BruteforceJob(host, settings.getBruteforceMaxRequestsPerHost());
+        BruteforceJob job = new BruteforceJob(host, baseUrl, settings.getBruteforceMaxRequestsPerHost());
         jobs.add(job);
         dispatcher.submit(() -> run(job, baseUrl, host));
         return job;
@@ -124,18 +127,21 @@ public final class BruteforceEngine {
         try {
             log("── Bruteforce start: " + baseUrl + " (" + wordlist.size() + " paths, budget "
                     + job.getBudget() + ")");
-            String nonce = "/__reconhub_" + ThreadLocalRandom.current().nextInt(100_000, 999_999) + "__";
-            HttpRequestResponse base = send(baseUrl + nonce, job);
-            int baseStatus = status(base);
-            int baseLen = len(base);
-            log("  baseline (random nonexistent path) → " + baseStatus + " " + baseLen + "B");
-            if (base == null) {
+            HttpRequestResponse base1 = send(baseUrl + randomNonce(), job);
+            HttpRequestResponse base2 = send(baseUrl + randomNonce(), job);
+            int baseStatus = status(base1);
+            String baseBody = body(base1);
+            double selfSim = PageComparator.similarity(baseBody, body(base2));
+            double threshold = PageComparator.stableThreshold(selfSim);
+            log("  baseline (2 random nonexistent paths) → " + baseStatus + " " + baseBody.length()
+                    + "B, page self-similarity " + fmt(selfSim) + " (match threshold " + fmt(threshold) + ")");
+            if (base1 == null || base2 == null) {
                 log("  ⚠ baseline request failed outright (no response) — every path below will also "
                         + "read 0/0B. Usually a wrong scheme (https vs http) or port for this host; "
                         + "edit the target and re-run.");
             }
 
-            runWordlist(job, baseUrl, host, baseStatus, baseLen);
+            runWordlist(job, baseUrl, host, baseStatus, baseBody, threshold);
             log("── Bruteforce done: " + baseUrl + " (requests sent: " + job.getSent()
                     + ", hits: " + job.getHits() + ")");
         } catch (RuntimeException e) {
@@ -147,13 +153,18 @@ public final class BruteforceEngine {
         }
     }
 
+    private static String randomNonce() {
+        return "/__reconhub_" + ThreadLocalRandom.current().nextInt(100_000, 999_999) + "__";
+    }
+
     /**
      * Probes the wordlist against one host, using up to {@code settings.getBruteforceConcurrency()}
      * worker threads pulling from a shared cursor — the actual sends still funnel through the single
      * {@link Throttler} pace lock, so raising concurrency overlaps network wait rather than sending
      * faster than {@code delayMs} apart.
      */
-    private void runWordlist(BruteforceJob job, String baseUrl, String host, int baseStatus, int baseLen) {
+    private void runWordlist(BruteforceJob job, String baseUrl, String host, int baseStatus,
+                             String baseBody, double threshold) {
         int par = Math.max(1, settings.getBruteforceConcurrency());
         AtomicInteger cursor = new AtomicInteger();
         Runnable worker = () -> {
@@ -170,12 +181,14 @@ public final class BruteforceEngine {
                     return;
                 }
                 int st = status(rr);
-                int ln = len(rr);
-                boolean softNotFound = st == baseStatus && similarLength(ln, baseLen);
+                String bodyText = body(rr);
+                double sim = PageComparator.similarity(baseBody, bodyText);
+                boolean softNotFound = st == baseStatus && sim >= threshold;
                 boolean hit = !softNotFound && INTERESTING_STATUS.contains(st);
-                log("  ⇐ " + entry.path() + "  → " + st + " " + ln + "B" + (hit ? "  [HIT]" : ""));
+                log("  ⇐ " + entry.path() + "  → " + st + " " + bodyText.length() + "B (sim "
+                        + fmt(sim) + ")" + (hit ? "  [HIT]" : ""));
                 if (hit) {
-                    job.recordHit();
+                    job.recordHit(new BruteforceJob.Hit(entry.path(), st, bodyText.length(), entry.tag()));
                     record(host, entry, st, rr);
                 }
                 listener.onProgress(job);
@@ -257,17 +270,16 @@ public final class BruteforceEngine {
         }
     }
 
-    private static boolean similarLength(int a, int b) {
-        int max = Math.max(a, b);
-        return max == 0 || Math.abs(a - b) / (double) max <= LEN_TOLERANCE;
-    }
-
     private static int status(HttpRequestResponse rr) {
         return rr != null && rr.response() != null ? rr.response().statusCode() : 0;
     }
 
-    private static int len(HttpRequestResponse rr) {
-        return rr != null && rr.response() != null ? rr.response().bodyToString().length() : 0;
+    private static String body(HttpRequestResponse rr) {
+        return rr != null && rr.response() != null ? rr.response().bodyToString() : "";
+    }
+
+    private static String fmt(double d) {
+        return String.format(java.util.Locale.ROOT, "%.2f", d);
     }
 
     private static String contentType(HttpRequestResponse rr) {

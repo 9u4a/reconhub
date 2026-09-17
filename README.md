@@ -20,7 +20,7 @@ on/off 토글은 없고, **호스트 우클릭 → 대상 주소를 확인·수�
 | **Findings** | 시크릿·PII·미스컨피그 등을 심각도·**카테고리**로 집계(필터·트리아지·JWT 디코드, 행 선택 시 원문). 반사 XSS·오픈 리다이렉트 후보는 우클릭 **View payload cheatsheet…** 제공 |
 | **JS Assets** | JS 수집(SHA-256 dedup·옵션 저장) + 내부 엔드포인트·시크릿 추출. 트래픽에 안 잡힌 파일은 **Import JS file(s)…**로 로컬에서 불러와 동일 분석 |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 누락 체크 |
-| **Bruteforce** ⚠**ACTIVE** | 알려진 경로(관리자 패널·API 문서·노출 파일·CI/CD·IDE 아티팩트 등, 내장 워드리스트 약 380개) 탐색. 스로틀(지연·동시성·호스트당 상한) 조절, **Activity log**에 보낸 경로·응답(상태·길이)을 실시간 기록. Dashboard/Endpoints/Parameters/Tech에서 호스트 우클릭 → **확인 다이얼로그에서 대상 주소(스킴·포트 포함) 직접 수정 + 매 실행마다 확인**(이게 유일한 게이트) — 기본 스킴은 그 호스트에서 **이미 관찰된 트래픽**을 참고해 자동 선택(http만 관찰된 호스트에 https를 강제해 전부 실패하는 상황 방지). 결과는 Endpoints(Source=bruteforce)·Findings 탭에 반영 |
+| **Bruteforce** ⚠**ACTIVE** | 알려진 경로(관리자 패널·API 문서·노출 파일·CI/CD·IDE 아티팩트 등, 내장 워드리스트 약 380개) 탐색. **Hits 탭**에서 확인된 hit을 바로 표로 확인(호스트·경로·상태·길이·태그, 우클릭 Copy/Open in browser). 스로틀(지연·동시성·호스트당 상한) 조절, **Activity log**에 보낸 경로·응답(상태·길이·유사도)을 실시간 기록. Dashboard/Endpoints/Parameters/Tech에서 호스트 우클릭 → **확인 다이얼로그에서 대상 주소(스킴·포트 포함) 직접 수정 + 매 실행마다 확인**(이게 유일한 게이트) — 기본 스킴은 그 호스트에서 **이미 관찰된 트래픽**을 참고해 자동 선택(http만 관찰된 호스트에 https를 강제해 전부 실패하는 상황 방지). Soft-404 판정은 **본문 유사도 기반**(경로가 그대로 echo되는 404 페이지에도 오탐 없음). 결과는 Endpoints(Source=bruteforce)·Findings 탭에도 반영 |
 | **Settings** | 스코프·패시브 토글·커스텀 탐지 규칙·Ingest·내보내기·State 백업 |
 
 **탐지 항목**: API 키/토큰·JWT·인증 헤더·스토리지 URL 등 **시크릿**, **PII**(주민번호·카드·휴대폰),

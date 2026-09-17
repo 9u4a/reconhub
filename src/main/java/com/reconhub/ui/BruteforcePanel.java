@@ -11,8 +11,10 @@ import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
@@ -25,12 +27,21 @@ import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Desktop;
+import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.io.File;
+import java.net.URI;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Known-path bruteforce tab. <b>ACTIVE</b> — this is the only place in ReconHub that sends its own
@@ -51,6 +62,8 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
     private final JLabel wordlistInfo = new JLabel();
     private final JobModel jobModel = new JobModel();
     private final JTable jobTable = new JTable(jobModel);
+    private final HitModel hitModel = new HitModel();
+    private final JTable hitTable = new JTable(hitModel);
     private final JTextArea logArea = new JTextArea();
 
     public BruteforcePanel(Settings settings, BruteforceEngine engine) {
@@ -81,9 +94,9 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
         top.add(section("How to run"));
         top.add(wrappedText("Right-click a host in Dashboard (host scorecard), Tech, Endpoints or "
                 + "Parameters and choose \"Run known-path bruteforce on this host…\" — the confirmation "
-                + "dialog there lets you edit the target address and is required every run. Hits appear "
-                + "in Endpoints (Source=bruteforce) and, for exposed files / admin surfaces, in "
-                + "Findings. Every path sent and the response it got is logged below."));
+                + "dialog there lets you edit the target address and is required every run. Confirmed "
+                + "hits are listed below (Hits tab) and also appear in Endpoints (Source=bruteforce) "
+                + "and, for exposed files / admin surfaces, in Findings."));
 
         add(top, BorderLayout.NORTH);
 
@@ -91,6 +104,7 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
         logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
 
         JTabbedPane center = new JTabbedPane();
+        center.addTab("Hits", hitsPanel());
         center.addTab("Jobs", jobsPanel());
         center.addTab("Activity log", logPanel());
         add(center, BorderLayout.CENTER);
@@ -117,7 +131,7 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
     private interface IntSetter { void set(int v); }
 
     private JPanel spinnerRow(String label, int value, int min, int max, int step, IntSetter setter) {
-        JPanel p = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 2));
+        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         p.setAlignmentX(LEFT_ALIGNMENT);
         p.add(new JLabel(label));
         JSpinner sp = new JSpinner(new SpinnerNumberModel(value, min, max, step));
@@ -127,7 +141,7 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
     }
 
     private JPanel wordlistRow() {
-        JPanel p = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 2));
+        JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         p.setAlignmentX(LEFT_ALIGNMENT);
         p.add(wordlistInfo);
         JButton load = new JButton("Load custom wordlist file…");
@@ -204,7 +218,7 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
                 }
             }
         });
-        JPanel buttons = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 4));
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
         buttons.add(cancelSelected);
         buttons.add(cancelAll);
 
@@ -214,10 +228,91 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
         return panel;
     }
 
+    /** All confirmed hits across every job (running or finished), newest job first. */
+    private List<Map.Entry<BruteforceJob, BruteforceJob.Hit>> allHits() {
+        List<Map.Entry<BruteforceJob, BruteforceJob.Hit>> out = new ArrayList<>();
+        List<BruteforceJob> jobs = engine.jobs();
+        for (int j = jobs.size() - 1; j >= 0; j--) {
+            BruteforceJob job = jobs.get(j);
+            for (BruteforceJob.Hit hit : job.getHitList()) {
+                out.add(new AbstractMap.SimpleEntry<>(job, hit));
+            }
+        }
+        return out;
+    }
+
+    private JComponent hitsPanel() {
+        hitTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        hitTable.setRowHeight(22);
+        int[] widths = {160, 220, 60, 80, 70};
+        for (int i = 0; i < widths.length; i++) {
+            hitTable.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
+        }
+        hitTable.addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e) { maybeShow(e); }
+            @Override public void mouseReleased(MouseEvent e) { maybeShow(e); }
+            private void maybeShow(MouseEvent e) {
+                if (!e.isPopupTrigger()) {
+                    return;
+                }
+                int row = hitTable.rowAtPoint(e.getPoint());
+                if (row < 0) {
+                    return;
+                }
+                hitTable.setRowSelectionInterval(row, row);
+                hitPopup(row).show(hitTable, e.getX(), e.getY());
+            }
+        });
+
+        JLabel hint = new JLabel("Full detail (request/response) for each hit is in the Endpoints tab "
+                + "(Source=bruteforce) and, for exposed/admin/api hits, Findings.");
+        hint.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
+
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.add(hint, BorderLayout.NORTH);
+        panel.add(new JScrollPane(hitTable), BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPopupMenu hitPopup(int row) {
+        JPopupMenu menu = new JPopupMenu();
+        List<Map.Entry<BruteforceJob, BruteforceJob.Hit>> hits = allHits();
+        if (row < 0 || row >= hits.size()) {
+            return menu;
+        }
+        BruteforceJob job = hits.get(row).getKey();
+        BruteforceJob.Hit hit = hits.get(row).getValue();
+        String url = job.getBaseUrl() + hit.path();
+        JMenuItem copyPath = new JMenuItem("Copy path");
+        copyPath.addActionListener(e -> copyToClipboard(hit.path()));
+        menu.add(copyPath);
+        JMenuItem copyUrl = new JMenuItem("Copy URL");
+        copyUrl.addActionListener(e -> copyToClipboard(url));
+        menu.add(copyUrl);
+        JMenuItem open = new JMenuItem("Open in browser");
+        open.addActionListener(e -> openBrowser(url));
+        menu.add(open);
+        return menu;
+    }
+
+    private static void copyToClipboard(String s) {
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(s), null);
+    }
+
+    private static void openBrowser(String url) {
+        try {
+            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                Desktop.getDesktop().browse(URI.create(url));
+            }
+        } catch (Exception ignored) {
+            // browser not available / bad URL -- ignore
+        }
+    }
+
     private JComponent logPanel() {
         JButton clear = new JButton("Clear log");
         clear.addActionListener(e -> logArea.setText(""));
-        JPanel buttons = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 4));
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
         buttons.add(clear);
 
         JPanel panel = new JPanel(new BorderLayout());
@@ -230,12 +325,18 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
 
     @Override
     public void onProgress(BruteforceJob job) {
-        SwingUtilities.invokeLater(jobModel::fireChanged);
+        SwingUtilities.invokeLater(() -> {
+            jobModel.fireChanged();
+            hitModel.fireChanged();
+        });
     }
 
     @Override
     public void onDone(BruteforceJob job) {
-        SwingUtilities.invokeLater(jobModel::fireChanged);
+        SwingUtilities.invokeLater(() -> {
+            jobModel.fireChanged();
+            hitModel.fireChanged();
+        });
     }
 
     @Override
@@ -249,6 +350,7 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
     @Override
     public void refreshData() {
         jobModel.fireChanged();
+        hitModel.fireChanged();
     }
 
     private static JComponent section(String title) {
@@ -303,6 +405,35 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
                 case 1 -> j.isCancelled() ? "Cancelled" : j.isDone() ? "Done" : "Running";
                 case 2 -> j.getSent() + " / " + j.getBudget();
                 case 3 -> j.getHits();
+                default -> "";
+            };
+        }
+    }
+
+    private final class HitModel extends AbstractTableModel {
+        private static final String[] COLS = {"Host", "Path", "Status", "Length", "Tag"};
+
+        void fireChanged() { fireTableDataChanged(); }
+
+        @Override public int getRowCount() { return allHits().size(); }
+        @Override public int getColumnCount() { return COLS.length; }
+        @Override public String getColumnName(int c) { return COLS[c]; }
+        @Override public boolean isCellEditable(int r, int c) { return false; }
+
+        @Override
+        public Object getValueAt(int r, int c) {
+            List<Map.Entry<BruteforceJob, BruteforceJob.Hit>> hits = allHits();
+            if (r < 0 || r >= hits.size()) {
+                return "";
+            }
+            BruteforceJob job = hits.get(r).getKey();
+            BruteforceJob.Hit hit = hits.get(r).getValue();
+            return switch (c) {
+                case 0 -> job.getHost();
+                case 1 -> hit.path();
+                case 2 -> hit.status();
+                case 3 -> hit.lengthBytes();
+                case 4 -> hit.tag();
                 default -> "";
             };
         }
