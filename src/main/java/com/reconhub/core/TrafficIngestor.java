@@ -27,6 +27,7 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 /**
  * Orchestrates ingestion: runs every request/response through the analyzers and writes results to
@@ -188,6 +189,31 @@ public final class TrafficIngestor implements HttpHandler {
                 store.fireChanged();
             } catch (RuntimeException e) {
                 api.logging().logToError("manual ingest failed: " + e);
+            }
+        });
+    }
+
+    /**
+     * Analyzes a locally-imported JS file's text through the same pipeline as JS seen in traffic
+     * (endpoint/secret extraction, optional save-to-disk) — no request is sent. {@code syntheticUrl}
+     * is a display/join key (e.g. {@code "import://app.js"}), not a real URL. Content-hash dedup means
+     * re-importing a file whose text was already analyzed is a silent no-op — {@code onDone} reports
+     * which.
+     */
+    public void ingestJsFile(String syntheticUrl, String body, Consumer<Boolean> onDone) {
+        executor.submit(() -> {
+            try {
+                boolean isNew = !store.hasJsAsset(HashUtil.sha256(body));
+                jsAnalyzer.analyze(syntheticUrl, body, null);
+                store.fireChanged();
+                if (onDone != null) {
+                    onDone.accept(isNew);
+                }
+            } catch (RuntimeException e) {
+                api.logging().logToError("JS import failed for " + syntheticUrl + ": " + e);
+                if (onDone != null) {
+                    onDone.accept(false);
+                }
             }
         });
     }

@@ -16,7 +16,7 @@ JavaScript 수집·분석, 기술 핑거프린팅을 수행하고 결과를 **JS
 | **Endpoints** | method+정규화 URL로 dedup한 인벤토리(인증 관찰 Auth 컬럼 포함), 행 선택 시 원문 Request/Response |
 | **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie) + 취약점 후보 **Class** 자동 분류 |
 | **Findings** | 시크릿·PII·미스컨피그 등을 심각도·**카테고리**로 집계(필터·트리아지·JWT 디코드, 행 선택 시 원문) |
-| **JS Assets** | JS 수집(SHA-256 dedup·옵션 저장) + 내부 엔드포인트·시크릿 추출 |
+| **JS Assets** | JS 수집(SHA-256 dedup·옵션 저장) + 내부 엔드포인트·시크릿 추출. 트래픽에 안 잡힌 파일은 **Import JS file(s)…**로 로컬에서 불러와 동일 분석 |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 누락 체크 |
 | **Settings** | 스코프·패시브 토글·커스텀 탐지 규칙·Ingest·내보내기·State 백업 |
 
