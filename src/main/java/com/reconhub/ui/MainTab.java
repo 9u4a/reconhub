@@ -30,7 +30,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         setLayout(new BorderLayout());
 
         DashboardPanel dashboard = new DashboardPanel(store);
-        EndpointsPanel endpoints = new EndpointsPanel(store, api);
+        EndpointsPanel endpoints = new EndpointsPanel(store, api, cheatsheet);
         ParametersPanel parameters = new ParametersPanel(store, api, cheatsheet);
         FindingsPanel findings = new FindingsPanel(store, settings, api, cheatsheet);
         JsAssetsPanel jsAssets = new JsAssetsPanel(store, api, ingestor);

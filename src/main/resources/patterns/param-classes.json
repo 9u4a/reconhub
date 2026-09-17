@@ -7,6 +7,7 @@
     { "name": "SQLi/Sort",     "regex": "(?i)(^|_)(order|orderby|order_?by|sort|sortby|sort_?by|filter|column|col|field|table|where|group_?by|having|select|limit|offset|q|query|search|keyword)($|_)" },
     { "name": "Command",       "regex": "(?i)(^|_)(cmd|command|exec|execute|run|ping|shell|code|func|function|action|op|operation|method|task|do)($|_)" },
     { "name": "Secret/Token",  "regex": "(?i)(^|_)(token|auth|authorization|apikey|api_?key|access_?token|refresh_?token|session|sid|jwt|secret|password|passwd|pwd|key|signature|sig|hash|nonce)($|_)" },
-    { "name": "Debug",         "regex": "(?i)(^|_)(debug|test|dev|staging|verbose|trace|mock|sandbox|preview)($|_)" }
+    { "name": "Debug",         "regex": "(?i)(^|_)(debug|test|dev|staging|verbose|trace|mock|sandbox|preview)($|_)" },
+    { "name": "SSTI",          "regex": "(?i)(^|_)(template|tpl|view|layout|theme|partial|render|widget|snippet|component|skin)($|_)" }
   ]
 }

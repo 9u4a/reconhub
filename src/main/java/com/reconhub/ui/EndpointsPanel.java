@@ -3,6 +3,7 @@ package com.reconhub.ui;
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.active.BruteforceEngine;
+import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.Settings;
 import com.reconhub.model.Endpoint;
@@ -20,13 +21,15 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
     private static final int COL_AUTH = 6;
 
     private final DataStore store;
+    private final PayloadCheatsheet cheatsheet;
     private final MessageViewer viewer;
     private BruteforceEngine bruteforce;
     private Settings settings;
 
-    public EndpointsPanel(DataStore store, MontoyaApi api) {
+    public EndpointsPanel(DataStore store, MontoyaApi api, PayloadCheatsheet cheatsheet) {
         super(api);
         this.store = store;
+        this.cheatsheet = cheatsheet;
         this.viewer = new MessageViewer(api);
         installDetail(viewer);
     }
@@ -39,12 +42,22 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
 
     @Override
     protected void extraMenuItems(JPopupMenu menu, Endpoint e) {
-        if (e == null || bruteforce == null || e.getHost() == null || e.getHost().isBlank()) {
+        if (e == null) {
             return;
         }
-        menu.addSeparator();
-        addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
-                () -> RunBruteforceAction.run(this, bruteforce, settings, e.getHost()));
+        // Body-structure-driven cheatsheets (XXE on XML/SOAP endpoints) -- not name-based, so keyed
+        // off Content-Type instead of a ParameterClassifier class.
+        PayloadCheatsheet.Set xxe = cheatsheet == null ? null : cheatsheet.forContentType(e.getContentType());
+        if (xxe != null) {
+            menu.addSeparator();
+            addMenuItem(menu, "View payload cheatsheet (XXE)…", true,
+                    () -> CheatsheetDialog.showFor(this, e.getPath(), List.of(xxe)));
+        }
+        if (bruteforce != null && e.getHost() != null && !e.getHost().isBlank()) {
+            menu.addSeparator();
+            addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
+                    () -> RunBruteforceAction.run(this, bruteforce, settings, e.getHost()));
+        }
     }
 
     @Override

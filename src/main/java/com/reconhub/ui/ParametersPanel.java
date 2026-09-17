@@ -63,6 +63,21 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
                     sets.add(s);
                 }
             }
+            // Prototype Pollution targets JSON-body merge/clone sinks -- not identifiable by param
+            // name, so offer it on every JSON-location parameter regardless of its name-based class.
+            if (p.getLocation() == ParameterInfo.Location.JSON) {
+                PayloadCheatsheet.Set pp = cheatsheet.forClass("Prototype Pollution");
+                if (pp != null && !sets.contains(pp)) {
+                    sets.add(pp);
+                }
+            }
+            // Deserialization sinks aren't identifiable by name either -- flag by value shape instead.
+            if (PayloadCheatsheet.looksSerialized(p.getName(), p.getExampleValue())) {
+                PayloadCheatsheet.Set deser = cheatsheet.forClass("Deserialization");
+                if (deser != null && !sets.contains(deser)) {
+                    sets.add(deser);
+                }
+            }
             if (!sets.isEmpty()) {
                 menu.addSeparator();
                 addMenuItem(menu, "View payload cheatsheet…", true,

