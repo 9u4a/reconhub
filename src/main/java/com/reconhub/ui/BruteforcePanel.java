@@ -80,12 +80,10 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
         top.add(strut());
 
         top.add(section("How to run"));
-        JLabel howTo = new JLabel("<html>Right-click a host in <b>Dashboard</b> (host scorecard) or "
-                + "<b>Tech</b> and choose <i>Run known-path bruteforce on this host…</i> — every run "
-                + "asks for confirmation. Hits appear in <b>Endpoints</b> (Source=bruteforce) and, for "
-                + "exposed files / admin surfaces, in <b>Findings</b>.</html>");
-        howTo.setAlignmentX(LEFT_ALIGNMENT);
-        top.add(howTo);
+        top.add(wrappedText("Right-click a host in Dashboard (host scorecard), Tech, Endpoints or "
+                + "Parameters and choose \"Run known-path bruteforce on this host…\" — you can edit the "
+                + "target address before it runs, and every run asks for confirmation. Hits appear in "
+                + "Endpoints (Source=bruteforce) and, for exposed files / admin surfaces, in Findings."));
 
         add(top, BorderLayout.NORTH);
         add(jobsPanel(), BorderLayout.CENTER);
@@ -237,6 +235,24 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
 
     private static Component strut() {
         return Box.createVerticalStrut(10);
+    }
+
+    /**
+     * A plain, word-wrapping block of text styled to look like a label. Burp's Swing look-and-feel
+     * does not render {@code <html>} markup in {@code JLabel} (tags show up as literal text), so
+     * multi-line hint text uses a non-editable {@link javax.swing.JTextArea} instead.
+     */
+    private static JComponent wrappedText(String text) {
+        javax.swing.JTextArea area = new javax.swing.JTextArea(text);
+        area.setEditable(false);
+        area.setFocusable(false);
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        area.setOpaque(false);
+        area.setBorder(null);
+        area.setFont(new JLabel().getFont());
+        area.setAlignmentX(LEFT_ALIGNMENT);
+        return area;
     }
 
     private final class JobModel extends AbstractTableModel {

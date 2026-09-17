@@ -39,6 +39,9 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         BruteforcePanel bruteforcePanel = new BruteforcePanel(settings, bruteforce);
         dashboard.setBruteforce(bruteforce, settings);
         tech.setBruteforce(bruteforce, settings);
+        endpoints.setBruteforce(bruteforce, settings);
+        parameters.setBruteforce(bruteforce, settings);
+        findings.setBruteforce(bruteforce);
 
         refreshables.add(dashboard);
         refreshables.add(endpoints);

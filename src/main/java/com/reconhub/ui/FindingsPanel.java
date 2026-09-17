@@ -2,6 +2,7 @@ package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
+import com.reconhub.active.BruteforceEngine;
 import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.JwtDecoder;
 import com.reconhub.analysis.PayloadCheatsheet;
@@ -49,6 +50,7 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     private final JComboBox<String> catBox = new JComboBox<>();
     private boolean rebuildingCatBox;
     private DashboardPanel.Navigator navigator;
+    private BruteforceEngine bruteforce;
 
     public FindingsPanel(DataStore store, Settings settings, MontoyaApi api,
                          PayloadCheatsheet cheatsheet) {
@@ -114,6 +116,11 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     /** Wires cross-tab navigation (finding → related endpoints/parameters). */
     public void setNavigator(DashboardPanel.Navigator navigator) {
         this.navigator = navigator;
+    }
+
+    /** Wires the (ACTIVE) known-path bruteforce action for this tab's right-click menu; called once. */
+    public void setBruteforce(BruteforceEngine engine) {
+        this.bruteforce = engine;
     }
 
     @Override
@@ -233,6 +240,11 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
             menu.addSeparator();
             addMenuItem(menu, "View payload cheatsheet…", true,
                     () -> CheatsheetDialog.showFor(this, f.getType(), List.of(set)));
+        }
+        if (bruteforce != null && !host.isEmpty()) {
+            menu.addSeparator();
+            addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
+                    () -> RunBruteforceAction.run(this, bruteforce, settings, host));
         }
         menu.addSeparator();
         for (Finding.Triage t : Finding.Triage.values()) {

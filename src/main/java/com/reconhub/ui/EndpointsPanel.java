@@ -2,9 +2,12 @@ package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
+import com.reconhub.active.BruteforceEngine;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.Settings;
 import com.reconhub.model.Endpoint;
 
+import javax.swing.JPopupMenu;
 import java.awt.Component;
 import java.awt.Font;
 import java.util.List;
@@ -18,12 +21,30 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
 
     private final DataStore store;
     private final MessageViewer viewer;
+    private BruteforceEngine bruteforce;
+    private Settings settings;
 
     public EndpointsPanel(DataStore store, MontoyaApi api) {
         super(api);
         this.store = store;
         this.viewer = new MessageViewer(api);
         installDetail(viewer);
+    }
+
+    /** Wires the (ACTIVE) known-path bruteforce action for this tab's right-click menu; called once. */
+    public void setBruteforce(BruteforceEngine engine, Settings settings) {
+        this.bruteforce = engine;
+        this.settings = settings;
+    }
+
+    @Override
+    protected void extraMenuItems(JPopupMenu menu, Endpoint e) {
+        if (e == null || bruteforce == null || e.getHost() == null || e.getHost().isBlank()) {
+            return;
+        }
+        menu.addSeparator();
+        addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
+                () -> RunBruteforceAction.run(this, bruteforce, settings, e.getHost()));
     }
 
     @Override

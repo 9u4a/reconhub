@@ -86,15 +86,25 @@ public final class BruteforceEngine {
     }
 
     /**
-     * Starts a run against {@code host} (probed as {@code https://<host>}).
-     * @return the job, or {@code null} if refused (master switch off, or host not in scope).
+     * Starts a run against {@code target}, e.g. {@code "https://example.com"} or
+     * {@code "example.com"} (scheme defaults to {@code https} when omitted). Any path/query on
+     * {@code target} is dropped — only the origin is probed.
+     * @return the job, or {@code null} if refused (master switch off, target unparsable, or the
+     * resulting origin is not in scope).
      */
-    public BruteforceJob submit(String host) {
-        if (!settings.isBruteforceActiveEnabled() || host == null || host.isBlank()) {
+    public BruteforceJob submit(String target) {
+        if (!settings.isBruteforceActiveEnabled() || target == null || target.isBlank()) {
             return null;
         }
-        String baseUrl = "https://" + host;
+        String baseUrl = normalizeOrigin(target.trim());
+        if (baseUrl == null) {
+            return null;
+        }
         if (!scopeFilter.inScope(baseUrl)) {
+            return null;
+        }
+        String host = java.net.URI.create(baseUrl).getHost();
+        if (host == null || host.isBlank()) {
             return null;
         }
         BruteforceJob job = new BruteforceJob(host, settings.getBruteforceMaxRequestsPerHost());
@@ -205,6 +215,24 @@ public final class BruteforceEngine {
                     "Known-path bruteforce hit, status " + status, false));
         }
         store.fireChanged();
+    }
+
+    /** Normalizes a user-entered target into a bare origin {@code "scheme://host[:port]"} (no
+     * path/query) — defaults to {@code https} when no scheme is given. Null if unparsable. */
+    private static String normalizeOrigin(String target) {
+        try {
+            String withScheme = target.matches("(?i)^[a-z][a-z0-9+.-]*://.*") ? target : "https://" + target;
+            java.net.URI uri = java.net.URI.create(withScheme);
+            String scheme = uri.getScheme();
+            String host = uri.getHost();
+            if (scheme == null || host == null || host.isBlank()) {
+                return null;
+            }
+            int port = uri.getPort();
+            return scheme + "://" + host + (port > 0 ? ":" + port : "");
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private static boolean similarLength(int a, int b) {

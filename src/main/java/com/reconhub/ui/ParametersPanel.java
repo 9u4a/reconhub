@@ -2,9 +2,11 @@ package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
+import com.reconhub.active.BruteforceEngine;
 import com.reconhub.analysis.ParameterClassifier;
 import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.Settings;
 import com.reconhub.model.ParameterInfo;
 
 import javax.swing.JComponent;
@@ -29,6 +31,8 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
     private final DataStore store;
     private final PayloadCheatsheet cheatsheet;
     private final MessageViewer viewer;
+    private BruteforceEngine bruteforce;
+    private Settings settings;
 
     public ParametersPanel(DataStore store, MontoyaApi api, PayloadCheatsheet cheatsheet) {
         super(api);
@@ -38,25 +42,41 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
         installDetail(viewer);
     }
 
+    /** Wires the (ACTIVE) known-path bruteforce action for this tab's right-click menu; called once. */
+    public void setBruteforce(BruteforceEngine engine, Settings settings) {
+        this.bruteforce = engine;
+        this.settings = settings;
+    }
+
     @Override
     protected void extraMenuItems(JPopupMenu menu, ParameterInfo p) {
-        if (p == null || cheatsheet == null) {
+        if (p == null) {
             return;
         }
-        List<String> classes = ParameterClassifier.classify(p.getName());
-        List<PayloadCheatsheet.Set> sets = new ArrayList<>();
-        for (String c : classes) {
-            PayloadCheatsheet.Set s = cheatsheet.forClass(c);
-            if (s != null) {
-                sets.add(s);
+        boolean addedAny = false;
+        if (cheatsheet != null) {
+            List<String> classes = ParameterClassifier.classify(p.getName());
+            List<PayloadCheatsheet.Set> sets = new ArrayList<>();
+            for (String c : classes) {
+                PayloadCheatsheet.Set s = cheatsheet.forClass(c);
+                if (s != null) {
+                    sets.add(s);
+                }
+            }
+            if (!sets.isEmpty()) {
+                menu.addSeparator();
+                addMenuItem(menu, "View payload cheatsheet…", true,
+                        () -> CheatsheetDialog.showFor(this, p.getName(), sets));
+                addedAny = true;
             }
         }
-        if (sets.isEmpty()) {
-            return;
+        if (bruteforce != null && p.getHost() != null && !p.getHost().isBlank()) {
+            if (!addedAny) {
+                menu.addSeparator();
+            }
+            addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
+                    () -> RunBruteforceAction.run(this, bruteforce, settings, p.getHost()));
         }
-        menu.addSeparator();
-        addMenuItem(menu, "View payload cheatsheet…", true,
-                () -> CheatsheetDialog.showFor(this, p.getName(), sets));
     }
 
     @Override

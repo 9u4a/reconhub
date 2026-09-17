@@ -12,16 +12,18 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Loads {@code payload-cheatsheets.json}: a reference set of payloads to try, keyed by the
+ * Loads {@code payload-cheatsheets.json}: reference payloads to try, keyed by the
  * {@link ParameterClassifier} class name it applies to, and/or a substring match against a
- * {@link com.reconhub.model.Finding} type for injection-category findings. Passive/reference-only —
- * this class never sends anything; see {@code integration.IntruderPayloads} for the (also passive)
- * Intruder payload-set registration, and {@code ui.CheatsheetDialog} for the read-only viewer.
+ * {@link com.reconhub.model.Finding} type for injection-category findings. Each set has two tiers —
+ * {@code basic} (plain, unencoded probes) and {@code bypass} (case/encoding/comment obfuscation and
+ * other filter/WAF-evasion variants of the same idea). Passive/reference-only — this class never sends
+ * anything; see {@code integration.IntruderPayloads} for the (also passive) Intruder registration, and
+ * {@code ui.CheatsheetDialog} for the read-only viewer.
  */
 public final class PayloadCheatsheet {
 
-    /** One cheatsheet entry: the payloads plus an optional short usage note. */
-    public record Set(String label, List<String> payloads, String note) {}
+    /** One cheatsheet entry: basic + bypass/evasion payloads, plus an optional short usage note. */
+    public record Set(String label, List<String> basic, List<String> bypass, String note) {}
 
     private final Map<String, Set> byClass = new LinkedHashMap<>();
     private final List<FindingRule> findingRules = new ArrayList<>();
@@ -44,10 +46,15 @@ public final class PayloadCheatsheet {
                 return sheet;
             }
             for (Raw.Entry e : raw.sets) {
-                if (e == null || e.clazz == null || e.payloads == null || e.payloads.isEmpty()) {
+                if (e == null || e.clazz == null) {
                     continue;
                 }
-                Set set = new Set(e.clazz, List.copyOf(e.payloads), e.note == null ? "" : e.note);
+                List<String> basic = e.basic == null ? List.of() : List.copyOf(e.basic);
+                List<String> bypass = e.bypass == null ? List.of() : List.copyOf(e.bypass);
+                if (basic.isEmpty() && bypass.isEmpty()) {
+                    continue;
+                }
+                Set set = new Set(e.clazz, basic, bypass, e.note == null ? "" : e.note);
                 sheet.byClass.put(e.clazz, set);
                 if (e.findingTypeContains != null) {
                     for (String needle : e.findingTypeContains) {
@@ -97,7 +104,8 @@ public final class PayloadCheatsheet {
         List<Entry> sets;
         static final class Entry {
             String note;
-            List<String> payloads;
+            List<String> basic;
+            List<String> bypass;
             List<String> findingTypeContains;
             @com.google.gson.annotations.SerializedName("class")
             String clazz;

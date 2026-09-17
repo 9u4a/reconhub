@@ -11,10 +11,10 @@ import com.reconhub.analysis.PayloadCheatsheet;
 import java.util.List;
 
 /**
- * Exposes each {@link PayloadCheatsheet} set to Burp Intruder as a selectable payload generator, one
- * per parameter class / injection type. Purely passive registration, done once at extension load —
- * Intruder itself only sends traffic when the user runs an attack from its own UI. Mirrors the same
- * pattern used by the sibling InjectScope extension's Intruder integration.
+ * Exposes each {@link PayloadCheatsheet} set to Burp Intruder as two selectable payload generators —
+ * basic and bypass/evasion — per parameter class / injection type. Purely passive registration, done
+ * once at extension load; Intruder itself only sends traffic when the user runs an attack. Mirrors the
+ * same pattern used by the sibling InjectScope extension's Intruder integration.
  */
 public final class IntruderPayloads {
 
@@ -22,25 +22,36 @@ public final class IntruderPayloads {
 
     public static void register(MontoyaApi api, PayloadCheatsheet sheet) {
         for (PayloadCheatsheet.Set set : sheet.allSets()) {
-            api.intruder().registerPayloadGeneratorProvider(new Provider(set));
+            if (!set.basic().isEmpty()) {
+                api.intruder().registerPayloadGeneratorProvider(
+                        new Provider(set.label(), "", set.basic()));
+            }
+            if (!set.bypass().isEmpty()) {
+                api.intruder().registerPayloadGeneratorProvider(
+                        new Provider(set.label(), " (bypass)", set.bypass()));
+            }
         }
     }
 
     private static final class Provider implements PayloadGeneratorProvider {
-        private final PayloadCheatsheet.Set set;
+        private final String label;
+        private final String suffix;
+        private final List<String> payloads;
 
-        Provider(PayloadCheatsheet.Set set) {
-            this.set = set;
+        Provider(String label, String suffix, List<String> payloads) {
+            this.label = label;
+            this.suffix = suffix;
+            this.payloads = payloads;
         }
 
         @Override
         public String displayName() {
-            return "ReconHub: " + set.label();
+            return "ReconHub: " + label + suffix;
         }
 
         @Override
         public PayloadGenerator providePayloadGenerator(AttackConfiguration attackConfiguration) {
-            return new Generator(set.payloads());
+            return new Generator(payloads);
         }
     }
 
