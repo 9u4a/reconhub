@@ -7,10 +7,11 @@ import com.reconhub.core.Settings;
 
 /**
  * The single choke point for known-path-bruteforce traffic — the only place in ReconHub that ever
- * calls {@code api.http().sendRequest}. Refuses to send unless the master
- * {@link Settings#isBruteforceActiveEnabled()} switch is on, enforces the per-job request budget via
- * {@link BruteforceJob#tryReserve()}, and paces sends to at least
- * {@link Settings#getBruteforceDelayMs()} apart. Every other part of ReconHub stays strictly passive.
+ * calls {@code api.http().sendRequest}. Every run still requires the user's explicit per-run
+ * confirmation ({@code RunBruteforceAction}) before {@link BruteforceEngine#submit} ever creates a
+ * job, so this refuses only on the per-job request budget ({@link BruteforceJob#tryReserve()}) or
+ * cancellation, and paces sends to at least {@link Settings#getBruteforceDelayMs()} apart. Every other
+ * part of ReconHub stays strictly passive.
  */
 public final class Throttler {
 
@@ -24,9 +25,9 @@ public final class Throttler {
         this.settings = settings;
     }
 
-    /** @return the response, or {@code null} when sending is refused (off / budget spent / cancelled). */
+    /** @return the response, or {@code null} when sending is refused (budget spent / cancelled). */
     public HttpRequestResponse send(HttpRequest request, BruteforceJob job) {
-        if (!settings.isBruteforceActiveEnabled() || job.isCancelled() || !job.tryReserve()) {
+        if (job.isCancelled() || !job.tryReserve()) {
             return null;
         }
         int delay = settings.getBruteforceDelayMs();

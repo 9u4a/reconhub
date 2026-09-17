@@ -48,7 +48,7 @@ public final class ReconHubExtension implements BurpExtension {
         }
         IntruderPayloads.register(api, cheatsheet);   // registration only — no traffic sent
 
-        // Known-path bruteforce (ACTIVE, off by default — see Settings.isBruteforceActiveEnabled()).
+        // Known-path bruteforce (ACTIVE — gated per run by a confirmation dialog, see RunBruteforceAction).
         KnownPaths wordlist = KnownPaths.loadBundled();
         for (String err : wordlist.loadErrors()) {
             api.logging().logToError("ReconHub wordlist load: " + err);

@@ -15,10 +15,9 @@ import java.awt.Component;
 
 /**
  * Shared "run known-path bruteforce on this host" action, invoked from a host/endpoint/parameter
- * row's right-click menu. Mirrors the sibling InjectScope extension's confirm-before-run pattern:
- * refuses immediately if the master switch is off, otherwise shows a confirmation dialog — with the
- * target address in an editable field, defaulted from the row but changeable before running — every
- * time. Never a silent run.
+ * row's right-click menu. There is no separate master on/off switch — this confirmation dialog (with
+ * the target address in an editable field, defaulted from the row but changeable before running) is
+ * the sole, mandatory gate every single run goes through. Never a silent run.
  */
 public final class RunBruteforceAction {
 
@@ -29,13 +28,6 @@ public final class RunBruteforceAction {
     public static void run(Component owner, BruteforceEngine engine, Settings settings,
                            String suggestedTarget) {
         if (suggestedTarget == null || suggestedTarget.isBlank()) {
-            return;
-        }
-        if (!settings.isBruteforceActiveEnabled()) {
-            JOptionPane.showMessageDialog(owner,
-                    "Known-path bruteforce is OFF.\nEnable it in the Bruteforce tab first "
-                            + "(this sends requests to the target).",
-                    "ReconHub — bruteforce inactive", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
@@ -69,8 +61,8 @@ public final class RunBruteforceAction {
         BruteforceJob job = engine.submit(target);
         if (job == null) {
             JOptionPane.showMessageDialog(owner,
-                    "Refused — target could not be parsed, is out of scope "
-                            + "(check Settings → Scope), or bruteforce is off.",
+                    "Refused — target could not be parsed, or is out of scope "
+                            + "(check Settings → Scope).",
                     "ReconHub", JOptionPane.WARNING_MESSAGE);
         } else {
             JOptionPane.showMessageDialog(owner,

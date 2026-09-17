@@ -8,7 +8,6 @@ import com.reconhub.core.Settings;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.JButton;
-import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
@@ -16,7 +15,9 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
+import javax.swing.JTabbedPane;
 import javax.swing.JTable;
+import javax.swing.JTextArea;
 import javax.swing.ListSelectionModel;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
@@ -26,17 +27,23 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Font;
 import java.io.File;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Known-path bruteforce tab. <b>ACTIVE</b> — this is the only place in ReconHub that sends its own
- * traffic to a target. Runs are started from a host row's right-click menu (Dashboard/Tech), not from
- * here; this tab holds the master switch, throttle, wordlist, and the running/finished job list. All
- * discovered endpoints/findings show up in the existing Endpoints (Source=bruteforce) and Findings
- * tabs — no separate results grid.
+ * traffic to a target. There is no separate master on/off switch here: runs are started from a host
+ * row's right-click menu (Dashboard/Tech/Endpoints/Parameters), and the confirmation dialog shown
+ * there (with an editable target field) is the sole, mandatory gate — see {@link RunBruteforceAction}.
+ * This tab holds the throttle, wordlist, the running/finished job list, and an activity log of every
+ * path probed and the response it got. Discovered endpoints/findings show up in the existing Endpoints
+ * (Source=bruteforce) and Findings tabs — no separate results grid.
  */
 public final class BruteforcePanel extends JPanel implements Refreshable, BruteforceEngine.Listener {
+
+    private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     private final Settings settings;
     private final BruteforceEngine engine;
@@ -44,6 +51,7 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
     private final JLabel wordlistInfo = new JLabel();
     private final JobModel jobModel = new JobModel();
     private final JTable jobTable = new JTable(jobModel);
+    private final JTextArea logArea = new JTextArea();
 
     public BruteforcePanel(Settings settings, BruteforceEngine engine) {
         this.settings = settings;
@@ -54,15 +62,6 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
         JPanel top = new JPanel();
         top.setLayout(new javax.swing.BoxLayout(top, javax.swing.BoxLayout.Y_AXIS));
         top.add(banner());
-        top.add(strut());
-
-        JCheckBox active = new JCheckBox("ACTIVE — probe known paths against targets "
-                + "(off = nothing is ever sent)", settings.isBruteforceActiveEnabled());
-        active.setForeground(new Color(0xff5c5c));
-        active.setFont(active.getFont().deriveFont(Font.BOLD));
-        active.setAlignmentX(LEFT_ALIGNMENT);
-        active.addActionListener(e -> settings.setBruteforceActiveEnabled(active.isSelected()));
-        top.add(active);
         top.add(strut());
 
         top.add(section("Throttle"));
@@ -81,12 +80,20 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
 
         top.add(section("How to run"));
         top.add(wrappedText("Right-click a host in Dashboard (host scorecard), Tech, Endpoints or "
-                + "Parameters and choose \"Run known-path bruteforce on this host…\" — you can edit the "
-                + "target address before it runs, and every run asks for confirmation. Hits appear in "
-                + "Endpoints (Source=bruteforce) and, for exposed files / admin surfaces, in Findings."));
+                + "Parameters and choose \"Run known-path bruteforce on this host…\" — the confirmation "
+                + "dialog there lets you edit the target address and is required every run. Hits appear "
+                + "in Endpoints (Source=bruteforce) and, for exposed files / admin surfaces, in "
+                + "Findings. Every path sent and the response it got is logged below."));
 
         add(top, BorderLayout.NORTH);
-        add(jobsPanel(), BorderLayout.CENTER);
+
+        logArea.setEditable(false);
+        logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+
+        JTabbedPane center = new JTabbedPane();
+        center.addTab("Jobs", jobsPanel());
+        center.addTab("Activity log", logPanel());
+        add(center, BorderLayout.CENTER);
 
         updateWordlistInfo();
         engine.setListener(this);
@@ -95,7 +102,7 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
     private JComponent banner() {
         JLabel l = new JLabel("⚠  ACTIVE known-path bruteforce — for AUTHORIZED targets only. "
                 + "Sends requests for every path in the wordlist. Runs only on a host you explicitly "
-                + "pick, after you confirm.");
+                + "pick, after you confirm (and can edit the target) in the dialog.");
         l.setOpaque(true);
         l.setBackground(new Color(0x3a1414));
         l.setForeground(new Color(0xff8a8a));
@@ -202,8 +209,19 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
         buttons.add(cancelAll);
 
         JPanel panel = new JPanel(new BorderLayout());
-        panel.add(section("Jobs"), BorderLayout.NORTH);
         panel.add(new JScrollPane(jobTable), BorderLayout.CENTER);
+        panel.add(buttons, BorderLayout.SOUTH);
+        return panel;
+    }
+
+    private JComponent logPanel() {
+        JButton clear = new JButton("Clear log");
+        clear.addActionListener(e -> logArea.setText(""));
+        JPanel buttons = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 4));
+        buttons.add(clear);
+
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.add(new JScrollPane(logArea), BorderLayout.CENTER);
         panel.add(buttons, BorderLayout.SOUTH);
         return panel;
     }
@@ -218,6 +236,14 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
     @Override
     public void onDone(BruteforceJob job) {
         SwingUtilities.invokeLater(jobModel::fireChanged);
+    }
+
+    @Override
+    public void onLog(String message) {
+        SwingUtilities.invokeLater(() -> {
+            logArea.append("[" + LocalTime.now().format(TS) + "] " + message + "\n");
+            logArea.setCaretPosition(logArea.getDocument().getLength());
+        });
     }
 
     @Override
@@ -240,10 +266,10 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
     /**
      * A plain, word-wrapping block of text styled to look like a label. Burp's Swing look-and-feel
      * does not render {@code <html>} markup in {@code JLabel} (tags show up as literal text), so
-     * multi-line hint text uses a non-editable {@link javax.swing.JTextArea} instead.
+     * multi-line hint text uses a non-editable {@link JTextArea} instead.
      */
     private static JComponent wrappedText(String text) {
-        javax.swing.JTextArea area = new javax.swing.JTextArea(text);
+        JTextArea area = new JTextArea(text);
         area.setEditable(false);
         area.setFocusable(false);
         area.setLineWrap(true);

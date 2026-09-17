@@ -20,16 +20,19 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Known-path bruteforce: for one host, probes {@link KnownPaths} entries (common admin panels, API
- * docs, exposed config/backup files) and records hits. <b>ACTIVE</b> — refuses to run unless
- * {@link Settings#isBruteforceActiveEnabled()} is on and the host passes {@link ScopeFilter}; every
- * send goes through {@link Throttler}, the only choke point that talks to the target.
+ * docs, exposed config/backup files) and records hits. <b>ACTIVE</b> — every run requires the user's
+ * explicit per-run confirmation ({@code ui.RunBruteforceAction}, which shows and lets the user edit the
+ * target before running) and the target must pass {@link ScopeFilter}; every send goes through
+ * {@link Throttler}, the only choke point that talks to the target.
  *
  * <p>Detection: a soft-404 baseline (one random nonexistent path) is fetched first; a probe response
  * matching that baseline's status and body length (within 3%) is treated as a false hit and skipped.
  * A real hit ({@code status} in {200,201,204,301,302,307,401,403}) is recorded via
  * {@link DataStore#recordEndpoint} (source {@code "bruteforce"}) — no separate results grid — and, for
  * {@code exposed}/{@code admin}/{@code api}-tagged paths, also as a {@link Finding} so it surfaces in
- * triage.
+ * triage. Every probe (payload path sent + response status/length) is reported to the
+ * {@link Listener#onLog} callback so the Bruteforce tab's activity log shows exactly what was sent and
+ * what came back.
  */
 public final class BruteforceEngine {
 
@@ -37,6 +40,7 @@ public final class BruteforceEngine {
     public interface Listener {
         void onProgress(BruteforceJob job);
         void onDone(BruteforceJob job);
+        void onLog(String message);
     }
 
     private static final Set<Integer> INTERESTING_STATUS =
@@ -63,6 +67,7 @@ public final class BruteforceEngine {
     private volatile Listener listener = new Listener() {
         @Override public void onProgress(BruteforceJob j) {}
         @Override public void onDone(BruteforceJob j) {}
+        @Override public void onLog(String m) {}
     };
 
     public BruteforceEngine(MontoyaApi api, DataStore store, Settings settings, ScopeFilter scopeFilter,
@@ -88,12 +93,14 @@ public final class BruteforceEngine {
     /**
      * Starts a run against {@code target}, e.g. {@code "https://example.com"} or
      * {@code "example.com"} (scheme defaults to {@code https} when omitted). Any path/query on
-     * {@code target} is dropped — only the origin is probed.
-     * @return the job, or {@code null} if refused (master switch off, target unparsable, or the
-     * resulting origin is not in scope).
+     * {@code target} is dropped — only the origin is probed. Callers (only
+     * {@code ui.RunBruteforceAction}) must have already shown the user a confirmation dialog naming
+     * this exact target before calling this.
+     * @return the job, or {@code null} if refused (target unparsable, or the resulting origin is not
+     * in scope).
      */
     public BruteforceJob submit(String target) {
-        if (!settings.isBruteforceActiveEnabled() || target == null || target.isBlank()) {
+        if (target == null || target.isBlank()) {
             return null;
         }
         String baseUrl = normalizeOrigin(target.trim());
@@ -115,14 +122,20 @@ public final class BruteforceEngine {
 
     private void run(BruteforceJob job, String baseUrl, String host) {
         try {
+            log("── Bruteforce start: " + baseUrl + " (" + wordlist.size() + " paths, budget "
+                    + job.getBudget() + ")");
             String nonce = "/__reconhub_" + ThreadLocalRandom.current().nextInt(100_000, 999_999) + "__";
             HttpRequestResponse base = send(baseUrl + nonce, job);
             int baseStatus = status(base);
             int baseLen = len(base);
+            log("  baseline (random nonexistent path) → " + baseStatus + " " + baseLen + "B");
 
             runWordlist(job, baseUrl, host, baseStatus, baseLen);
+            log("── Bruteforce done: " + baseUrl + " (requests sent: " + job.getSent()
+                    + ", hits: " + job.getHits() + ")");
         } catch (RuntimeException e) {
             api.logging().logToError("ReconHub bruteforce job for " + host + " failed: " + e);
+            log("  error: " + e);
         } finally {
             job.markDone();
             listener.onDone(job);
@@ -142,17 +155,21 @@ public final class BruteforceEngine {
             int i;
             while ((i = cursor.getAndIncrement()) < wordlist.size()) {
                 if (job.isCancelled()) {
+                    log("  cancelled.");
                     return;
                 }
                 KnownPaths.Entry entry = wordlist.get(i);
                 HttpRequestResponse rr = send(baseUrl + entry.path(), job);
                 if (rr == null) {
-                    return;   // budget spent, active switch turned off, or cancelled mid-run
+                    log("  aborted (budget spent / cancelled)");
+                    return;
                 }
                 int st = status(rr);
                 int ln = len(rr);
                 boolean softNotFound = st == baseStatus && similarLength(ln, baseLen);
-                if (!softNotFound && INTERESTING_STATUS.contains(st)) {
+                boolean hit = !softNotFound && INTERESTING_STATUS.contains(st);
+                log("  ⇐ " + entry.path() + "  → " + st + " " + ln + "B" + (hit ? "  [HIT]" : ""));
+                if (hit) {
                     job.recordHit();
                     record(host, entry, st, rr);
                 }
@@ -254,6 +271,13 @@ public final class BruteforceEngine {
         }
         String ct = rr.response().headerValue("Content-Type");
         return ct == null ? "" : ct;
+    }
+
+    private void log(String message) {
+        if (api != null) {
+            api.logging().logToOutput("ReconHub bruteforce: " + message);
+        }
+        listener.onLog(message);
     }
 
     public void shutdown() {

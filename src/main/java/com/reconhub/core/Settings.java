@@ -33,10 +33,14 @@ public final class Settings {
     private final Set<FindingTaxonomy.Category> mutedCategories =
             EnumSet.noneOf(FindingTaxonomy.Category.class);
 
-    // --- Known-path bruteforce (ACTIVE — sends its own traffic). Off by default per the workspace
-    // target-load safety policy; every send goes through active.Throttler, paced by delayMs, capped
-    // by bruteforceMaxRequestsPerHost, and confirmed by the user on every run (see BruteforcePanel).
-    private volatile boolean bruteforceActiveEnabled = false;
+    // --- Known-path bruteforce (ACTIVE — sends its own traffic). No master on/off switch: the user
+    // explicitly types/edits the target and clicks OK on a confirmation dialog every single run (see
+    // RunBruteforceAction) -- a deliberate, discussed exception to the workspace target-load safety
+    // policy's default-OFF-flag requirement (2026-09-17), since that per-run confirmation already is
+    // explicit informed consent. The other two policy requirements still apply in full: every send
+    // goes through active.Throttler paced by delayMs and capped by bruteforceMaxRequestsPerHost
+    // (user-adjustable, see BruteforcePanel), and the UI clearly labels the feature ACTIVE (banner +
+    // "(active)" menu suffix).
     private volatile int bruteforceDelayMs = 200;
     private volatile int bruteforceConcurrency = 1;
     private volatile int bruteforceMaxRequestsPerHost = 3000;
@@ -89,9 +93,6 @@ public final class Settings {
     public boolean findingVisible(Finding.Severity sev, FindingTaxonomy.Category cat) {
         return sev.ordinal() <= minFindingSeverity.ordinal() && !mutedCategories.contains(cat);
     }
-
-    public boolean isBruteforceActiveEnabled() { return bruteforceActiveEnabled; }
-    public void setBruteforceActiveEnabled(boolean b) { this.bruteforceActiveEnabled = b; }
 
     public int getBruteforceDelayMs() { return bruteforceDelayMs; }
     public void setBruteforceDelayMs(int ms) { this.bruteforceDelayMs = Math.max(0, ms); }
