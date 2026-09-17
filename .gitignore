@@ -25,3 +25,8 @@ collected-js/
 *.jpg
 *.jpeg
 *.gif
+
+# Local raw payload/wordlist scratch files used as a source to mine when expanding
+# patterns/*.json — the curated result goes in the tracked JSON, the raw corpus doesn't
+# (may carry third-party domains from a public fuzzing list; not part of the extension).
+src/main/resources/patterns/*.txt

