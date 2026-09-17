@@ -33,6 +33,14 @@ public final class Settings {
     private final Set<FindingTaxonomy.Category> mutedCategories =
             EnumSet.noneOf(FindingTaxonomy.Category.class);
 
+    // --- Known-path bruteforce (ACTIVE — sends its own traffic). Off by default per the workspace
+    // target-load safety policy; every send goes through active.Throttler, paced by delayMs, capped
+    // by bruteforceMaxRequestsPerHost, and confirmed by the user on every run (see BruteforcePanel).
+    private volatile boolean bruteforceActiveEnabled = false;
+    private volatile int bruteforceDelayMs = 200;
+    private volatile int bruteforceConcurrency = 1;
+    private volatile int bruteforceMaxRequestsPerHost = 3000;
+
     public ScopeMode getScopeMode() { return scopeMode; }
     public void setScopeMode(ScopeMode m) { this.scopeMode = m; }
 
@@ -81,4 +89,16 @@ public final class Settings {
     public boolean findingVisible(Finding.Severity sev, FindingTaxonomy.Category cat) {
         return sev.ordinal() <= minFindingSeverity.ordinal() && !mutedCategories.contains(cat);
     }
+
+    public boolean isBruteforceActiveEnabled() { return bruteforceActiveEnabled; }
+    public void setBruteforceActiveEnabled(boolean b) { this.bruteforceActiveEnabled = b; }
+
+    public int getBruteforceDelayMs() { return bruteforceDelayMs; }
+    public void setBruteforceDelayMs(int ms) { this.bruteforceDelayMs = Math.max(0, ms); }
+
+    public int getBruteforceConcurrency() { return bruteforceConcurrency; }
+    public void setBruteforceConcurrency(int n) { this.bruteforceConcurrency = Math.max(1, Math.min(n, 10)); }
+
+    public int getBruteforceMaxRequestsPerHost() { return bruteforceMaxRequestsPerHost; }
+    public void setBruteforceMaxRequestsPerHost(int n) { this.bruteforceMaxRequestsPerHost = Math.max(1, n); }
 }

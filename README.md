@@ -5,8 +5,9 @@
 **ReconHub**는 Burp에 쌓인 **Proxy History / Site Map**을 순회해 진단에 필요한 정보를 추출·정리하는
 Burp Suite 확장(Montoya API, Java)입니다. 엔드포인트·파라미터 인벤토리, 민감정보·미스컨피그 탐지,
 JavaScript 수집·분석, 기술 핑거프린팅을 수행하고 결과를 **JSON / HTML / Markdown / SARIF 리포트**와
-재적재 가능한 **State 백업**으로 내보냅니다. 이미 캡처된 트래픽만 사용하는 **수동(passive) 분석**이며,
-대상 서버에 직접 트래픽을 발생시키지 않습니다.
+재적재 가능한 **State 백업**으로 내보냅니다. 기본은 이미 캡처된 트래픽만 사용하는 **수동(passive)
+분석**이며, 유일한 예외인 **Bruteforce 탭(알려진 경로 탐색)만 ACTIVE**(대상에 요청 전송) — 기본
+**OFF**이며 매 실행마다 확인이 필요합니다.
 
 ## 기능
 
@@ -18,6 +19,7 @@ JavaScript 수집·분석, 기술 핑거프린팅을 수행하고 결과를 **JS
 | **Findings** | 시크릿·PII·미스컨피그 등을 심각도·**카테고리**로 집계(필터·트리아지·JWT 디코드, 행 선택 시 원문). 반사 XSS·오픈 리다이렉트 후보는 우클릭 **View payload cheatsheet…** 제공 |
 | **JS Assets** | JS 수집(SHA-256 dedup·옵션 저장) + 내부 엔드포인트·시크릿 추출. 트래픽에 안 잡힌 파일은 **Import JS file(s)…**로 로컬에서 불러와 동일 분석 |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 누락 체크 |
+| **Bruteforce** ⚠**ACTIVE** | 알려진 경로(관리자 패널·API 문서·노출 파일 등, 내장 워드리스트 약 340개) 탐색. **기본 OFF**, 스로틀(지연·동시성·호스트당 상한) 조절, Dashboard/Tech에서 호스트 우클릭 → **매 실행마다 확인 다이얼로그**. 결과는 Endpoints(Source=bruteforce)·Findings 탭에 반영 |
 | **Settings** | 스코프·패시브 토글·커스텀 탐지 규칙·Ingest·내보내기·State 백업 |
 
 **탐지 항목**: API 키/토큰·JWT·인증 헤더·스토리지 URL 등 **시크릿**, **PII**(주민번호·카드·휴대폰),

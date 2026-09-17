@@ -1,6 +1,7 @@
 package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
+import com.reconhub.active.BruteforceEngine;
 import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.Settings;
@@ -25,7 +26,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
     private final Timer refreshTimer;
 
     public MainTab(MontoyaApi api, DataStore store, Settings settings, TrafficIngestor ingestor,
-                   PayloadCheatsheet cheatsheet) {
+                   PayloadCheatsheet cheatsheet, BruteforceEngine bruteforce) {
         setLayout(new BorderLayout());
 
         DashboardPanel dashboard = new DashboardPanel(store);
@@ -35,6 +36,9 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         JsAssetsPanel jsAssets = new JsAssetsPanel(store, api, ingestor);
         TechPanel tech = new TechPanel(store, api);
         SettingsPanel settingsPanel = new SettingsPanel(api, store, settings, ingestor);
+        BruteforcePanel bruteforcePanel = new BruteforcePanel(settings, bruteforce);
+        dashboard.setBruteforce(bruteforce, settings);
+        tech.setBruteforce(bruteforce, settings);
 
         refreshables.add(dashboard);
         refreshables.add(endpoints);
@@ -42,6 +46,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         refreshables.add(findings);
         refreshables.add(jsAssets);
         refreshables.add(tech);
+        refreshables.add(bruteforcePanel);
 
         JTabbedPane tabs = new JTabbedPane();
         tabs.addTab("Dashboard", dashboard);
@@ -50,6 +55,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         tabs.addTab("Findings", findings);
         tabs.addTab("JS Assets", jsAssets);
         tabs.addTab("Tech", tech);
+        tabs.addTab("Bruteforce", bruteforcePanel);
         // Settings is a tall stack of sections — scroll it so lower sections stay reachable at
         // any window height / half width.
         javax.swing.JScrollPane settingsScroll = new javax.swing.JScrollPane(settingsPanel,

@@ -78,6 +78,8 @@ public final class DashboardPanel extends JPanel implements Refreshable {
 
     private final DataStore store;
     private Navigator navigator;
+    private com.reconhub.active.BruteforceEngine bruteforce;
+    private com.reconhub.core.Settings settings;
 
     private final JLabel requests = stat();
     private final JLabel endpoints = stat();
@@ -171,6 +173,12 @@ public final class DashboardPanel extends JPanel implements Refreshable {
     /** Wires cross-tab navigation; called once by {@code MainTab}. */
     public void setNavigator(Navigator navigator) {
         this.navigator = navigator;
+    }
+
+    /** Wires the (ACTIVE) known-path bruteforce action for the host-scorecard menu; called once. */
+    public void setBruteforce(com.reconhub.active.BruteforceEngine engine, com.reconhub.core.Settings settings) {
+        this.bruteforce = engine;
+        this.settings = settings;
     }
 
     private void configureTables() {
@@ -454,6 +462,11 @@ public final class DashboardPanel extends JPanel implements Refreshable {
                 () -> navigator.filterParameters(host));
         item(m, "View findings for this host", navigator != null && real,
                 () -> navigator.filterFindings(host));
+        if (bruteforce != null && real) {
+            m.addSeparator();
+            item(m, "Run known-path bruteforce on this host… (active)", true,
+                    () -> RunBruteforceAction.run(this, bruteforce, settings, host));
+        }
         return m;
     }
 

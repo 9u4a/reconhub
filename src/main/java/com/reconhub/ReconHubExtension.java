@@ -2,9 +2,12 @@ package com.reconhub;
 
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
+import com.reconhub.active.BruteforceEngine;
+import com.reconhub.active.KnownPaths;
 import com.reconhub.analysis.PatternRegistry;
 import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.ScopeFilter;
 import com.reconhub.core.Settings;
 import com.reconhub.core.TrafficIngestor;
 import com.reconhub.integration.IntruderPayloads;
@@ -45,13 +48,24 @@ public final class ReconHubExtension implements BurpExtension {
         }
         IntruderPayloads.register(api, cheatsheet);   // registration only — no traffic sent
 
+        // Known-path bruteforce (ACTIVE, off by default — see Settings.isBruteforceActiveEnabled()).
+        KnownPaths wordlist = KnownPaths.loadBundled();
+        for (String err : wordlist.loadErrors()) {
+            api.logging().logToError("ReconHub wordlist load: " + err);
+        }
+        BruteforceEngine bruteforce = new BruteforceEngine(
+                api, store, settings, new ScopeFilter(api, settings), wordlist.entries());
+
         api.http().registerHttpHandler(ingestor);
         api.userInterface().registerContextMenuItemsProvider(new SendToReconHubMenu(ingestor));
 
-        JComponent tab = buildUi(api, store, settings, ingestor, cheatsheet);
+        JComponent tab = buildUi(api, store, settings, ingestor, cheatsheet, bruteforce);
         api.userInterface().registerSuiteTab("ReconHub", tab);
 
-        api.extension().registerUnloadingHandler(ingestor::shutdown);
+        api.extension().registerUnloadingHandler(() -> {
+            ingestor.shutdown();
+            bruteforce.shutdown();
+        });
 
         if (settings.isAutoIngestOnLoad()) {
             ingestor.ingestSiteMapAsync(() ->
@@ -64,10 +78,11 @@ public final class ReconHubExtension implements BurpExtension {
     }
 
     private static JComponent buildUi(MontoyaApi api, DataStore store, Settings settings,
-                                      TrafficIngestor ingestor, PayloadCheatsheet cheatsheet) {
+                                      TrafficIngestor ingestor, PayloadCheatsheet cheatsheet,
+                                      BruteforceEngine bruteforce) {
         AtomicReference<JComponent> ref = new AtomicReference<>();
-        Runnable build =
-                () -> ref.set(new MainTab(api, store, settings, ingestor, cheatsheet).component());
+        Runnable build = () -> ref.set(
+                new MainTab(api, store, settings, ingestor, cheatsheet, bruteforce).component());
         if (SwingUtilities.isEventDispatchThread()) {
             build.run();
         } else {

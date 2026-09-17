@@ -1,13 +1,16 @@
 package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
+import com.reconhub.active.BruteforceEngine;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.Settings;
 import com.reconhub.model.TechInfo;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import java.awt.Component;
 import java.awt.FlowLayout;
@@ -21,6 +24,8 @@ public final class TechPanel extends AbstractTablePanel<TechInfo> {
 
     private final DataStore store;
     private final JPanel detailBody = new JPanel();
+    private BruteforceEngine bruteforce;
+    private Settings settings;
 
     public TechPanel(DataStore store, MontoyaApi api) {
         super(api);
@@ -28,6 +33,22 @@ public final class TechPanel extends AbstractTablePanel<TechInfo> {
         detailBody.setLayout(new BoxLayout(detailBody, BoxLayout.Y_AXIS));
         detailBody.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
         installDetail(new JScrollPane(detailBody));
+    }
+
+    /** Wires the (ACTIVE) known-path bruteforce action for this tab's right-click menu; called once. */
+    public void setBruteforce(BruteforceEngine engine, Settings settings) {
+        this.bruteforce = engine;
+        this.settings = settings;
+    }
+
+    @Override
+    protected void extraMenuItems(JPopupMenu menu, TechInfo t) {
+        if (t == null || bruteforce == null || t.getHost() == null || t.getHost().isBlank()) {
+            return;
+        }
+        menu.addSeparator();
+        addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
+                () -> RunBruteforceAction.run(this, bruteforce, settings, t.getHost()));
     }
 
     @Override
