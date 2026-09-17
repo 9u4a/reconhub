@@ -129,6 +129,11 @@ public final class BruteforceEngine {
             int baseStatus = status(base);
             int baseLen = len(base);
             log("  baseline (random nonexistent path) → " + baseStatus + " " + baseLen + "B");
+            if (base == null) {
+                log("  ⚠ baseline request failed outright (no response) — every path below will also "
+                        + "read 0/0B. Usually a wrong scheme (https vs http) or port for this host; "
+                        + "edit the target and re-run.");
+            }
 
             runWordlist(job, baseUrl, host, baseStatus, baseLen);
             log("── Bruteforce done: " + baseUrl + " (requests sent: " + job.getSent()

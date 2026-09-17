@@ -56,7 +56,7 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
         if (bruteforce != null && e.getHost() != null && !e.getHost().isBlank()) {
             menu.addSeparator();
             addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
-                    () -> RunBruteforceAction.run(this, bruteforce, settings, e.getHost()));
+                    () -> RunBruteforceAction.run(this, bruteforce, settings, store, e.getHost()));
         }
     }
 

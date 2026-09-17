@@ -90,7 +90,7 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
                 menu.addSeparator();
             }
             addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
-                    () -> RunBruteforceAction.run(this, bruteforce, settings, p.getHost()));
+                    () -> RunBruteforceAction.run(this, bruteforce, settings, store, p.getHost()));
         }
     }
 

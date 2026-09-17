@@ -48,7 +48,7 @@ public final class TechPanel extends AbstractTablePanel<TechInfo> {
         }
         menu.addSeparator();
         addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
-                () -> RunBruteforceAction.run(this, bruteforce, settings, t.getHost()));
+                () -> RunBruteforceAction.run(this, bruteforce, settings, store, t.getHost()));
     }
 
     @Override

@@ -465,7 +465,7 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         if (bruteforce != null && real) {
             m.addSeparator();
             item(m, "Run known-path bruteforce on this host… (active)", true,
-                    () -> RunBruteforceAction.run(this, bruteforce, settings, host));
+                    () -> RunBruteforceAction.run(this, bruteforce, settings, store, host));
         }
         return m;
     }

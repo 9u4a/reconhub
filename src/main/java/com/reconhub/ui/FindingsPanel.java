@@ -244,7 +244,7 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         if (bruteforce != null && !host.isEmpty()) {
             menu.addSeparator();
             addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
-                    () -> RunBruteforceAction.run(this, bruteforce, settings, host));
+                    () -> RunBruteforceAction.run(this, bruteforce, settings, store, host));
         }
         menu.addSeparator();
         for (Finding.Triage t : Finding.Triage.values()) {
