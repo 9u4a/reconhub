@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'com.reconhub'
-version = '0.31.1'
+version = '0.32.0'
 
 repositories {
     mavenCentral()
@@ -21,14 +21,19 @@ dependencies {
 
     // Gson is bundled into the fat-jar via shadowJar.
     implementation 'com.google.code.gson:gson:2.10.1'
+
+    // SnakeYAML: parses YAML-format OpenAPI/Swagger specs (ApiSpecAnalyzer). Loaded with a
+    // SafeConstructor (no arbitrary class instantiation) since spec bodies come from the target.
+    implementation 'org.yaml:snakeyaml:2.2'
 }
 
 shadowJar {
     archiveBaseName.set('reconhub')
     archiveClassifier.set('all')
     archiveVersion.set(version)
-    // Relocate gson to avoid clashing with other extensions/Burp internals.
+    // Relocate to avoid clashing with other extensions/Burp internals.
     relocate 'com.google.gson', 'com.reconhub.shaded.gson'
+    relocate 'org.yaml.snakeyaml', 'com.reconhub.shaded.snakeyaml'
 }
 
 // Make `gradle build` produce the loadable fat-jar.

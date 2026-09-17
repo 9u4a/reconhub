@@ -53,42 +53,36 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
         if (p == null) {
             return;
         }
-        boolean addedAny = false;
         if (cheatsheet != null) {
             List<String> classes = ParameterClassifier.classify(p.getName());
-            List<PayloadCheatsheet.Set> sets = new ArrayList<>();
+            List<PayloadCheatsheet.Set> suggested = new ArrayList<>();
             for (String c : classes) {
                 PayloadCheatsheet.Set s = cheatsheet.forClass(c);
                 if (s != null) {
-                    sets.add(s);
+                    suggested.add(s);
                 }
             }
             // Prototype Pollution targets JSON-body merge/clone sinks -- not identifiable by param
-            // name, so offer it on every JSON-location parameter regardless of its name-based class.
+            // name, so suggest it on every JSON-location parameter regardless of its name-based class.
             if (p.getLocation() == ParameterInfo.Location.JSON) {
                 PayloadCheatsheet.Set pp = cheatsheet.forClass("Prototype Pollution");
-                if (pp != null && !sets.contains(pp)) {
-                    sets.add(pp);
+                if (pp != null && !suggested.contains(pp)) {
+                    suggested.add(pp);
                 }
             }
             // Deserialization sinks aren't identifiable by name either -- flag by value shape instead.
             if (PayloadCheatsheet.looksSerialized(p.getName(), p.getExampleValue())) {
                 PayloadCheatsheet.Set deser = cheatsheet.forClass("Deserialization");
-                if (deser != null && !sets.contains(deser)) {
-                    sets.add(deser);
+                if (deser != null && !suggested.contains(deser)) {
+                    suggested.add(deser);
                 }
             }
-            if (!sets.isEmpty()) {
-                menu.addSeparator();
-                addMenuItem(menu, "View payload cheatsheet…", true,
-                        () -> CheatsheetDialog.showFor(this, p.getName(), sets));
-                addedAny = true;
-            }
+            // Always offered, whether or not anything was auto-suggested -- lets the analyst pick any
+            // class manually (e.g. a hunch the name-based classifier didn't happen to catch).
+            PayloadCheatsheetMenu.addTo(menu, this, cheatsheet, p.getName(), suggested);
         }
         if (bruteforce != null && p.getHost() != null && !p.getHost().isBlank()) {
-            if (!addedAny) {
-                menu.addSeparator();
-            }
+            menu.addSeparator();
             addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
                     () -> RunBruteforceAction.run(this, bruteforce, settings, store, p.getHost()));
         }

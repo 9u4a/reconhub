@@ -235,11 +235,12 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
             addMenuItem(menu, "View parameters for " + host, true,
                     () -> navigator.filterParameters(host));
         }
-        PayloadCheatsheet.Set set = cheatsheet == null ? null : cheatsheet.forFindingType(f.getType());
-        if (set != null) {
-            menu.addSeparator();
-            addMenuItem(menu, "View payload cheatsheet…", true,
-                    () -> CheatsheetDialog.showFor(this, f.getType(), List.of(set)));
+        if (cheatsheet != null) {
+            PayloadCheatsheet.Set set = cheatsheet.forFindingType(f.getType());
+            List<PayloadCheatsheet.Set> suggested = set == null ? List.of() : List.of(set);
+            // Always offered, whether or not the finding type auto-matched a class -- e.g. an Auth
+            // finding might still be worth an IDOR/SSRF cheatsheet look even with no automatic hit.
+            PayloadCheatsheetMenu.addTo(menu, this, cheatsheet, f.getType(), suggested);
         }
         if (bruteforce != null && !host.isEmpty()) {
             menu.addSeparator();

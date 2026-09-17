@@ -1,12 +1,16 @@
 package com.reconhub.analysis;
 
 import burp.api.montoya.http.message.HttpRequestResponse;
+import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Finding;
 import com.reconhub.model.ParameterInfo;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import java.net.URI;
 import java.util.LinkedHashSet;
@@ -18,8 +22,12 @@ import java.util.Set;
  * Passive API-surface discovery from already-captured responses:
  *
  * <ul>
- *   <li><b>OpenAPI / Swagger</b> JSON — parses {@code paths} into endpoints (source {@code "spec"})
- *       and their query/header/cookie parameters, and records an INFO finding that a spec is exposed.
+ *   <li><b>OpenAPI / Swagger</b> — parses {@code paths} into endpoints (source {@code "spec"}) and
+ *       their query/header/cookie parameters, and records an INFO finding that a spec is exposed.
+ *       Handles both JSON specs and <b>YAML specs</b> (e.g. {@code /openapi.yaml}) — a common format
+ *       Burp/JSON-only tooling tends to miss entirely; YAML is parsed with a {@link SafeConstructor}
+ *       (no arbitrary class instantiation) since the body comes from the target, then converted to a
+ *       {@link JsonElement} tree so the same path/parameter walk handles both formats.
  *   <li><b>GraphQL</b> — flags a GraphQL endpoint, and raises a MEDIUM finding when a response exposes
  *       {@code __schema} (introspection enabled).
  * </ul>
@@ -31,6 +39,8 @@ public final class ApiSpecAnalyzer {
     private static final int MAX_BODY = 5_000_000;   // don't parse absurdly large bodies
     private static final Set<String> HTTP_METHODS =
             Set.of("get", "put", "post", "delete", "options", "head", "patch", "trace");
+    // No arbitrary class instantiation from untrusted (target-controlled) YAML.
+    private static final Yaml SAFE_YAML = new Yaml(new SafeConstructor(new LoaderOptions()));
 
     private final DataStore store;
 
@@ -43,15 +53,35 @@ public final class ApiSpecAnalyzer {
             return;
         }
         String ct = contentType == null ? "" : contentType.toLowerCase(Locale.ROOT);
-        boolean jsonish = ct.contains("json") || body.stripLeading().startsWith("{");
+        String trimmed = body.stripLeading();
+        boolean jsonish = ct.contains("json") || trimmed.startsWith("{");
+        // Only worth trying YAML when it isn't already JSON-shaped, and it looks like an OpenAPI/
+        // Swagger root (starts with "openapi:"/"swagger:", the two top-level keys every such spec has).
+        boolean yamlish = !jsonish && (ct.contains("yaml")
+                || trimmed.toLowerCase(Locale.ROOT).matches("(?s)^(openapi|swagger)\\s*:.*"));
 
-        // --- OpenAPI / Swagger -------------------------------------------
+        // --- OpenAPI / Swagger (JSON) -------------------------------------
         if (jsonish && body.contains("\"paths\"")
                 && (body.contains("\"openapi\"") || body.contains("\"swagger\""))) {
             try {
-                parseOpenApi(body, url, rr);
+                JsonElement rootEl = JsonParser.parseString(body);
+                if (rootEl.isJsonObject()) {
+                    parseOpenApi(rootEl.getAsJsonObject(), url, rr);
+                }
             } catch (RuntimeException ignored) {
                 // malformed / unexpected shape -> skip silently
+            }
+        } else if (yamlish && body.contains("paths:")
+                && (body.contains("openapi:") || body.contains("swagger:"))) {
+            // --- OpenAPI / Swagger (YAML) ---------------------------------
+            try {
+                Object yamlRoot = SAFE_YAML.load(body);
+                JsonElement rootEl = new Gson().toJsonTree(yamlRoot);
+                if (rootEl.isJsonObject()) {
+                    parseOpenApi(rootEl.getAsJsonObject(), url, rr);
+                }
+            } catch (RuntimeException ignored) {
+                // malformed YAML / unexpected shape -> skip silently
             }
         }
 
@@ -68,12 +98,7 @@ public final class ApiSpecAnalyzer {
 
     // ---- OpenAPI / Swagger ---------------------------------------------
 
-    private void parseOpenApi(String body, String specUrl, HttpRequestResponse rr) {
-        JsonElement rootEl = JsonParser.parseString(body);
-        if (!rootEl.isJsonObject()) {
-            return;
-        }
-        JsonObject root = rootEl.getAsJsonObject();
+    private void parseOpenApi(JsonObject root, String specUrl, HttpRequestResponse rr) {
         JsonObject paths = optObject(root, "paths");
         if (paths == null) {
             return;
