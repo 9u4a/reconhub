@@ -1,6 +1,7 @@
 package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
+import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.Settings;
 import com.reconhub.core.TrafficIngestor;
@@ -23,13 +24,14 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
     private final List<Refreshable> refreshables = new ArrayList<>();
     private final Timer refreshTimer;
 
-    public MainTab(MontoyaApi api, DataStore store, Settings settings, TrafficIngestor ingestor) {
+    public MainTab(MontoyaApi api, DataStore store, Settings settings, TrafficIngestor ingestor,
+                   PayloadCheatsheet cheatsheet) {
         setLayout(new BorderLayout());
 
         DashboardPanel dashboard = new DashboardPanel(store);
         EndpointsPanel endpoints = new EndpointsPanel(store, api);
-        ParametersPanel parameters = new ParametersPanel(store, api);
-        FindingsPanel findings = new FindingsPanel(store, settings, api);
+        ParametersPanel parameters = new ParametersPanel(store, api, cheatsheet);
+        FindingsPanel findings = new FindingsPanel(store, settings, api, cheatsheet);
         JsAssetsPanel jsAssets = new JsAssetsPanel(store, api, ingestor);
         TechPanel tech = new TechPanel(store, api);
         SettingsPanel settingsPanel = new SettingsPanel(api, store, settings, ingestor);

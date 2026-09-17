@@ -4,6 +4,7 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.JwtDecoder;
+import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.Settings;
 import com.reconhub.model.Finding;
@@ -35,6 +36,7 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
 
     private final DataStore store;
     private final Settings settings;
+    private final PayloadCheatsheet cheatsheet;
     private final MessageViewer viewer;
     private final JTabbedPane detailTabs = new JTabbedPane();
     private final JTextArea jwtArea = new JTextArea();
@@ -48,10 +50,12 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     private boolean rebuildingCatBox;
     private DashboardPanel.Navigator navigator;
 
-    public FindingsPanel(DataStore store, Settings settings, MontoyaApi api) {
+    public FindingsPanel(DataStore store, Settings settings, MontoyaApi api,
+                         PayloadCheatsheet cheatsheet) {
         super(api);
         this.store = store;
         this.settings = settings;
+        this.cheatsheet = cheatsheet;
         this.viewer = new MessageViewer(api);
 
         jwtArea.setEditable(false);
@@ -223,6 +227,12 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
                     () -> navigator.filterEndpoints(host));
             addMenuItem(menu, "View parameters for " + host, true,
                     () -> navigator.filterParameters(host));
+        }
+        PayloadCheatsheet.Set set = cheatsheet == null ? null : cheatsheet.forFindingType(f.getType());
+        if (set != null) {
+            menu.addSeparator();
+            addMenuItem(menu, "View payload cheatsheet…", true,
+                    () -> CheatsheetDialog.showFor(this, f.getType(), List.of(set)));
         }
         menu.addSeparator();
         for (Finding.Triage t : Finding.Triage.values()) {
