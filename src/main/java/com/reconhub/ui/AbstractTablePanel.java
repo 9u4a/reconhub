@@ -79,6 +79,7 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
     private final Timer debounce = new Timer(200, e -> applySearch());
     private final Map<T, String> bodyCache = new IdentityHashMap<>();
     private MessageViewer viewer;   // set by installDetail when the detail is a MessageViewer
+    private boolean refreshing;     // true while refreshData()
 
     protected AbstractTablePanel(MontoyaApi api) {
         this.api = api;
@@ -125,7 +126,7 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         add(scrollPane, BorderLayout.CENTER);
 
         table.getSelectionModel().addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting()) {
+            if (!e.getValueIsAdjusting() && !refreshing) {
                 onRowSelected(rowAt(table.getSelectedRow()));
                 highlightViewer();
             }
@@ -577,10 +578,56 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
 
     @Override
     public void refreshData() {
-        this.rows = new ArrayList<>(supplyRows());
-        model.fireTableDataChanged();
-        applyColumnWidths();
-        updateCount();
+        // fireTableDataChanged() below clears the JTable's selection (Swing's standard behavior for
+        // a full model reload, since old row indices may no longer mean the same thing) -- without
+        // this, a detail viewer left open flickers shut on every background refresh (live capture,
+        // a running bruteforce job, etc.), even though the same row is still right there. Capture the
+        // actual selected *object* (not its index, which is meaningless after the rows list is
+        // rebuilt) before the reload, then re-select it afterwards if it's still present.
+        T previouslySelected = rowAt(table.getSelectedRow());
+
+        // The selection listener is muted for the whole reload: otherwise the clear + re-select
+        // would blank and re-render the detail viewer (resetting its scroll position) on every tick.
+        refreshing = true;
+        boolean restored;
+        try {
+            this.rows = new ArrayList<>(supplyRows());
+            model.fireTableDataChanged();
+            applyColumnWidths();
+            updateCount();
+            restored = restoreSelection(previouslySelected);
+        } finally {
+            refreshing = false;
+        }
+        if (previouslySelected != null && !restored) {
+            // The row vanished (or was filtered out): now the viewer really should clear.
+            onRowSelected(null);
+            highlightViewer();
+        }
+    }
+
+    /** Re-selects {@code target} by identity after a full table reload, if it's still in {@link #rows}
+     * and still passes the current filter. @return true if the selection was restored. */
+    private boolean restoreSelection(T target) {
+        if (target == null) {
+            return false;
+        }
+        int modelIdx = -1;
+        for (int i = 0; i < rows.size(); i++) {
+            if (rows.get(i) == target) {
+                modelIdx = i;
+                break;
+            }
+        }
+        if (modelIdx < 0) {
+            return false;
+        }
+        int viewIdx = table.convertRowIndexToView(modelIdx);
+        if (viewIdx < 0) {
+            return false;
+        }
+        table.getSelectionModel().setSelectionInterval(viewIdx, viewIdx);
+        return true;
     }
 
     private void applyColumnWidths() {
