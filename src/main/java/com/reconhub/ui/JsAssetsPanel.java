@@ -1,6 +1,7 @@
 package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.TrafficIngestor;
 import com.reconhub.model.Endpoint;
@@ -8,14 +9,17 @@ import com.reconhub.model.Finding;
 import com.reconhub.model.JsAsset;
 
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.SwingWorker;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Desktop;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -25,14 +29,19 @@ import java.nio.file.Files;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/** Collected JS files, with a detail panel: metadata, open-file, and related endpoints/findings. */
+/** Collected JS files, with a detail panel: metadata/preview (Info tab) and the captured
+ * request/response (Response tab, when this asset came from traffic rather than a local import). */
 public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
 
     private static final String[] COLS =
-            {"URL", "Size (B)", "Endpoints", "Secrets", "Saved path"};
+            {"URL", "Preview", "Size (B)", "Endpoints", "Secrets", "Saved path"};
+    private static final int COL_PREVIEW = 1;
+    private static final int RESPONSE_TAB = 1;
 
     private final DataStore store;
     private final TrafficIngestor ingestor;
+    private final MessageViewer viewer;
+    private final JTabbedPane detailTabs = new JTabbedPane();
     private final JTextArea detail = new JTextArea();
     private final JButton openFile = new JButton("Open saved file");
     private final JButton importJs = new JButton("Import JS file(s)…");
@@ -43,6 +52,7 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
         super(api);
         this.store = store;
         this.ingestor = ingestor;
+        this.viewer = new MessageViewer(api);
 
         detail.setEditable(false);
         detail.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -57,10 +67,13 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
         top.add(importJs);
         top.add(importStatus);
 
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.add(top, BorderLayout.NORTH);
-        panel.add(new JScrollPane(detail), BorderLayout.CENTER);
-        installDetail(panel);
+        JPanel infoPanel = new JPanel(new BorderLayout());
+        infoPanel.add(top, BorderLayout.NORTH);
+        infoPanel.add(new JScrollPane(detail), BorderLayout.CENTER);
+
+        detailTabs.addTab("Info", infoPanel);
+        detailTabs.addTab("Response", viewer);
+        installDetail(detailTabs, viewer);
     }
 
     private void importJsFiles() {
@@ -126,15 +139,23 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
             detail.setText("");
             currentSavedPath = "";
             openFile.setEnabled(false);
+            viewer.show(null);
+            viewer.setInfo(" ");
+            detailTabs.setTitleAt(RESPONSE_TAB, "Response");
             return;
         }
         currentSavedPath = a.getSavedPath();
         openFile.setEnabled(currentSavedPath != null && !currentSavedPath.isBlank());
 
+        viewer.show(a.getMessages());
+        viewer.setInfo(a.getUrl() + "   |   " + a.getSizeBytes() + " chars   |   " + a.getSha256());
+        detailTabs.setTitleAt(RESPONSE_TAB, a.getMessages() != null ? "Response ✓" : "Response");
+
         StringBuilder sb = new StringBuilder();
         sb.append("URL       : ").append(a.getUrl()).append('\n');
         sb.append("SHA-256   : ").append(a.getSha256()).append('\n');
         sb.append("Size      : ").append(a.getSizeBytes()).append(" bytes\n");
+        sb.append("Preview   : ").append(a.getPreview().isEmpty() ? "(none)" : a.getPreview()).append('\n');
         sb.append("Saved     : ").append(a.getSavedPath().isEmpty() ? "(not saved)" : a.getSavedPath())
                 .append("\n\n");
 
@@ -176,28 +197,50 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
         return a != null && a.getUrl() != null && a.getUrl().startsWith("http") ? a.getUrl() : null;
     }
 
+    @Override
+    protected HttpRequestResponse rowMessages(JsAsset a) {
+        return a == null ? null : a.getMessages();
+    }
+
+    @Override protected boolean supportsBodySearch() { return true; }
+
+    @Override
+    protected String searchableBody(JsAsset a) {
+        return a == null ? null : MessageViewer.toSearchText(a.getMessages());
+    }
+
     @Override protected List<JsAsset> supplyRows() { return store.snapshotJsAssets(); }
 
     @Override protected String[] columns() { return COLS; }
 
     @Override protected int[] columnWidths() {
-        return new int[]{380, 80, 80, 70, 360};
+        return new int[]{300, 300, 80, 80, 70, 260};
     }
 
-    // Size (1), Endpoints (2), Secrets (3) are numeric -- declared so the sorter compares them as
-    // numbers, not lexicographically (which would put e.g. "10" before "2").
+    // Size (2), Endpoints (3), Secrets (4) are numeric -- declared so the sorter compares them as
+    // numbers, not lexicographically (which would put e.g. "10" before "2"). Preview (1) is a plain
+    // String column, so it takes no entry here.
     @Override protected Class<?>[] columnClasses() {
-        return new Class<?>[]{null, Integer.class, Integer.class, Integer.class, null};
+        return new Class<?>[]{null, null, Integer.class, Integer.class, Integer.class, null};
     }
 
     @Override protected Object valueAt(JsAsset a, int c) {
         return switch (c) {
             case 0 -> a.getUrl();
-            case 1 -> a.getSizeBytes();
-            case 2 -> a.getExtractedEndpoints();
-            case 3 -> a.getExtractedSecrets();
-            case 4 -> a.getSavedPath();
+            case COL_PREVIEW -> a.getPreview();
+            case 2 -> a.getSizeBytes();
+            case 3 -> a.getExtractedEndpoints();
+            case 4 -> a.getExtractedSecrets();
+            case 5 -> a.getSavedPath();
             default -> "";
         };
+    }
+
+    @Override
+    protected void styleCell(Component comp, JsAsset a, int viewColumn, boolean selected) {
+        if (a == null || viewColumn != COL_PREVIEW || !(comp instanceof JComponent jc)) {
+            return;
+        }
+        jc.setToolTipText(a.getPreview().isEmpty() ? null : a.getPreview());
     }
 }

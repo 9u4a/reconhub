@@ -16,6 +16,9 @@ import java.util.regex.Pattern;
  * evidence, extracted parameter values, JS/API-spec analysis, tech-signature matching, "Copy as
  * curl", etc. Byte-mapped decoding is still fine where the text is only re-encoded back to the
  * exact same bytes and never read as characters (there is currently no such use in this codebase).
+ * {@link #encode} is the inverse, for the rare case of feeding edited/derived text back into a
+ * Montoya {@code HttpResponse} (e.g. a beautified body) — using {@code HttpResponse.withBody(String)}
+ * directly would re-introduce the same mojibake bug on the encode side.
  */
 public final class BodyDecoder {
     private BodyDecoder() {
@@ -38,6 +41,15 @@ public final class BodyDecoder {
             return "";
         }
         return new String(bytes, charsetOf(contentType));
+    }
+
+    /** Inverse of {@link #decode}: encodes {@code text} using {@code contentType}'s charset param
+     * (default UTF-8). Never null. */
+    public static byte[] encode(String text, String contentType) {
+        if (text == null || text.isEmpty()) {
+            return new byte[0];
+        }
+        return text.getBytes(charsetOf(contentType));
     }
 
     private static Charset charsetOf(String contentType) {

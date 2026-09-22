@@ -114,6 +114,7 @@ public final class JsonExporter {
             m.put("url", a.getUrl());
             m.put("sha256", a.getSha256());
             m.put("sizeBytes", a.getSizeBytes());
+            m.put("preview", a.getPreview());
             m.put("extractedEndpoints", a.getExtractedEndpoints());
             m.put("extractedSecrets", a.getExtractedSecrets());
             m.put("savedPath", a.getSavedPath());

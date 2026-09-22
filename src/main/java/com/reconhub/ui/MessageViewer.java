@@ -1,6 +1,7 @@
 package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
+import burp.api.montoya.core.ByteArray;
 import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
@@ -8,9 +9,12 @@ import burp.api.montoya.http.message.responses.HttpResponse;
 import burp.api.montoya.ui.editor.EditorOptions;
 import burp.api.montoya.ui.editor.HttpRequestEditor;
 import burp.api.montoya.ui.editor.HttpResponseEditor;
+import com.reconhub.analysis.JsBeautifier;
 import com.reconhub.core.BodyDecoder;
+import com.reconhub.core.TrafficIngestor;
 
 import javax.swing.BorderFactory;
+import javax.swing.JCheckBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
@@ -24,15 +28,23 @@ import java.awt.BorderLayout;
 public final class MessageViewer extends JPanel {
 
     private final JLabel info = new JLabel(" ");
+    private final JCheckBox beautifyBox = new JCheckBox("Beautify JS");
     private HttpRequestEditor requestEditor;
     private HttpResponseEditor responseEditor;
     private final HttpRequest emptyRequest = HttpRequest.httpRequest("");
     private final HttpResponse emptyResponse = HttpResponse.httpResponse();
+    private HttpRequestResponse current;   // the pair last passed to show()
 
     public MessageViewer(MontoyaApi api) {
         setLayout(new BorderLayout());
         info.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
-        add(info, BorderLayout.NORTH);
+        beautifyBox.setToolTipText("Only available for JavaScript responses");
+        beautifyBox.setEnabled(false);
+        beautifyBox.addActionListener(e -> renderResponse());
+        JPanel header = new JPanel(new BorderLayout());
+        header.add(info, BorderLayout.CENTER);
+        header.add(beautifyBox, BorderLayout.EAST);
+        add(header, BorderLayout.NORTH);
 
         try {
             requestEditor = api.userInterface().createHttpRequestEditor(EditorOptions.READ_ONLY);
@@ -72,10 +84,66 @@ public final class MessageViewer extends JPanel {
         if (requestEditor == null || responseEditor == null) {
             return;
         }
+        current = rr;
         HttpRequest req = rr != null ? rr.request() : null;
-        HttpResponse resp = rr != null ? rr.response() : null;
         requestEditor.setRequest(req != null ? req : emptyRequest);
-        responseEditor.setResponse(resp != null ? resp : emptyResponse);
+        renderResponse();
+    }
+
+    /**
+     * Renders {@link #current}'s response, applying {@link #beautifyBox} if it's checked and
+     * applicable. Called from {@link #show} (a new row was selected) and from the checkbox's own
+     * listener (the user toggled it on the already-shown row) — either way it always re-derives from
+     * {@code current}, so nothing beautified is ever cached and a row that isn't JS can never show
+     * stale beautified content from a previous selection.
+     */
+    private void renderResponse() {
+        HttpResponse resp = current != null ? current.response() : null;
+        boolean canBeautify = canBeautify(resp);
+        beautifyBox.setEnabled(canBeautify);
+        beautifyBox.setToolTipText(beautifyTooltip(resp, canBeautify));
+        if (resp == null) {
+            responseEditor.setResponse(emptyResponse);
+            return;
+        }
+        if (canBeautify && beautifyBox.isSelected()) {
+            try {
+                String contentType = resp.headerValue("Content-Type");
+                String pretty = JsBeautifier.beautify(BodyDecoder.decode(resp));
+                byte[] bytes = BodyDecoder.encode(pretty, contentType);
+                responseEditor.setResponse(resp.withBody(ByteArray.byteArray(bytes)));
+                return;
+            } catch (RuntimeException ignored) {
+                // fall through to the original, unmodified response
+            }
+        }
+        responseEditor.setResponse(resp);   // the exact original object -- a guaranteed byte-identical
+                                             // restore when Beautify is off or fails
+    }
+
+    /** True when {@code resp} looks like JavaScript and isn't too large to reformat responsively. */
+    private boolean canBeautify(HttpResponse resp) {
+        if (resp == null || current == null || current.request() == null) {
+            return false;
+        }
+        String url = current.request().url();
+        String contentType = resp.headerValue("Content-Type");
+        if (!TrafficIngestor.isJavaScript(url == null ? "" : url, contentType == null ? "" : contentType)) {
+            return false;
+        }
+        return resp.body().length() <= JsBeautifier.MAX_INPUT;
+    }
+
+    private static String beautifyTooltip(HttpResponse resp, boolean canBeautify) {
+        if (canBeautify) {
+            return "Reformat this minified JavaScript response for reading "
+                    + "(display only — the captured response is unchanged)";
+        }
+        if (resp != null && resp.body().length() > JsBeautifier.MAX_INPUT) {
+            return "Body too large to beautify (" + resp.body().length() + " bytes, limit "
+                    + JsBeautifier.MAX_INPUT + ")";
+        }
+        return "Only available for JavaScript responses";
     }
 
     /**

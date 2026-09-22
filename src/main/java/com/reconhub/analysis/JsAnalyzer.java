@@ -9,7 +9,9 @@ import com.reconhub.model.JsAsset;
 
 import java.net.URI;
 import java.nio.file.Path;
-import java.util.HashSet;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 
@@ -20,6 +22,8 @@ import java.util.regex.Matcher;
 public final class JsAnalyzer {
 
     private static final int MAX_LINKS_PER_RULE = 500;
+    private static final int PREVIEW_MAX = 160;
+    private static final int PREVIEW_SAMPLES = 3;
 
     private final DataStore store;
     private final PatternRegistry patterns;
@@ -49,6 +53,7 @@ public final class JsAnalyzer {
         }
 
         JsAsset asset = store.recordJsAsset(new JsAsset(url, sha, body.length()));
+        asset.setMessages(messages);   // null for a manually-imported local file -- that's correct
 
         if (settings.isSaveJsToDisk()) {
             Path saved = JsFileWriter.write(settings.getJsSaveDirectory(), url, sha, body);
@@ -57,8 +62,9 @@ public final class JsAnalyzer {
             }
         }
 
-        int endpoints = extractEndpoints(url, body);
-        asset.setExtractedEndpoints(endpoints);
+        List<String> links = extractEndpoints(url, body);
+        asset.setExtractedEndpoints(links.size());
+        asset.setPreview(buildPreview(links, body));
 
         int secrets = secretScanner.scan(body, url, messages);
         asset.setExtractedSecrets(secrets);
@@ -70,9 +76,14 @@ public final class JsAnalyzer {
         }
     }
 
-    private int extractEndpoints(String jsUrl, String body) {
+    /** @return the distinct links discovered (insertion order), so the caller can both count them and
+     * sample a few for {@link #buildPreview}. */
+    private List<String> extractEndpoints(String jsUrl, String body) {
         String host = hostOf(jsUrl);
-        Set<String> seen = new HashSet<>();
+        // LinkedHashSet, not HashSet: preview sampling needs a deterministic order (the same body is
+        // only ever analyzed once, due to SHA-256 dedup, so its preview must come out the same way
+        // every time -- not depend on HashSet's unspecified iteration order).
+        Set<String> seen = new LinkedHashSet<>();
         for (PatternRegistry.JsLinkRule rule : patterns.jsLinkRules()) {
             Matcher m = rule.pattern.matcher(body);
             int hits = 0;
@@ -88,7 +99,40 @@ public final class JsAnalyzer {
                         Set.of(), null, Set.of(jsUrl));
             }
         }
-        return seen.size();
+        return new ArrayList<>(seen);
+    }
+
+    /**
+     * A short, identifying hint for a JS asset that's more useful than a code snippet at telling
+     * hash-named code-split chunks apart: a webpack/Vite chunk's first ~100 characters are near-
+     * identical boilerplate across every chunk, but "talks to /api/admin/users" instantly identifies
+     * one. Falls back to a code snippet only when no links were found in this body.
+     */
+    static String buildPreview(List<String> links, String body) {
+        List<String> samples = pickSamples(links, PREVIEW_SAMPLES);
+        if (samples.isEmpty()) {
+            return JsBeautifier.snippet(body, PREVIEW_MAX);
+        }
+        String joined = String.join(", ", samples);
+        return joined.length() > PREVIEW_MAX ? joined.substring(0, PREVIEW_MAX) + "…" : joined;
+    }
+
+    /** Prioritizes API-ish paths, then any absolute path, then everything else. */
+    private static List<String> pickSamples(List<String> links, int max) {
+        List<String> out = new ArrayList<>(max);
+        for (String l : links) {
+            if (out.size() >= max) break;
+            if (l.contains("/api")) out.add(l);
+        }
+        for (String l : links) {
+            if (out.size() >= max) break;
+            if (!out.contains(l) && l.startsWith("/")) out.add(l);
+        }
+        for (String l : links) {
+            if (out.size() >= max) break;
+            if (!out.contains(l)) out.add(l);
+        }
+        return out;
     }
 
     private static boolean isInterestingLink(String link) {

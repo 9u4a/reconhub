@@ -198,10 +198,11 @@ public final class MarkdownReporter {
             b.append("_No JS files collected._\n\n");
             return;
         }
-        b.append("| URL | Size | Endpoints | Secrets | Saved path |\n"
-                + "| --- | --- | --- | --- | --- |\n");
+        b.append("| URL | Preview | Size | Endpoints | Secrets | Saved path |\n"
+                + "| --- | --- | --- | --- | --- | --- |\n");
         for (JsAsset a : assets) {
             b.append("| ").append(code(a.getUrl()))
+                    .append(" | ").append(md(a.getPreview()))
                     .append(" | ").append(humanBytes(a.getSizeBytes()))
                     .append(" | ").append(a.getExtractedEndpoints())
                     .append(" | ").append(a.getExtractedSecrets())

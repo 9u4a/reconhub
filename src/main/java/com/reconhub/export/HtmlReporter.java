@@ -246,10 +246,11 @@ public final class HtmlReporter {
             b.append("<p class=\"muted\">No JS files collected.</p></section>");
             return;
         }
-        b.append("<table><thead><tr><th>URL</th><th>Size</th><th>Endpoints</th>"
+        b.append("<table><thead><tr><th>URL</th><th>Preview</th><th>Size</th><th>Endpoints</th>"
                 + "<th>Secrets</th><th>Saved path</th></tr></thead><tbody>");
         for (JsAsset a : assets) {
             b.append("<tr><td><code>").append(esc(a.getUrl())).append("</code></td><td>")
+                    .append(esc(a.getPreview())).append("</td><td>")
                     .append(humanBytes(a.getSizeBytes())).append("</td><td>")
                     .append(a.getExtractedEndpoints()).append("</td><td>")
                     .append(a.getExtractedSecrets()).append("</td><td class=\"muted\"><code>")

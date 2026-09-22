@@ -88,7 +88,7 @@ public final class StateSerializer {
     }
 
     private static final class JsAssetDto {
-        String url, sha256, savedPath;
+        String url, sha256, savedPath, preview;
         int sizeBytes, extractedEndpoints, extractedSecrets;
     }
 
@@ -189,6 +189,7 @@ public final class StateSerializer {
             d.extractedEndpoints = a.getExtractedEndpoints();
             d.extractedSecrets = a.getExtractedSecrets();
             d.savedPath = a.getSavedPath();
+            d.preview = a.getPreview();
             s.jsAssets.add(d);
         }
 
@@ -272,6 +273,7 @@ public final class StateSerializer {
                 a.setExtractedEndpoints(d.extractedEndpoints);
                 a.setExtractedSecrets(d.extractedSecrets);
                 a.setSavedPath(d.savedPath == null ? "" : d.savedPath);
+                a.setPreview(d.preview == null ? "" : d.preview);
                 store.restoreJsAsset(a);
                 js++;
             }

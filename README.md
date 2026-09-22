@@ -18,7 +18,7 @@ on/off 토글은 없고, **호스트 우클릭 → 대상 주소를 확인·수�
 | **Endpoints** | method+정규화 URL로 dedup한 인벤토리(인증 관찰 Auth 컬럼 포함), 행 선택 시 원문 Request/Response. **XML/SOAP** Content-Type이면 우클릭 **View payload cheatsheet (XXE)…** 제공 |
 | **Parameters** | 엔드포인트별 파라미터(query/body/JSON/cookie) + 취약점 후보 **Class** 자동 분류(IDOR·Redirect/SSRF·File/Path·SQLi/Sort·Command·**SSTI**). 우클릭 **Payload cheatsheet ▸**로 자동 제안 클래스는 원클릭, **전체 클래스도 항상 수동으로 직접 선택 가능**(Basic/Bypass·우회 페이로드, Intruder에 클래스당 2세트 등록). **JSON 파라미터**는 Prototype Pollution, **직렬화 값처럼 보이는 파라미터**(Java/PHP serialize·ViewState)는 Deserialization이 이름과 무관하게 자동 제안 |
 | **Findings** | 시크릿·PII·미스컨피그 등을 심각도·**카테고리**로 집계(필터·트리아지·JWT 디코드, 행 선택 시 원문). 우클릭 **Payload cheatsheet ▸**로 반사 XSS·오픈 리다이렉트는 자동 제안, **전체 클래스도 수동 선택 가능** |
-| **JS Assets** | JS 수집(SHA-256 dedup·옵션 저장) + 내부 엔드포인트·시크릿 추출. 트래픽에 안 잡힌 파일은 **Import JS file(s)…**로 로컬에서 불러와 동일 분석 |
+| **JS Assets** | JS 수집(SHA-256 dedup·옵션 저장) + 내부 엔드포인트·시크릿 추출. 해시 이름 코드-스플릿 청크를 열어보지 않고 구분할 수 있는 **Preview** 컬럼(감지된 엔드포인트 샘플, 없으면 코드 스니펫), 행 선택 시 **Response 탭**에서 캡처된 응답 원문 확인(임포트된 파일은 없음). 트래픽에 안 잡힌 파일은 **Import JS file(s)…**로 로컬에서 불러와 동일 분석 |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 누락 체크 |
 | **Bruteforce** ⚠**ACTIVE** | 알려진 경로(관리자 패널·API 문서·노출 파일·CI/CD·IDE 아티팩트 등, 내장 워드리스트 약 380개) 탐색. **Hits 탭**에서 확인된 hit을 바로 표로 확인(호스트·경로·상태·길이·태그, 우클릭 Copy/Open in browser). 스로틀(지연·동시성·호스트당 상한) 조절, **Activity log**에 보낸 경로·응답(상태·길이·유사도)을 실시간 기록. Dashboard/Endpoints/Parameters/Tech에서 호스트 우클릭 → **확인 다이얼로그에서 대상 주소(스킴·포트 포함) 직접 수정 + 매 실행마다 확인**(이게 유일한 게이트) — 기본 스킴은 그 호스트에서 **이미 관찰된 트래픽**을 참고해 자동 선택(http만 관찰된 호스트에 https를 강제해 전부 실패하는 상황 방지). Soft-404 판정은 **본문 유사도 기반**(경로가 그대로 echo되는 404 페이지에도 오탐 없음). 결과는 Endpoints(Source=bruteforce)·Findings 탭에도 반영 |
 | **Settings** | 스코프·패시브 토글·커스텀 탐지 규칙·Ingest·내보내기·State 백업 |
@@ -30,7 +30,9 @@ CORS·쿠키·CSP·캐시·혼합 콘텐츠 **미스컨피그**, 노출 파일(`
 참조 / 캡처된 `.map`의 원본 소스 목록), 주석. (화면에선 원문 확인·복사 가능, 리포트에선 마스킹)
 
 **모든 탭 공통**: 한/영·본문 검색(정규식·다중 AND·제외·컬럼 지정), 정렬 3단계(오름 → 내림 → 기본),
-CSV 내보내기, 행 우클릭 Copy/Open/Repeater/Intruder/curl.
+CSV 내보내기, 행 우클릭 Copy/Open/Repeater/Intruder/curl. Request/Response 뷰어가 있는 탭(Endpoints·
+Parameters·Findings·JS Assets)에서 JS 응답이면 **Beautify JS** 토글로 한 줄로 압축된 minified 본문을
+줄바꿈·들여쓰기해서 열람(화면 표시만 바꿈 — 캡처된 응답 자체나 탐지 로직에는 영향 없음).
 
 ## 사용법
 

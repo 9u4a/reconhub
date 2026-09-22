@@ -311,7 +311,10 @@ public final class TrafficIngestor implements HttpHandler {
                 + "mp4|webm|mp3|wav|avi|mov|pdf)$");
     }
 
-    private static boolean isJavaScript(String url, String contentType) {
+    /** True when a URL/Content-Type pair looks like JavaScript. Public so the UI (e.g.
+     * {@code MessageViewer}'s Beautify toggle) can use the exact same "is this JS" test the ingest
+     * pipeline uses, instead of maintaining a second copy that could drift out of sync. */
+    public static boolean isJavaScript(String url, String contentType) {
         String ct = contentType.toLowerCase(Locale.ROOT);
         if (ct.contains("javascript") || ct.contains("ecmascript")) {
             return true;
