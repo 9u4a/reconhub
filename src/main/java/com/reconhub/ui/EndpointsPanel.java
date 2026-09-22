@@ -109,12 +109,18 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
         return new int[]{60, 160, 320, 60, 150, 60, 60, 90};
     }
 
+    // Status (3) and Params (5) are numeric -- declared so the sorter compares them as numbers
+    // instead of lexicographically (which would put e.g. "10" before "2").
+    @Override protected Class<?>[] columnClasses() {
+        return new Class<?>[]{null, null, null, Integer.class, null, Integer.class, null, null};
+    }
+
     @Override protected Object valueAt(Endpoint e, int c) {
         return switch (c) {
             case 0 -> e.getMethod();
             case 1 -> e.getHost();
             case 2 -> e.getPath();
-            case 3 -> e.getLastStatusCode() == 0 ? "" : e.getLastStatusCode();
+            case 3 -> e.getLastStatusCode() == 0 ? null : e.getLastStatusCode();
             case 4 -> shortCt(e.getContentType());
             case 5 -> e.getParamCount();
             case COL_AUTH -> e.authStatus();

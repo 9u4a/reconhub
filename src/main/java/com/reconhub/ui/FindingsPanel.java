@@ -308,6 +308,11 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         return new int[]{80, 95, 200, 240, 240, 240, 50, 90};
     }
 
+    // Seen (6) is numeric -- declared so the sorter compares it as a number, not lexicographically.
+    @Override protected Class<?>[] columnClasses() {
+        return new Class<?>[]{null, null, null, null, null, null, Integer.class, null};
+    }
+
     @Override protected Object valueAt(Finding f, int c) {
         return switch (c) {
             case 0 -> f.getSeverity().name();

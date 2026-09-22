@@ -156,6 +156,11 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
         return new int[]{150, 250, 60, 150, 190, 150, 80, 55};
     }
 
+    // Seen (7) is numeric -- declared so the sorter compares it as a number, not lexicographically.
+    @Override protected Class<?>[] columnClasses() {
+        return new Class<?>[]{null, null, null, null, null, null, null, Integer.class};
+    }
+
     @Override protected Object valueAt(ParameterInfo p, int c) {
         return switch (c) {
             case 0 -> p.getHost();

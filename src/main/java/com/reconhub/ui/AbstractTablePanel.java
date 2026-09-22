@@ -653,6 +653,21 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         return null;
     }
 
+    /**
+     * Per-column type for sorting (e.g. {@code Integer.class} for a count/size column), matched by
+     * index to {@link #columns()}; {@code null} entries (and a {@code null} array, the default) fall
+     * back to {@code Object.class}. This matters because {@link TriStateRowSorter} (a
+     * {@code TableRowSorter}) only compares cell values numerically when the column's declared class
+     * implements {@link Comparable} and isn't {@code String} -- left at the default {@code Object},
+     * it always falls back to comparing {@code toString()}, so a numeric column sorts lexicographically
+     * ("10" before "2"). Declare {@code Integer.class} (or similar) for any column whose
+     * {@link #valueAt} returns a boxed number, and return that number (or {@code null} for "no value",
+     * never a String placeholder like {@code ""}) consistently for every row.
+     */
+    protected Class<?>[] columnClasses() {
+        return null;
+    }
+
     // ---- Table model ----------------------------------------------------
 
     private final class Model extends AbstractTableModel {
@@ -661,7 +676,15 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         @Override public String getColumnName(int c) { return columns()[c]; }
         @Override public boolean isCellEditable(int r, int c) { return false; }
         @Override public Object getValueAt(int r, int c) {
-            return (rows == null || r >= rows.size()) ? "" : valueAt(rows.get(r), c);
+            // null (not "") for the out-of-range fallback: a String would crash the row sorter's
+            // comparator on a column declared Integer.class (see columnClasses()) -- null is always
+            // safe there, and renders identically blank.
+            return (rows == null || r >= rows.size()) ? null : valueAt(rows.get(r), c);
+        }
+        @Override public Class<?> getColumnClass(int c) {
+            Class<?>[] classes = columnClasses();
+            return (classes != null && c >= 0 && c < classes.length && classes[c] != null)
+                    ? classes[c] : Object.class;
         }
     }
 }

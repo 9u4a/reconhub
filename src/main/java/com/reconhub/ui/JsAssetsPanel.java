@@ -184,6 +184,12 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
         return new int[]{380, 80, 80, 70, 360};
     }
 
+    // Size (1), Endpoints (2), Secrets (3) are numeric -- declared so the sorter compares them as
+    // numbers, not lexicographically (which would put e.g. "10" before "2").
+    @Override protected Class<?>[] columnClasses() {
+        return new Class<?>[]{null, Integer.class, Integer.class, Integer.class, null};
+    }
+
     @Override protected Object valueAt(JsAsset a, int c) {
         return switch (c) {
             case 0 -> a.getUrl();
