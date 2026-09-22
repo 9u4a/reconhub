@@ -19,6 +19,7 @@ import com.reconhub.analysis.PiiScanner;
 import com.reconhub.analysis.PatternRegistry;
 import com.reconhub.analysis.RequestInspector;
 import com.reconhub.analysis.SecretScanner;
+import com.reconhub.analysis.SourceMapDetector;
 import com.reconhub.analysis.TechFingerprinter;
 import com.reconhub.analysis.UserRuleStore;
 
@@ -48,6 +49,7 @@ public final class TrafficIngestor implements HttpHandler {
     private final SecretScanner signatureScanner;
     private final SecretScanner authzScanner;
     private final JsAnalyzer jsAnalyzer;
+    private final SourceMapDetector sourceMapDetector;
     private final TechFingerprinter techFingerprinter;
     private final MisconfigInspector misconfigInspector;
     private final CommentExtractor commentExtractor;
@@ -82,7 +84,9 @@ public final class TrafficIngestor implements HttpHandler {
         this.signatureScanner = new SecretScanner(store, patterns.signatureRules(), false);
         this.authzScanner = new SecretScanner(store, patterns.authzRules(), false);
         this.commentExtractor = new CommentExtractor(store);
-        this.jsAnalyzer = new JsAnalyzer(store, patterns, secretScanner, commentExtractor, settings);
+        this.sourceMapDetector = new SourceMapDetector(store);
+        this.jsAnalyzer = new JsAnalyzer(store, patterns, secretScanner, commentExtractor,
+                sourceMapDetector, settings);
         this.techFingerprinter = new TechFingerprinter(store, patterns);
         this.misconfigInspector = new MisconfigInspector(store);
         this.apiSpecAnalyzer = new ApiSpecAnalyzer(store);
@@ -271,6 +275,8 @@ public final class TrafficIngestor implements HttpHandler {
             techFingerprinter.fingerprint(ep.host(), response, contentType);
             // Passive API-surface discovery (OpenAPI/Swagger/GraphQL) from the captured body.
             apiSpecAnalyzer.analyze(url, contentType, responseBody, rr);
+            // Passive source-map exposure (a captured .map is a confirmed original-source leak).
+            sourceMapDetector.analyze(url, contentType, responseBody, rr);
             if (isJavaScript(url, contentType)) {
                 jsAnalyzer.analyze(url, responseBody, rr);
             }

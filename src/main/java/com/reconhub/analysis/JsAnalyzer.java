@@ -25,14 +25,17 @@ public final class JsAnalyzer {
     private final PatternRegistry patterns;
     private final SecretScanner secretScanner;
     private final CommentExtractor commentExtractor;
+    private final SourceMapDetector sourceMapDetector;
     private final Settings settings;
 
     public JsAnalyzer(DataStore store, PatternRegistry patterns, SecretScanner secretScanner,
-                      CommentExtractor commentExtractor, Settings settings) {
+                      CommentExtractor commentExtractor, SourceMapDetector sourceMapDetector,
+                      Settings settings) {
         this.store = store;
         this.patterns = patterns;
         this.secretScanner = secretScanner;
         this.commentExtractor = commentExtractor;
+        this.sourceMapDetector = sourceMapDetector;
         this.settings = settings;
     }
 
@@ -59,6 +62,8 @@ public final class JsAnalyzer {
 
         int secrets = secretScanner.scan(body, url, messages);
         asset.setExtractedSecrets(secrets);
+
+        sourceMapDetector.checkJsBody(url, body, messages);
 
         if (settings.isRunPassiveChecks()) {
             commentExtractor.extractJs(body, url, messages);
