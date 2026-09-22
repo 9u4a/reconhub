@@ -164,8 +164,22 @@ public final class SettingsPanel extends JPanel {
         JTextField exclude = new JTextField(settings.getScopeExcludeRegex(), 20);
         JButton apply = new JButton("Apply");
         apply.addActionListener(e -> {
-            settings.setScopeIncludeRegex(include.getText().trim());
-            settings.setScopeExcludeRegex(exclude.getText().trim());
+            String inc = include.getText().trim();
+            String exc = exclude.getText().trim();
+            String err = validateRegex("Include", inc);
+            if (err == null) {
+                err = validateRegex("Exclude", exc);
+            }
+            if (err != null) {
+                // Do NOT save: ScopeFilter.compile() treats an uncompilable include regex as "no
+                // include filter", which silently WIDENS scope to everything instead of narrowing it.
+                // Leave the previous (working) value in effect, same as UserRuleStore.add does for a
+                // bad custom rule.
+                setStatus(err);
+                return;
+            }
+            settings.setScopeIncludeRegex(inc);
+            settings.setScopeExcludeRegex(exc);
             setStatus("Scope regex applied.");
         });
         p.add(new JLabel("Include regex:"));
@@ -404,13 +418,25 @@ public final class SettingsPanel extends JPanel {
     }
 
     private void applyJsDir() {
+        Path p;
         try {
-            Path p = Paths.get(jsDir.getText().trim());
-            settings.setJsSaveDirectory(p);
-            setStatus("JS folder set to " + p);
+            p = Paths.get(jsDir.getText().trim());
         } catch (RuntimeException e) {
             setStatus("Invalid folder: " + e.getMessage());
+            return;
         }
+        // Parsing as a Path proves nothing about writability -- probe for real, so "Save JS to disk"
+        // can't be silently dead against a read-only/nonexistent/offline directory.
+        try {
+            java.nio.file.Files.createDirectories(p);
+            Path probe = java.nio.file.Files.createTempFile(p, ".reconhub-probe", ".tmp");
+            java.nio.file.Files.deleteIfExists(probe);
+        } catch (java.io.IOException | RuntimeException e) {
+            setStatus("Folder is not writable (not applied): " + p + " — " + e);
+            return;   // keep the previous directory in effect
+        }
+        settings.setJsSaveDirectory(p);
+        setStatus("JS folder set to " + p);
     }
 
     private void exportJson() {
@@ -542,6 +568,21 @@ public final class SettingsPanel extends JPanel {
 
     private void setStatus(String s) {
         status.setText(s);
+    }
+
+    /** @return null when {@code regex} is blank or compiles, else a user-facing error message.
+     * Package-private for headless testing. */
+    static String validateRegex(String label, String regex) {
+        if (regex.isEmpty()) {
+            return null;   // blank = filter not set, which is valid
+        }
+        try {
+            java.util.regex.Pattern.compile(regex);
+            return null;
+        } catch (java.util.regex.PatternSyntaxException ex) {
+            return label + " regex is invalid (not applied): " + ex.getDescription()
+                    + " near index " + ex.getIndex();
+        }
     }
 
     private static final java.awt.Color ACCENT = new java.awt.Color(0x4da3ff);

@@ -22,7 +22,7 @@ public final class CommentExtractor {
             "(?i)(todo|fixme|hack|xxx|bug|deprecated|password|passwd|pwd|secret|api[_-]?key|token|"
                     + "backdoor|debug|username|user\\b|admin|internal|/[a-z0-9._/-]{2,}|https?://)");
 
-    private static final int MAX_PER_BODY = 50;
+    private static final int MAX_PER_BODY = 50;   // match attempts per body, interesting or not
     private static final int MAX_LEN = 300;
 
     private final DataStore store;
@@ -46,8 +46,10 @@ public final class CommentExtractor {
             return 0;
         }
         int found = 0;
+        int examined = 0;   // match ATTEMPTS, not new findings -- see MAX_PER_BODY
         Matcher m = p.matcher(body);
-        while (m.find() && found < MAX_PER_BODY) {
+        while (examined < MAX_PER_BODY && m.find()) {
+            examined++;
             String text = m.group(1) == null ? "" : m.group(1).trim();
             if (text.length() < 4 || !INTERESTING.matcher(text).find()) {
                 continue;

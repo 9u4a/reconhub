@@ -3,6 +3,7 @@ package com.reconhub.model;
 import burp.api.montoya.http.message.HttpRequestResponse;
 
 import java.net.URI;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A deduplicated parameter observed on a specific endpoint.
@@ -22,7 +23,9 @@ public final class ParameterInfo {
 
     private volatile String exampleValue = "";
     private volatile boolean reflected;    // example value seen echoed back in a response
-    private volatile int seen;             // number of requests in which this parameter appeared
+    // AtomicInteger, not `volatile int` -- see Endpoint.observations for why (bruteforce concurrency
+    // races this against the ingest thread).
+    private final AtomicInteger seen = new AtomicInteger();
     private volatile HttpRequestResponse messages;   // representative request/response
     private volatile String host;          // derived lazily from endpointKey
 
@@ -42,7 +45,7 @@ public final class ParameterInfo {
     }
 
     public void record(String value, boolean reflected, HttpRequestResponse messages) {
-        this.seen++;
+        this.seen.incrementAndGet();
         if (value != null && !value.isBlank() && this.exampleValue.isBlank()) {
             this.exampleValue = value.length() > 120 ? value.substring(0, 120) + "…" : value;
         }
@@ -58,7 +61,7 @@ public final class ParameterInfo {
 
     public void setExampleValue(String v) { this.exampleValue = v == null ? "" : v; }
     public void setReflected(boolean b) { this.reflected = b; }
-    public void setSeen(int n) { this.seen = n; }
+    public void setSeen(int n) { this.seen.set(n); }
     public void setMessages(HttpRequestResponse m) { this.messages = m; }
 
     /** Host of the owning endpoint, parsed from {@code endpointKey} (empty if not derivable). */
@@ -92,6 +95,6 @@ public final class ParameterInfo {
     public String getEndpointPath() { return endpointPath; }
     public String getExampleValue() { return exampleValue; }
     public boolean isReflected() { return reflected; }
-    public int getSeen() { return seen; }
+    public int getSeen() { return seen.get(); }
     public HttpRequestResponse getMessages() { return messages; }
 }

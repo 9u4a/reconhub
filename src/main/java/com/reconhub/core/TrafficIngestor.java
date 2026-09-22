@@ -85,7 +85,7 @@ public final class TrafficIngestor implements HttpHandler {
         this.authzScanner = new SecretScanner(store, patterns.authzRules(), false);
         this.commentExtractor = new CommentExtractor(store);
         this.sourceMapDetector = new SourceMapDetector(store);
-        this.jsAnalyzer = new JsAnalyzer(store, patterns, secretScanner, commentExtractor,
+        this.jsAnalyzer = new JsAnalyzer(api, store, patterns, secretScanner, commentExtractor,
                 sourceMapDetector, settings);
         this.techFingerprinter = new TechFingerprinter(store, patterns);
         this.misconfigInspector = new MisconfigInspector(store);
@@ -268,8 +268,16 @@ public final class TrafficIngestor implements HttpHandler {
         parameterExtractor.extract(request, endpointKey, ep.path(), responseBody, rr);
 
         if (response != null) {
+            // Computed once and reused below: a JS body is secret-scanned inside jsAnalyzer.analyze()
+            // (which also needs the hit count for JsAsset's "Secrets" column, and is the only scan the
+            // manual JS-import path gets) -- scanning it here too was scanning every bundle twice with
+            // the same scanner instance. userScanner (the user's custom rules) is NOT run by JsAnalyzer,
+            // so it still runs for every response including JS.
+            boolean isJs = isJavaScript(url, contentType);
             if (settings.isScanResponsesForSecrets()) {
-                secretScanner.scan(responseBody, url, rr);
+                if (!isJs) {
+                    secretScanner.scan(responseBody, url, rr);
+                }
                 userScanner.scan(responseBody, url, rr);
             }
             techFingerprinter.fingerprint(ep.host(), response, contentType);
@@ -277,7 +285,7 @@ public final class TrafficIngestor implements HttpHandler {
             apiSpecAnalyzer.analyze(url, contentType, responseBody, rr);
             // Passive source-map exposure (a captured .map is a confirmed original-source leak).
             sourceMapDetector.analyze(url, contentType, responseBody, rr);
-            if (isJavaScript(url, contentType)) {
+            if (isJs) {
                 jsAnalyzer.analyze(url, responseBody, rr);
             }
             if (settings.isRunPassiveChecks()) {

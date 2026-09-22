@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A deduplicated endpoint observed in traffic (or discovered inside JS).
@@ -27,7 +28,10 @@ public final class Endpoint {
     private final Set<String> sources = Collections.newSetFromMap(new ConcurrentHashMap<>()); // "proxy","sitemap","js"
     private final Set<String> origins = Collections.newSetFromMap(new ConcurrentHashMap<>()); // JS files a JS-link was found in
     private final long firstSeenEpochMs;
-    private volatile int observations;
+    // AtomicInteger, not `volatile int`: incremented from the ingest thread AND from bruteforce worker
+    // threads (BruteforceEngine.runWordlist with concurrency > 1). `volatile` gives visibility but not
+    // read-modify-write atomicity, so concurrent `++` would silently lose updates.
+    private final AtomicInteger observations = new AtomicInteger();
     private volatile boolean authObserved;    // seen at least once with Authorization/Cookie
     private volatile boolean anonObserved;    // seen at least once with no credentials
     private volatile HttpRequestResponse messages;   // representative request/response (latest, if any)
@@ -57,7 +61,7 @@ public final class Endpoint {
 
     public void recordObservation(int statusCode, String contentType, String source,
                                   HttpRequestResponse messages) {
-        this.observations++;
+        this.observations.incrementAndGet();
         if (statusCode > 0) {
             this.lastStatusCode = statusCode;
         }
@@ -103,7 +107,7 @@ public final class Endpoint {
 
     public void setLastStatusCode(int code) { this.lastStatusCode = code; }
     public void setContentType(String ct) { this.contentType = ct == null ? "" : ct; }
-    public void setObservations(int n) { this.observations = n; }
+    public void setObservations(int n) { this.observations.set(n); }
     public void setAuthObserved(boolean b) { this.authObserved = b; }
     public void setAnonObserved(boolean b) { this.anonObserved = b; }
     public void setMessages(HttpRequestResponse m) { this.messages = m; }
@@ -119,7 +123,7 @@ public final class Endpoint {
     public Set<String> getSources() { return new TreeSet<>(sources); }
     public Set<String> getOrigins() { return new TreeSet<>(origins); }
     public long getFirstSeenEpochMs() { return firstSeenEpochMs; }
-    public int getObservations() { return observations; }
+    public int getObservations() { return observations.get(); }
     public boolean isAuthObserved() { return authObserved; }
     public boolean isAnonObserved() { return anonObserved; }
 

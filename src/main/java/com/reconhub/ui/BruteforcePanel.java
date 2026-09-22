@@ -228,8 +228,10 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
         return panel;
     }
 
-    /** All confirmed hits across every job (running or finished), newest job first. */
-    private List<Map.Entry<BruteforceJob, BruteforceJob.Hit>> allHits() {
+    /** All confirmed hits across every job (running or finished), newest job first. Called only from
+     * {@code HitModel.fireChanged()} -- do not call from getRowCount()/getValueAt() (Swing's renderer
+     * calls those once per visible cell per repaint, which used to rebuild this whole list every time). */
+    private List<Map.Entry<BruteforceJob, BruteforceJob.Hit>> buildHits() {
         List<Map.Entry<BruteforceJob, BruteforceJob.Hit>> out = new ArrayList<>();
         List<BruteforceJob> jobs = engine.jobs();
         for (int j = jobs.size() - 1; j >= 0; j--) {
@@ -276,7 +278,9 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
 
     private JPopupMenu hitPopup(int row) {
         JPopupMenu menu = new JPopupMenu();
-        List<Map.Entry<BruteforceJob, BruteforceJob.Hit>> hits = allHits();
+        // Must read the SAME list the table is currently displaying, not rebuild -- otherwise a hit
+        // landing between repaint and right-click could shift row indices out from under this.
+        List<Map.Entry<BruteforceJob, BruteforceJob.Hit>> hits = hitModel.hits();
         if (row < 0 || row >= hits.size()) {
             return menu;
         }
@@ -413,21 +417,32 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
     private final class HitModel extends AbstractTableModel {
         private static final String[] COLS = {"Host", "Path", "Status", "Length", "Tag"};
 
-        void fireChanged() { fireTableDataChanged(); }
+        // Rebuilt only when a hit is actually recorded (fireChanged()), not on every getRowCount()/
+        // getValueAt() call -- Swing calls the latter once per visible cell per repaint, which used to
+        // walk every job's hit list on every single cell paint. Declared here (an inner-class instance
+        // field) so it's initialized during `new HitModel()`, before `hitTable = new JTable(hitModel)`
+        // (the next field) ever calls getRowCount().
+        private List<Map.Entry<BruteforceJob, BruteforceJob.Hit>> cache = List.of();
 
-        @Override public int getRowCount() { return allHits().size(); }
+        void fireChanged() {
+            cache = buildHits();
+            fireTableDataChanged();
+        }
+
+        List<Map.Entry<BruteforceJob, BruteforceJob.Hit>> hits() { return cache; }
+
+        @Override public int getRowCount() { return cache.size(); }
         @Override public int getColumnCount() { return COLS.length; }
         @Override public String getColumnName(int c) { return COLS[c]; }
         @Override public boolean isCellEditable(int r, int c) { return false; }
 
         @Override
         public Object getValueAt(int r, int c) {
-            List<Map.Entry<BruteforceJob, BruteforceJob.Hit>> hits = allHits();
-            if (r < 0 || r >= hits.size()) {
+            if (r < 0 || r >= cache.size()) {
                 return "";
             }
-            BruteforceJob job = hits.get(r).getKey();
-            BruteforceJob.Hit hit = hits.get(r).getValue();
+            BruteforceJob job = cache.get(r).getKey();
+            BruteforceJob.Hit hit = cache.get(r).getValue();
             return switch (c) {
                 case 0 -> job.getHost();
                 case 1 -> hit.path();

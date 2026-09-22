@@ -90,7 +90,13 @@ public final class TechPanel extends AbstractTablePanel<TechInfo> {
 
     @Override
     protected String rowUrl(TechInfo t) {
-        return t != null && !t.getHost().isBlank() ? "https://" + t.getHost() : null;
+        if (t == null || t.getHost() == null || t.getHost().isBlank()) {
+            return null;
+        }
+        // Reuse the scheme actually observed for this host (see RunBruteforceAction.inferScheme and the
+        // CLAUDE.md note on this exact bug class) -- a hardcoded https:// sends Open-in-browser/Send-to-
+        // Repeater at the wrong scheme for any http-only host (e.g. a local dev server).
+        return RunBruteforceAction.inferScheme(store, t.getHost()) + "://" + t.getHost();
     }
 
     @Override

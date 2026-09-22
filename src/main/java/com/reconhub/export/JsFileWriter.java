@@ -17,21 +17,19 @@ public final class JsFileWriter {
     private JsFileWriter() {}
 
     /**
-     * @return the absolute path written (or the existing path if already present), or {@code null}
-     *         on failure.
+     * @return the absolute path written (or the existing path if already present).
+     * @throws IOException if the directory can't be created or the file can't be written -- the caller
+     *         decides how to surface it. (This used to return null on failure, which meant "Save JS to
+     *         disk" against an unwritable directory failed silently, forever, for every file.)
      */
-    public static Path write(Path directory, String url, String sha256, String body) {
-        try {
-            Files.createDirectories(directory);
-            String fileName = buildFileName(url, sha256);
-            Path target = directory.resolve(fileName);
-            if (!Files.exists(target)) {
-                Files.write(target, body.getBytes(StandardCharsets.UTF_8));
-            }
-            return target.toAbsolutePath();
-        } catch (IOException | RuntimeException e) {
-            return null;
+    public static Path write(Path directory, String url, String sha256, String body) throws IOException {
+        Files.createDirectories(directory);
+        String fileName = buildFileName(url, sha256);
+        Path target = directory.resolve(fileName);
+        if (!Files.exists(target)) {
+            Files.write(target, body.getBytes(StandardCharsets.UTF_8));
         }
+        return target.toAbsolutePath();
     }
 
     private static String buildFileName(String url, String sha256) {

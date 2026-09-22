@@ -17,6 +17,7 @@ import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Passive API-surface discovery from already-captured responses:
@@ -41,6 +42,11 @@ public final class ApiSpecAnalyzer {
             Set.of("get", "put", "post", "delete", "options", "head", "patch", "trace");
     // No arbitrary class instantiation from untrusted (target-controlled) YAML.
     private static final Yaml SAFE_YAML = new Yaml(new SafeConstructor(new LoaderOptions()));
+    // Matched against the first few characters only -- the two root keys every OpenAPI/Swagger YAML
+    // starts with. Lowercasing (and regex-scanning) the WHOLE body just to read its first ~10 chars
+    // allocated a full copy of every non-JSON response, including every JS bundle.
+    private static final int SPEC_HEAD_CHARS = 32;
+    private static final Pattern YAML_SPEC_HEAD = Pattern.compile("(?i)^(?:openapi|swagger)\\s{0,8}:");
 
     private final DataStore store;
 
@@ -57,8 +63,8 @@ public final class ApiSpecAnalyzer {
         boolean jsonish = ct.contains("json") || trimmed.startsWith("{");
         // Only worth trying YAML when it isn't already JSON-shaped, and it looks like an OpenAPI/
         // Swagger root (starts with "openapi:"/"swagger:", the two top-level keys every such spec has).
-        boolean yamlish = !jsonish && (ct.contains("yaml")
-                || trimmed.toLowerCase(Locale.ROOT).matches("(?s)^(openapi|swagger)\\s*:.*"));
+        String head = trimmed.length() > SPEC_HEAD_CHARS ? trimmed.substring(0, SPEC_HEAD_CHARS) : trimmed;
+        boolean yamlish = !jsonish && (ct.contains("yaml") || YAML_SPEC_HEAD.matcher(head).find());
 
         // --- OpenAPI / Swagger (JSON) -------------------------------------
         if (jsonish && body.contains("\"paths\"")

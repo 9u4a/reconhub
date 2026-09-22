@@ -6,6 +6,7 @@ import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonIOException;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
@@ -15,9 +16,11 @@ import com.reconhub.model.TechInfo;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -203,7 +206,21 @@ public final class StateSerializer {
         }
 
         Files.createDirectories(file.toAbsolutePath().getParent());
-        Files.write(file, GSON.toJson(s).getBytes(StandardCharsets.UTF_8));
+        // Stream straight to the file: GSON.toJson(s) + getBytes() used to hold the whole document
+        // twice more in memory (a String and a byte[]) on top of the DTO graph -- with includeMessages
+        // on and a large session that's what OOMs. Write to a sibling temp file and rename so a failure
+        // mid-serialization can't leave a truncated state file where the old one was.
+        Path tmp = file.resolveSibling(file.getFileName() + ".part");
+        try {
+            try (Writer w = Files.newBufferedWriter(tmp, StandardCharsets.UTF_8)) {
+                GSON.toJson(s, State.class, w);
+            } catch (JsonIOException e) {
+                throw new IOException("Failed writing state JSON: " + e.getMessage(), e);
+            }
+            Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING);
+        } finally {
+            Files.deleteIfExists(tmp);
+        }
     }
 
     // ---- Import ---------------------------------------------------------

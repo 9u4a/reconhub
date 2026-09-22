@@ -178,7 +178,14 @@ public final class BruteforceEngine {
                 KnownPaths.Entry entry = wordlist.get(i);
                 HttpRequestResponse rr = send(baseUrl + entry.path(), job);
                 if (rr == null) {
-                    log("  aborted (budget spent / cancelled)");
+                    // send() already logged the real cause (via api.logging()) when it's a genuine
+                    // failure; distinguish the two expected/benign causes here rather than always
+                    // reporting the same generic (and often wrong) message.
+                    log(job.isCancelled() ? "  cancelled."
+                            : job.getSent() >= job.getBudget()
+                                    ? "  aborted (request budget " + job.getBudget() + " spent)"
+                                    : "  aborted after " + entry.path()
+                                            + " (request failed -- see the ⚠ line above / Burp error log)");
                     return;
                 }
                 int st = status(rr);
@@ -227,6 +234,10 @@ public final class BruteforceEngine {
             HttpRequest req = HttpRequest.httpRequestFromUrl(url);
             return throttler.send(req, job);
         } catch (RuntimeException e) {
+            // Was a bare `return null`, which the caller then reported as "budget spent / cancelled" --
+            // actively misleading when the real cause is e.g. an unparsable URL.
+            api.logging().logToError("ReconHub bruteforce: request for " + url + " failed: " + e);
+            log("  ⚠ request failed for " + url + ": " + e);
             return null;
         }
     }

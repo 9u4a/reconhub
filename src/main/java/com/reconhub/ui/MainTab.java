@@ -13,16 +13,23 @@ import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Top-level ReconHub suite tab. Hosts the sub-tabs and coalesces model-change notifications into a
- * single debounced refresh on the EDT (so a bulk sweep doesn't repaint thousands of times).
+ * single debounced refresh on the EDT (so a bulk sweep doesn't repaint thousands of times) -- and, as
+ * of 0.35.0, only refreshes the currently-selected sub-tab (a background tab is refreshed once when
+ * the user switches to it, via the tabs' ChangeListener, rather than 3x/second while hidden).
  */
 public final class MainTab extends JPanel implements DataStore.ChangeListener {
 
     private final List<Refreshable> refreshables = new ArrayList<>();
+    private final Map<Component, Refreshable> refreshableByTab = new IdentityHashMap<>();
+    private final JTabbedPane tabs = new JTabbedPane();
     private final Timer refreshTimer;
 
     public MainTab(MontoyaApi api, DataStore store, Settings settings, TrafficIngestor ingestor,
@@ -43,22 +50,13 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         parameters.setBruteforce(bruteforce, settings);
         findings.setBruteforce(bruteforce);
 
-        refreshables.add(dashboard);
-        refreshables.add(endpoints);
-        refreshables.add(parameters);
-        refreshables.add(findings);
-        refreshables.add(jsAssets);
-        refreshables.add(tech);
-        refreshables.add(bruteforcePanel);
-
-        JTabbedPane tabs = new JTabbedPane();
-        tabs.addTab("Dashboard", dashboard);
-        tabs.addTab("Endpoints", endpoints);
-        tabs.addTab("Parameters", parameters);
-        tabs.addTab("Findings", findings);
-        tabs.addTab("JS Assets", jsAssets);
-        tabs.addTab("Tech", tech);
-        tabs.addTab("Bruteforce", bruteforcePanel);
+        addRefreshableTab("Dashboard", dashboard);
+        addRefreshableTab("Endpoints", endpoints);
+        addRefreshableTab("Parameters", parameters);
+        addRefreshableTab("Findings", findings);
+        addRefreshableTab("JS Assets", jsAssets);
+        addRefreshableTab("Tech", tech);
+        addRefreshableTab("Bruteforce", bruteforcePanel);
         // Settings is a tall stack of sections — scroll it so lower sections stay reachable at
         // any window height / half width.
         javax.swing.JScrollPane settingsScroll = new javax.swing.JScrollPane(settingsPanel,
@@ -87,20 +85,44 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         dashboard.setNavigator(navigator);
         findings.setNavigator(navigator);
 
-        refreshTimer = new Timer(300, e -> refreshAll());
+        // Switching to a tab shows current data immediately -- it hasn't been refreshed while hidden.
+        tabs.addChangeListener(e -> refreshSelected());
+
+        refreshTimer = new Timer(300, e -> refreshSelected());
         refreshTimer.setRepeats(false);
 
         store.addChangeListener(this);
         refreshAll();
     }
 
+    /** Registers {@code panel} as a tab and as a {@link Refreshable} kept in sync with it. */
+    private <C extends JComponent & Refreshable> void addRefreshableTab(String title, C panel) {
+        tabs.addTab(title, panel);
+        refreshables.add(panel);
+        refreshableByTab.put(panel, panel);
+    }
+
+    /** Every registered panel once -- used only at startup, so every tab has data before it's first
+     * shown (afterwards, {@link #refreshSelected()} is what the 300ms timer and tab switches call). */
     private void refreshAll() {
         for (Refreshable r : refreshables) {
-            try {
-                r.refreshData();
-            } catch (RuntimeException ignored) {
-                // one panel failing must not stop the others
-            }
+            refreshOne(r);
+        }
+    }
+
+    /** Refreshes only the sub-tab the user is actually looking at. */
+    private void refreshSelected() {
+        Refreshable r = refreshableByTab.get(tabs.getSelectedComponent());
+        if (r != null) {
+            refreshOne(r);
+        }
+    }
+
+    private void refreshOne(Refreshable r) {
+        try {
+            r.refreshData();
+        } catch (RuntimeException ignored) {
+            // one panel failing must not stop the others
         }
     }
 

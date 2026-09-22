@@ -2,6 +2,7 @@ package com.reconhub.core;
 
 import burp.api.montoya.MontoyaApi;
 
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -20,6 +21,8 @@ public final class ScopeFilter {
     private Pattern includePat;
     private String excludeSrc = "";
     private Pattern excludePat;
+
+    private final AtomicLong scopeCheckErrors = new AtomicLong();
 
     public ScopeFilter(MontoyaApi api, Settings settings) {
         this.api = api;
@@ -45,6 +48,14 @@ public final class ScopeFilter {
         try {
             return api.scope().isInScope(url);
         } catch (RuntimeException e) {
+            // Every ingested request passes through here -- a silent false here used to mean the whole
+            // extension quietly ingested nothing with no diagnostic trail. Rate-limited (1st, then every
+            // 100th) so a persistent failure doesn't flood Burp's error log with one line per request.
+            long n = scopeCheckErrors.incrementAndGet();
+            if (n == 1 || n % 100 == 0) {
+                api.logging().logToError("ReconHub: Burp scope check failed for " + url
+                        + " (treating as out of scope; failure #" + n + "): " + e);
+            }
             return false;
         }
     }

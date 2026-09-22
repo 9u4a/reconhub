@@ -98,6 +98,11 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         }
     }
 
+    // rowIncluded below can hide rows on its own (severity threshold, muted categories, quick-filter
+    // toggles) independent of the search box -- the filter must stay installed even with an empty
+    // search box, so this MUST stay in sync with rowIncluded (see AbstractTablePanel.hasRowFilter()).
+    @Override protected boolean hasRowFilter() { return true; }
+
     @Override
     protected boolean rowIncluded(Finding f) {
         if (f == null) {

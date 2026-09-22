@@ -78,7 +78,13 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
     private final JPanel toolbarLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 6));
 
     private final Timer debounce = new Timer(200, e -> applySearch());
+    // Bounded by total cached characters, not entry count: one entry is a full decoded request+
+    // response, so a few dozen entries can be tens of MB. On overflow the whole cache is dropped (a
+    // crude generational cache) -- with the RowFilter fix above, bodyText() only runs while a body
+    // search is actually active, so this path is not hot.
+    private static final int BODY_CACHE_MAX_CHARS = 4_000_000;
     private final Map<T, String> bodyCache = new IdentityHashMap<>();
+    private int bodyCacheChars;
     private MessageViewer viewer;   // set by installDetail when the detail is a MessageViewer
     private boolean refreshing;     // true while refreshData()
 
@@ -418,8 +424,15 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
             (exclude ? excludes : includes).add(compile(term, regexBox.isSelected(), flags));
         }
 
-        // Always install the filter so subclass row filters (rowIncluded) apply even with no search.
-        sorter.setRowFilter(new SearchFilter(includes, excludes, field, useBody));
+        // Install a filter only when it can actually exclude something: search terms, or a subclass
+        // quick filter (hasRowFilter()). A null RowFilter means fireTableDataChanged() -- which fires
+        // on every 300ms refresh tick -- does no per-row work at all. Before this, a filter (with an
+        // empty pattern list) was always installed, and with the "Body" checkbox defaulting on, every
+        // refresh tick rebuilt every row's full decoded request+response text just to match it against
+        // zero patterns and discard it.
+        boolean hasTerms = !includes.isEmpty() || !excludes.isEmpty();
+        sorter.setRowFilter(hasTerms || hasRowFilter()
+                ? new SearchFilter(includes, excludes, field, useBody) : null);
         updateCount();
         highlightViewer();
     }
@@ -427,9 +440,20 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
     /**
      * Additional per-row visibility hook, ANDed with the search filter. Override to add quick
      * filters (e.g. by severity); call {@link #reapplyFilter()} when the criteria change.
+     *
+     * <p><b>Any subclass overriding this MUST also override {@link #hasRowFilter()}</b> to return
+     * true, or the quick filter silently stops applying whenever the search box is empty.
      */
     protected boolean rowIncluded(T row) {
         return true;
+    }
+
+    /**
+     * True when {@link #rowIncluded} can hide rows on its own (a quick filter), so {@link #applySearch}
+     * must keep a {@link RowFilter} installed even when the search box is empty. Default false.
+     */
+    protected boolean hasRowFilter() {
+        return false;
     }
 
     /** Re-applies the search + {@link #rowIncluded} filter (call after quick-filter changes). */
@@ -480,6 +504,9 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
             if (!rowIncluded(row)) {
                 return false;
             }
+            if (includes.isEmpty() && excludes.isEmpty()) {
+                return true;   // quick-filter-only pass: no haystack (and no body text) needed
+            }
             String hay = haystack(entry);
             for (Pattern p : includes) {
                 if (!p.matcher(hay).find()) {
@@ -516,10 +543,37 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         if (row == null) {
             return "";
         }
-        return bodyCache.computeIfAbsent(row, r -> {
-            String s = searchableBody(r);
-            return s == null ? "" : s;
-        });
+        String cached = bodyCache.get(row);
+        if (cached != null) {
+            return cached;
+        }
+        String s = searchableBody(row);
+        if (s == null) {
+            s = "";
+        }
+        if (bodyCacheChars + s.length() > BODY_CACHE_MAX_CHARS) {
+            bodyCache.clear();
+            bodyCacheChars = 0;
+        }
+        bodyCache.put(row, s);
+        bodyCacheChars += s.length();
+        return s;
+    }
+
+    /** Drops cached body text for objects no longer in {@link #rows} (identity), e.g. after Clear data. */
+    private void pruneBodyCache() {
+        Map<T, String> kept = new IdentityHashMap<>();
+        int chars = 0;
+        for (T r : rows) {
+            String s = bodyCache.get(r);
+            if (s != null) {
+                kept.put(r, s);
+                chars += s.length();
+            }
+        }
+        bodyCache.clear();
+        bodyCache.putAll(kept);
+        bodyCacheChars = chars;
     }
 
     private void updateCount() {
@@ -593,6 +647,9 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         boolean restored;
         try {
             this.rows = new ArrayList<>(supplyRows());
+            if (bodyCache.size() > rows.size()) {
+                pruneBodyCache();   // rows were removed (e.g. Clear data) -- drop their cached bodies
+            }
             model.fireTableDataChanged();
             applyColumnWidths();
             updateCount();

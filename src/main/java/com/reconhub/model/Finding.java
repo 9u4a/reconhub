@@ -2,6 +2,8 @@ package com.reconhub.model;
 
 import burp.api.montoya.http.message.HttpRequestResponse;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
  * A secret / sensitive-information hit produced by {@code SecretScanner} or {@code JsAnalyzer}.
  *
@@ -22,7 +24,9 @@ public final class Finding {
     private final String locationUrl;  // where first seen
     private final String evidence;     // short surrounding snippet
     private final boolean sensitive;   // whether the value is masked for display
-    private volatile int timesSeen;
+    // AtomicInteger, not `volatile int` -- see Endpoint.observations for why (bruteforce concurrency
+    // races this against the ingest thread).
+    private final AtomicInteger timesSeen = new AtomicInteger(1);
     private volatile Triage triage = Triage.NEW;      // analyst triage state
     private volatile HttpRequestResponse messages;   // request/response the finding came from
 
@@ -46,7 +50,6 @@ public final class Finding {
         this.masked = sensitive ? mask(rawMatch) : "";
         this.locationUrl = locationUrl;
         this.evidence = evidence;
-        this.timesSeen = 1;
     }
 
     public static String key(String type, String rawMatch) {
@@ -58,12 +61,12 @@ public final class Finding {
     }
 
     public void incrementSeen() {
-        this.timesSeen++;
+        this.timesSeen.incrementAndGet();
     }
 
     /** Restore setter (used by state import). */
     public void setTimesSeen(int n) {
-        this.timesSeen = n;
+        this.timesSeen.set(n);
     }
 
     private static String mask(String s) {
@@ -87,7 +90,7 @@ public final class Finding {
     public String getRawMatch() { return rawMatch; }
     public String getLocationUrl() { return locationUrl; }
     public String getEvidence() { return evidence; }
-    public int getTimesSeen() { return timesSeen; }
+    public int getTimesSeen() { return timesSeen.get(); }
     public boolean isSensitive() { return sensitive; }
     public HttpRequestResponse getMessages() { return messages; }
 }

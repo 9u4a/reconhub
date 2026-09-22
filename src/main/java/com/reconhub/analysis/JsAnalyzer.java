@@ -1,5 +1,6 @@
 package com.reconhub.analysis;
 
+import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.HashUtil;
@@ -7,12 +8,13 @@ import com.reconhub.core.Settings;
 import com.reconhub.export.JsFileWriter;
 import com.reconhub.model.JsAsset;
 
+import java.io.IOException;
 import java.net.URI;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
 
 /**
@@ -25,16 +27,19 @@ public final class JsAnalyzer {
     private static final int PREVIEW_MAX = 160;
     private static final int PREVIEW_SAMPLES = 3;
 
+    private final MontoyaApi api;   // nullable (headless tests); used only to log a save failure
     private final DataStore store;
     private final PatternRegistry patterns;
     private final SecretScanner secretScanner;
     private final CommentExtractor commentExtractor;
     private final SourceMapDetector sourceMapDetector;
     private final Settings settings;
+    private final AtomicInteger saveFailures = new AtomicInteger();
 
-    public JsAnalyzer(DataStore store, PatternRegistry patterns, SecretScanner secretScanner,
-                      CommentExtractor commentExtractor, SourceMapDetector sourceMapDetector,
-                      Settings settings) {
+    public JsAnalyzer(MontoyaApi api, DataStore store, PatternRegistry patterns,
+                      SecretScanner secretScanner, CommentExtractor commentExtractor,
+                      SourceMapDetector sourceMapDetector, Settings settings) {
+        this.api = api;
         this.store = store;
         this.patterns = patterns;
         this.secretScanner = secretScanner;
@@ -56,9 +61,11 @@ public final class JsAnalyzer {
         asset.setMessages(messages);   // null for a manually-imported local file -- that's correct
 
         if (settings.isSaveJsToDisk()) {
-            Path saved = JsFileWriter.write(settings.getJsSaveDirectory(), url, sha, body);
-            if (saved != null) {
-                asset.setSavedPath(saved.toString());
+            try {
+                asset.setSavedPath(
+                        JsFileWriter.write(settings.getJsSaveDirectory(), url, sha, body).toString());
+            } catch (IOException | RuntimeException e) {
+                logSaveFailure(e);
             }
         }
 
@@ -74,6 +81,17 @@ public final class JsAnalyzer {
         if (settings.isRunPassiveChecks()) {
             commentExtractor.extractJs(body, url, messages);
         }
+    }
+
+    /** Logs a "Save JS to disk" failure, rate-limited: an unwritable directory fails for *every* JS
+     * body, so logging each one would flood Burp's error log. */
+    private void logSaveFailure(Exception e) {
+        int n = saveFailures.incrementAndGet();
+        if (api == null || (n > 3 && n % 100 != 0)) {
+            return;
+        }
+        api.logging().logToError("ReconHub: saving JS to " + settings.getJsSaveDirectory()
+                + " failed (failure #" + n + "; check Settings → JavaScript collection): " + e);
     }
 
     /** @return the distinct links discovered (insertion order), so the caller can both count them and
