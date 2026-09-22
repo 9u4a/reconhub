@@ -3,6 +3,7 @@ package com.reconhub.active;
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
+import com.reconhub.core.BodyDecoder;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.ScopeFilter;
 import com.reconhub.core.Settings;
@@ -275,7 +276,7 @@ public final class BruteforceEngine {
     }
 
     private static String body(HttpRequestResponse rr) {
-        return rr != null && rr.response() != null ? rr.response().bodyToString() : "";
+        return rr != null && rr.response() != null ? BodyDecoder.decode(rr.response()) : "";
     }
 
     private static String fmt(double d) {

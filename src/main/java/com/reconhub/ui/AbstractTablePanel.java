@@ -4,6 +4,7 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
+import com.reconhub.core.BodyDecoder;
 
 import javax.swing.Box;
 import javax.swing.JButton;
@@ -357,7 +358,7 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
             }
             sb.append(" -H '").append(shq(h.name() + ": " + h.value())).append('\'');
         }
-        String body = req.bodyToString();
+        String body = BodyDecoder.decode(req);
         if (body != null && !body.isEmpty()) {
             sb.append(" --data '").append(shq(body)).append('\'');
         }

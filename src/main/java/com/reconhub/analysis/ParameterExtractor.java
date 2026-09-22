@@ -6,6 +6,7 @@ import burp.api.montoya.http.message.params.ParsedHttpParameter;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import com.reconhub.core.BodyDecoder;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.ParameterInfo;
 
@@ -39,7 +40,7 @@ public final class ParameterExtractor {
 
         // Montoya's parameters() does not decompose a JSON body into keys; do it ourselves.
         if (isJsonRequest(request)) {
-            extractJsonKeys(request.bodyToString(), endpointKey, endpointPath, respBody, messages);
+            extractJsonKeys(BodyDecoder.decode(request), endpointKey, endpointPath, respBody, messages);
         }
     }
 

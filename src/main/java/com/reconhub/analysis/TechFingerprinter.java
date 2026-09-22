@@ -2,6 +2,7 @@ package com.reconhub.analysis;
 
 import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.responses.HttpResponse;
+import com.reconhub.core.BodyDecoder;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.TechInfo;
 
@@ -44,7 +45,7 @@ public final class TechFingerprinter {
                 case "body" -> {
                     if (isHtml(contentType)) {
                         if (body == null) {
-                            body = response.bodyToString();
+                            body = BodyDecoder.decode(response);
                         }
                         addIfMatch(ti, rule, body);
                     }

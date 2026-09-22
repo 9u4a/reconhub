@@ -244,7 +244,7 @@ public final class TrafficIngestor implements HttpHandler {
             status = response.statusCode();
             String ct = response.headerValue("Content-Type");
             contentType = ct == null ? "" : ct;
-            responseBody = response.bodyToString();
+            responseBody = BodyDecoder.decode(response);
         }
 
         // Skip static assets (never JS) to cut noise, unless the user disabled it.
