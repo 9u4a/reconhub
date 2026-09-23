@@ -50,6 +50,14 @@ shadowJar {
 // Make `gradle build` produce the loadable fat-jar.
 build.dependsOn shadowJar
 
+// The plain (non-shadow) jar the `java` plugin builds by default has no bundled dependencies (Gson/
+// SnakeYAML), so loading it in Burp fails immediately with ClassNotFoundException -- shadowJar's
+// "-all" jar is the only artifact this project ever actually distributes or releases. Disabling this
+// stops `gradle build`/`assemble` from producing a second, unusable jar alongside it every time.
+jar {
+    enabled = false
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
