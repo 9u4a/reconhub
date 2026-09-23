@@ -27,15 +27,11 @@ import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
-import java.awt.Desktop;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.Toolkit;
-import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
-import java.net.URI;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.AbstractMap;
@@ -288,29 +284,15 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
         BruteforceJob.Hit hit = hits.get(row).getValue();
         String url = job.getBaseUrl() + hit.path();
         JMenuItem copyPath = new JMenuItem("Copy path");
-        copyPath.addActionListener(e -> copyToClipboard(hit.path()));
+        copyPath.addActionListener(e -> UiUtil.copyToClipboard(hit.path()));
         menu.add(copyPath);
         JMenuItem copyUrl = new JMenuItem("Copy URL");
-        copyUrl.addActionListener(e -> copyToClipboard(url));
+        copyUrl.addActionListener(e -> UiUtil.copyToClipboard(url));
         menu.add(copyUrl);
         JMenuItem open = new JMenuItem("Open in browser");
-        open.addActionListener(e -> openBrowser(url));
+        open.addActionListener(e -> UiUtil.openInBrowser(null, url));
         menu.add(open);
         return menu;
-    }
-
-    private static void copyToClipboard(String s) {
-        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(s), null);
-    }
-
-    private static void openBrowser(String url) {
-        try {
-            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                Desktop.getDesktop().browse(URI.create(url));
-            }
-        } catch (Exception ignored) {
-            // browser not available / bad URL -- ignore
-        }
     }
 
     private JComponent logPanel() {

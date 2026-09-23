@@ -7,6 +7,8 @@ import burp.api.montoya.http.message.responses.HttpResponse;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonIOException;
+import com.reconhub.active.BruteforceEngine;
+import com.reconhub.active.BruteforceJob;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
@@ -57,6 +59,7 @@ public final class StateSerializer {
         List<FindingDto> findings;
         List<JsAssetDto> jsAssets;
         List<TechDto> tech;
+        List<BruteforceJobDto> bruteforceJobs;
     }
 
     private static final class Counters {
@@ -100,10 +103,31 @@ public final class StateSerializer {
         List<String> technologies, missingSecurityHeaders;
     }
 
+    private static final class HitDto {
+        String path, tag;
+        int status, lengthBytes;
+    }
+
+    // Historical only (see BruteforceJob.restored / BruteforceEngine.restoreHistoricalJob) -- an
+    // imported job is never re-submitted to the dispatcher, so no thread/executor state to capture.
+    private static final class BruteforceJobDto {
+        String host, baseUrl;
+        int budget, sent;
+        boolean cancelled, done;
+        List<HitDto> hits;
+    }
+
     // ---- Export ---------------------------------------------------------
 
+    /** Same as {@link #export(DataStore, Path, boolean, BruteforceEngine)} with no bruteforce jobs
+     * captured (kept for any caller that doesn't have one handy). */
     public static void export(DataStore store, Path file, boolean includeMessages)
             throws IOException {
+        export(store, file, includeMessages, null);
+    }
+
+    public static void export(DataStore store, Path file, boolean includeMessages,
+                              BruteforceEngine bruteforce) throws IOException {
         State s = new State();
         s.format = FORMAT;
         s.version = VERSION;
@@ -205,6 +229,29 @@ public final class StateSerializer {
             s.tech.add(d);
         }
 
+        s.bruteforceJobs = new ArrayList<>();
+        if (bruteforce != null) {
+            for (BruteforceJob job : bruteforce.jobs()) {
+                BruteforceJobDto d = new BruteforceJobDto();
+                d.host = job.getHost();
+                d.baseUrl = job.getBaseUrl();
+                d.budget = job.getBudget();
+                d.sent = job.getSent();
+                d.cancelled = job.isCancelled();
+                d.done = job.isDone();
+                d.hits = new ArrayList<>();
+                for (BruteforceJob.Hit h : job.getHitList()) {
+                    HitDto hd = new HitDto();
+                    hd.path = h.path();
+                    hd.status = h.status();
+                    hd.lengthBytes = h.lengthBytes();
+                    hd.tag = h.tag();
+                    d.hits.add(hd);
+                }
+                s.bruteforceJobs.add(d);
+            }
+        }
+
         Files.createDirectories(file.toAbsolutePath().getParent());
         // Stream straight to the file: GSON.toJson(s) + getBytes() used to hold the whole document
         // twice more in memory (a String and a byte[]) on top of the DTO graph -- with includeMessages
@@ -225,9 +272,16 @@ public final class StateSerializer {
 
     // ---- Import ---------------------------------------------------------
 
-    /** @return a short summary of what was imported. */
+    /** Same as {@link #importInto(DataStore, Path, boolean, BruteforceEngine)} with bruteforce jobs
+     * left out of the import (kept for any caller that doesn't have one handy). */
     public static String importInto(DataStore store, Path file, boolean clearFirst)
             throws IOException {
+        return importInto(store, file, clearFirst, null);
+    }
+
+    /** @return a short summary of what was imported. */
+    public static String importInto(DataStore store, Path file, boolean clearFirst,
+                                    BruteforceEngine bruteforce) throws IOException {
         State s;
         try (Reader r = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             s = GSON.fromJson(r, State.class);
@@ -311,9 +365,22 @@ public final class StateSerializer {
                     s.counters.hostCounts, s.counters.contentTypeCounts);
         }
 
+        int jobs = 0;
+        if (s.bruteforceJobs != null && bruteforce != null) {
+            for (BruteforceJobDto d : s.bruteforceJobs) {
+                List<BruteforceJob.Hit> hits = new ArrayList<>();
+                for (HitDto hd : d.hits == null ? List.<HitDto>of() : d.hits) {
+                    hits.add(new BruteforceJob.Hit(hd.path, hd.status, hd.lengthBytes, hd.tag));
+                }
+                bruteforce.restoreHistoricalJob(d.host, d.baseUrl, d.budget, d.sent, d.cancelled, d.done, hits);
+                jobs++;
+            }
+        }
+
         store.fireChanged();
-        return String.format("Imported %d endpoints, %d parameters, %d findings, %d JS, %d hosts%s.",
+        return String.format("Imported %d endpoints, %d parameters, %d findings, %d JS, %d hosts%s%s.",
                 endpoints, params, findings, js, tech,
+                jobs > 0 ? ", " + jobs + " bruteforce jobs" : "",
                 s.includesMessages ? " (with messages)" : "");
     }
 

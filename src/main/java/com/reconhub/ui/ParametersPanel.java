@@ -81,11 +81,7 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
             // class manually (e.g. a hunch the name-based classifier didn't happen to catch).
             PayloadCheatsheetMenu.addTo(menu, this, cheatsheet, p.getName(), suggested);
         }
-        if (bruteforce != null && p.getHost() != null && !p.getHost().isBlank()) {
-            menu.addSeparator();
-            addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
-                    () -> RunBruteforceAction.run(this, bruteforce, settings, store, p.getHost()));
-        }
+        addBruteforceMenuItem(menu, bruteforce, settings, store, p.getHost());
     }
 
     @Override

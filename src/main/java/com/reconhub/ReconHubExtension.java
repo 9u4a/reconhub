@@ -39,7 +39,10 @@ public final class ReconHubExtension implements BurpExtension {
                 + patterns.techRules().size() + " tech rules.");
 
         DataStore store = new DataStore();
-        Settings settings = new Settings();
+        // Restores whatever was saved on the last unload (see the unloading handler below) -- also
+        // fixes autoIngestOnLoad's previous "no chance to turn it off before it fires" ordering issue,
+        // since a saved false now loads before the auto-ingest check further down.
+        Settings settings = Settings.load(api);
         TrafficIngestor ingestor = new TrafficIngestor(api, store, settings, patterns);
 
         PayloadCheatsheet cheatsheet = PayloadCheatsheet.load();
@@ -63,6 +66,7 @@ public final class ReconHubExtension implements BurpExtension {
         api.userInterface().registerSuiteTab("ReconHub", tab);
 
         api.extension().registerUnloadingHandler(() -> {
+            settings.save(api);
             ingestor.shutdown();
             bruteforce.shutdown();
         });

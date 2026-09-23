@@ -13,6 +13,7 @@ import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
@@ -47,6 +48,7 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
     private final JButton importJs = new JButton("Import JS file(s)…");
     private final JLabel importStatus = new JLabel(" ");
     private volatile String currentSavedPath = "";
+    private DashboardPanel.Navigator navigator;
 
     public JsAssetsPanel(DataStore store, MontoyaApi api, TrafficIngestor ingestor) {
         super(api);
@@ -74,6 +76,31 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
         detailTabs.addTab("Info", infoPanel);
         detailTabs.addTab("Response", viewer);
         installDetail(detailTabs, viewer);
+    }
+
+    /** Wires cross-tab navigation (this JS file → endpoints/findings found in it). */
+    public void setNavigator(DashboardPanel.Navigator navigator) {
+        this.navigator = navigator;
+    }
+
+    @Override
+    protected void extraMenuItems(JPopupMenu menu, JsAsset a) {
+        if (a == null) {
+            return;
+        }
+        menu.addSeparator();
+        addMenuItem(menu, "Copy preview", !a.getPreview().isEmpty(),
+                () -> UiUtil.copyToClipboard(a.getPreview()));
+        // Findings are searchable by their "Location" column (= the JS URL for a JS-sourced finding),
+        // so a plain searchFor(url) filters correctly. Endpoints has no equivalent searchable column
+        // for "which JS this was discovered in" (Endpoint.getOrigins() isn't a table column) -- the
+        // Info tab's own "Endpoints found in this JS" list (computed the same way, onRowSelected) is
+        // the only place that relationship is shown; not offered here to avoid a menu item that would
+        // silently filter to zero rows.
+        if (navigator != null) {
+            addMenuItem(menu, "View findings from this JS", true,
+                    () -> navigator.filterFindings(a.getUrl()));
+        }
     }
 
     private void importJsFiles() {

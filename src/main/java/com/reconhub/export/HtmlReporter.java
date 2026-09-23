@@ -200,7 +200,7 @@ public final class HtmlReporter {
             return;
         }
         b.append("<table><thead><tr><th>Method</th><th>Host</th><th>Path</th>"
-                + "<th>Status</th><th>Content-Type</th><th>Params</th><th>Source</th></tr></thead><tbody>");
+                + "<th>Status</th><th>Content-Type</th><th>Params</th><th>Auth</th><th>Source</th></tr></thead><tbody>");
         for (Endpoint e : endpoints) {
             b.append("<tr><td><code>").append(esc(e.getMethod())).append("</code></td><td>")
                     .append(esc(e.getHost())).append("</td><td><code>")
@@ -208,6 +208,7 @@ public final class HtmlReporter {
                     .append(e.getLastStatusCode() == 0 ? "&ndash;" : e.getLastStatusCode())
                     .append("</td><td class=\"muted\">").append(esc(shortCt(e.getContentType())))
                     .append("</td><td>").append(e.getParamCount()).append("</td><td class=\"muted\">")
+                    .append(esc(e.authStatus())).append("</td><td class=\"muted\">")
                     .append(esc(String.join(",", e.getSources()))).append("</td></tr>");
         }
         b.append("</tbody></table></section>");

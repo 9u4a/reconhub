@@ -48,4 +48,21 @@ public final class BruteforceJob {
 
     public void markDone() { this.done = true; }
     public boolean isDone() { return done; }
+
+    /** Rebuilds a job as a completed historical record from previously-saved data (see
+     * {@code export.StateSerializer}) -- never re-executed, purely for the Bruteforce tab's Jobs/Hits
+     * view after a state import. Package-private: only {@code BruteforceEngine.restoreHistoricalJob}
+     * calls this, so a caller can never end up with a "restored" job that also gets submitted to the
+     * dispatcher. */
+    static BruteforceJob restored(String host, String baseUrl, int budget, int sent,
+                                  List<Hit> hits, boolean cancelled, boolean done) {
+        BruteforceJob job = new BruteforceJob(host, baseUrl, budget);
+        job.sent.set(sent);
+        job.hits.addAll(hits);
+        if (cancelled) {
+            job.cancelled.set(true);
+        }
+        job.done = done;
+        return job;
+    }
 }

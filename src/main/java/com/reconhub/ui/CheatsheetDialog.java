@@ -20,8 +20,6 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.Toolkit;
-import java.awt.datatransfer.StringSelection;
 import java.util.List;
 
 /**
@@ -98,22 +96,16 @@ public final class CheatsheetDialog extends JDialog {
         JButton copySelected = new JButton("Copy selected");
         copySelected.addActionListener(e -> {
             List<String> sel = list.getSelectedValuesList();
-            copy(String.join("\n", sel.isEmpty() ? payloads : sel));
+            UiUtil.copyToClipboard(String.join("\n", sel.isEmpty() ? payloads : sel));
         });
         JButton copyAll = new JButton("Copy all");
-        copyAll.addActionListener(e -> copy(String.join("\n", payloads)));
+        copyAll.addActionListener(e -> UiUtil.copyToClipboard(String.join("\n", payloads)));
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 2));
         buttons.add(copySelected);
         buttons.add(copyAll);
         section.add(buttons, BorderLayout.SOUTH);
 
         return section;
-    }
-
-    private static void copy(String s) {
-        if (s != null && !s.isEmpty()) {
-            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(s), null);
-        }
     }
 
     /**

@@ -2,6 +2,7 @@ package com.reconhub.export;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.ParameterClassifier;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Endpoint;
@@ -28,12 +29,19 @@ public final class JsonExporter {
     private JsonExporter() {}
 
     public static void export(DataStore store, Path file) throws IOException {
+        export(store, file, ReportOptions.all());
+    }
+
+    /** As {@link #export(DataStore, Path)}, but findings are filtered by {@code opts} first -- the
+     * JSON export was previously the only one of the four report formats that ignored the Confirmed-
+     * only / Exclude-FP options. */
+    public static void export(DataStore store, Path file, ReportOptions opts) throws IOException {
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("generatedAt", Instant.now().toString());
         root.put("summary", summary(store));
         root.put("endpoints", endpoints(store));
         root.put("parameters", parameters(store));
-        root.put("findings", findings(store));
+        root.put("findings", findings(store, opts));
         root.put("jsAssets", jsAssets(store));
         root.put("technologies", technologies(store));
 
@@ -91,11 +99,15 @@ public final class JsonExporter {
         return out;
     }
 
-    private static List<Map<String, Object>> findings(DataStore store) {
+    private static List<Map<String, Object>> findings(DataStore store, ReportOptions opts) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (Finding f : store.snapshotFindings()) {
+            if (!opts.includes(f)) {
+                continue;
+            }
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("type", f.getType());
+            m.put("category", FindingTaxonomy.categoryOf(f.getType()).label());
             m.put("severity", f.getSeverity().name());
             m.put("value", f.getMasked());
             m.put("location", f.getLocationUrl());

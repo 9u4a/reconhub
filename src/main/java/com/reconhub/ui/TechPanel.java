@@ -43,12 +43,10 @@ public final class TechPanel extends AbstractTablePanel<TechInfo> {
 
     @Override
     protected void extraMenuItems(JPopupMenu menu, TechInfo t) {
-        if (t == null || bruteforce == null || t.getHost() == null || t.getHost().isBlank()) {
+        if (t == null) {
             return;
         }
-        menu.addSeparator();
-        addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
-                () -> RunBruteforceAction.run(this, bruteforce, settings, store, t.getHost()));
+        addBruteforceMenuItem(menu, bruteforce, settings, store, t.getHost());
     }
 
     @Override

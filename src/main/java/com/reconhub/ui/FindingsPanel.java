@@ -190,6 +190,13 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         return f == null ? null : f.getMessages();
     }
 
+    @Override protected boolean supportsBodySearch() { return true; }
+
+    @Override
+    protected String searchableBody(Finding f) {
+        return f == null ? null : MessageViewer.toSearchText(f.getMessages());
+    }
+
     @Override
     protected String rowUrl(Finding f) {
         return f != null && f.getLocationUrl() != null
@@ -247,11 +254,7 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
             // finding might still be worth an IDOR/SSRF cheatsheet look even with no automatic hit.
             PayloadCheatsheetMenu.addTo(menu, this, cheatsheet, f.getType(), suggested);
         }
-        if (bruteforce != null && !host.isEmpty()) {
-            menu.addSeparator();
-            addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
-                    () -> RunBruteforceAction.run(this, bruteforce, settings, store, host));
-        }
+        addBruteforceMenuItem(menu, bruteforce, settings, store, host);
         menu.addSeparator();
         for (Finding.Triage t : Finding.Triage.values()) {
             boolean current = f.getTriage() == t;

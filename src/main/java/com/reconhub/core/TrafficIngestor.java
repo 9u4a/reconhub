@@ -88,7 +88,7 @@ public final class TrafficIngestor implements HttpHandler {
         this.jsAnalyzer = new JsAnalyzer(api, store, patterns, secretScanner, commentExtractor,
                 sourceMapDetector, settings);
         this.techFingerprinter = new TechFingerprinter(store, patterns);
-        this.misconfigInspector = new MisconfigInspector(store);
+        this.misconfigInspector = new MisconfigInspector(store, secretScanner);
         this.apiSpecAnalyzer = new ApiSpecAnalyzer(store);
         this.piiScanner = new PiiScanner(store);
         this.requestInspector = new RequestInspector(store);

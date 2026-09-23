@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.reconhub.core.DataStore;
+import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
 import com.reconhub.model.ParameterInfo;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -99,6 +100,99 @@ public final class ApiSpecAnalyzer {
         if (jsonish && body.contains("\"__schema\"") && body.contains("\"types\"")) {
             record(new Finding("GraphQL introspection enabled", Finding.Severity.MEDIUM,
                     "gql-introspection|" + hostKey(url), url, "introspection on", false), rr);
+            try {
+                JsonElement rootEl = JsonParser.parseString(body);
+                if (rootEl.isJsonObject()) {
+                    parseGraphQlSchema(rootEl.getAsJsonObject(), url, rr);
+                }
+            } catch (RuntimeException ignored) {
+                // malformed / unexpected shape -> the "introspection enabled" Finding above still fires
+            }
+        }
+    }
+
+    // ---- GraphQL introspection -------------------------------------------
+
+    /**
+     * Walks a standard introspection {@code data.__schema} response into synthetic {@link Endpoint}s
+     * (one per type.field) and {@link ParameterInfo}s (one per field argument). Fields are recorded
+     * only for OBJECT/INTERFACE types -- the only kinds that carry resolvable, callable fields.
+     */
+    private void parseGraphQlSchema(JsonObject root, String url, HttpRequestResponse rr) {
+        JsonObject data = optObject(root, "data");
+        JsonObject schema = data != null ? optObject(data, "__schema") : optObject(root, "__schema");
+        if (schema == null) {
+            return;
+        }
+        JsonElement typesEl = schema.get("types");
+        if (typesEl == null || !typesEl.isJsonArray()) {
+            return;
+        }
+
+        String host = hostOnly(url);
+        String base = baseAuthority(url);
+        int fieldCount = 0;
+
+        for (JsonElement typeEl : typesEl.getAsJsonArray()) {
+            if (!typeEl.isJsonObject()) {
+                continue;
+            }
+            JsonObject type = typeEl.getAsJsonObject();
+            String kind = optString(type, "kind");
+            if (!"OBJECT".equals(kind) && !"INTERFACE".equals(kind)) {
+                continue;
+            }
+            String typeName = optString(type, "name");
+            if (typeName.isEmpty() || typeName.startsWith("__")) {
+                continue;   // introspection's own meta-types (e.g. __Type, __Field) aren't callable
+            }
+            JsonElement fieldsEl = type.get("fields");
+            if (fieldsEl == null || !fieldsEl.isJsonArray()) {
+                continue;
+            }
+            for (JsonElement fieldEl : fieldsEl.getAsJsonArray()) {
+                if (!fieldEl.isJsonObject()) {
+                    continue;
+                }
+                JsonObject field = fieldEl.getAsJsonObject();
+                String fieldName = optString(field, "name");
+                if (fieldName.isEmpty()) {
+                    continue;
+                }
+                // Synthetic path -- not a real URL path, but stable/unique and human-readable, and
+                // deriveHost-compatible since it's appended to the real base authority.
+                String path = "/graphql#" + typeName + "." + fieldName;
+                String normalized = base + path;
+
+                Set<String> argNames = new LinkedHashSet<>();
+                JsonElement argsEl = field.get("args");
+                if (argsEl != null && argsEl.isJsonArray()) {
+                    for (JsonElement argEl : argsEl.getAsJsonArray()) {
+                        if (argEl.isJsonObject()) {
+                            String n = optString(argEl.getAsJsonObject(), "name");
+                            if (!n.isEmpty()) {
+                                argNames.add(n);
+                            }
+                        }
+                    }
+                }
+
+                store.recordEndpoint("POST", host, path, normalized, 0, "", "graphql",
+                        argNames, rr, Set.of());
+                // Sent as part of the JSON POST body ({"query":...,"variables":{...}}) -- reuses the
+                // existing JSON parameter bucket rather than adding a new Location value, which would
+                // also need StateSerializer enum-compat handling for a case this niche.
+                for (String arg : argNames) {
+                    store.recordParameter(ParameterInfo.Location.JSON, arg, null, normalized, path,
+                            false, rr);
+                }
+                fieldCount++;
+            }
+        }
+
+        if (fieldCount > 0) {
+            record(new Finding("GraphQL schema parsed", Finding.Severity.INFO,
+                    "gql-schema|" + hostKey(url), url, fieldCount + " fields discovered", false), rr);
         }
     }
 

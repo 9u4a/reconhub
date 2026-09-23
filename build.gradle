@@ -4,7 +4,7 @@ plugins {
 }
 
 group = 'com.reconhub'
-version = '0.35.0'
+version = '0.36.0'
 
 repositories {
     mavenCentral()
@@ -25,6 +25,17 @@ dependencies {
     // SnakeYAML: parses YAML-format OpenAPI/Swagger specs (ApiSpecAnalyzer). Loaded with a
     // SafeConstructor (no arbitrary class instantiation) since spec bodies come from the target.
     implementation 'org.yaml:snakeyaml:2.2'
+
+    // Test-only. Note: compileOnly does NOT propagate to testCompileOnly/testRuntimeOnly -- Montoya
+    // must be re-declared for both, since it appears in the signatures of most model classes.
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testCompileOnly 'net.portswigger.burp.extensions:montoya-api:2023.12.1'
+    testRuntimeOnly 'net.portswigger.burp.extensions:montoya-api:2023.12.1'
+}
+
+test {
+    useJUnitPlatform()
 }
 
 shadowJar {

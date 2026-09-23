@@ -4,7 +4,10 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
+import com.reconhub.active.BruteforceEngine;
 import com.reconhub.core.BodyDecoder;
+import com.reconhub.core.DataStore;
+import com.reconhub.core.Settings;
 
 import javax.swing.Box;
 import javax.swing.JButton;
@@ -27,18 +30,13 @@ import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Component;
-import java.awt.Desktop;
 import java.awt.FlowLayout;
 import java.awt.Dimension;
-import java.awt.Toolkit;
-import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import java.io.IOException;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -282,18 +280,18 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         T row = rowAt(table.getSelectedRow());
 
         String cell = cellText(table.getSelectedRow(), viewCol);
-        add(menu, "Copy cell", cell != null, () -> copy(cell));
+        add(menu, "Copy cell", cell != null, () -> UiUtil.copyToClipboard(cell));
 
         String url = row != null ? rowUrl(row) : null;
-        add(menu, "Copy URL", url != null, () -> copy(url));
+        add(menu, "Copy URL", url != null, () -> UiUtil.copyToClipboard(url));
         boolean http = url != null && url.startsWith("http");
-        add(menu, "Open in browser", http, () -> openBrowser(url));
+        add(menu, "Open in browser", http, () -> UiUtil.openInBrowser(api, url));
         add(menu, "Send to Repeater", row != null && requestFor(row) != null,
                 () -> sendToRepeater(row));
         add(menu, "Send to Intruder", row != null && requestFor(row) != null,
                 () -> sendToIntruder(row));
         add(menu, "Copy as curl", row != null && requestFor(row) != null,
-                () -> copy(toCurl(requestFor(row))));
+                () -> UiUtil.copyToClipboard(toCurl(requestFor(row))));
         extraMenuItems(menu, row);
         return menu;
     }
@@ -306,6 +304,23 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
     /** Adds a menu item that runs {@code action} (errors are logged, never thrown to the UI). */
     protected void addMenuItem(JPopupMenu menu, String label, boolean enabled, Runnable action) {
         add(menu, label, enabled, action);
+    }
+
+    /**
+     * Adds the "Run known-path bruteforce on this host…" item shared by every table panel that offers
+     * it (Endpoints/Parameters/Tech/Findings) -- was 4 independent copies of the same label text
+     * (CLAUDE.md documents the "(active)" suffix as safety-relevant) and gating logic; now one place to
+     * change either. No-op when {@code bruteforce} is null (feature not wired for this panel) or
+     * {@code host} is blank.
+     */
+    protected void addBruteforceMenuItem(JPopupMenu menu, BruteforceEngine bruteforce,
+                                         Settings settings, DataStore store, String host) {
+        if (bruteforce == null || host == null || host.isBlank()) {
+            return;
+        }
+        menu.addSeparator();
+        addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
+                () -> RunBruteforceAction.run(this, bruteforce, settings, store, host));
     }
 
     private void add(JPopupMenu menu, String label, boolean enabled, Runnable action) {
@@ -331,6 +346,9 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
             try {
                 return HttpRequest.httpRequestFromUrl(url);
             } catch (RuntimeException e) {
+                if (api != null) {
+                    api.logging().logToError("ReconHub: building request for row failed (" + url + "): " + e);
+                }
                 return null;
             }
         }
@@ -374,24 +392,6 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
     /** Escapes a value for single-quoted POSIX shell context. */
     private static String shq(String s) {
         return s == null ? "" : s.replace("'", "'\\''");
-    }
-
-    private void openBrowser(String url) {
-        try {
-            if (Desktop.isDesktopSupported()
-                    && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                Desktop.getDesktop().browse(URI.create(url));
-            }
-        } catch (Exception e) {
-            api.logging().logToError("open in browser failed: " + e);
-        }
-    }
-
-    private static void copy(String s) {
-        if (s != null) {
-            Toolkit.getDefaultToolkit().getSystemClipboard()
-                    .setContents(new StringSelection(s), null);
-        }
     }
 
     private String cellText(int viewRow, int viewCol) {

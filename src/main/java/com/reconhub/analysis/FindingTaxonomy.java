@@ -40,7 +40,7 @@ public final class FindingTaxonomy {
         }
         String t = type.toLowerCase(Locale.ROOT);
 
-        if (has(t, "cors", "csp", "cookie", "mixed content", "cacheable")) {
+        if (has(t, "cors", "csp", "cookie", "mixed content", "cacheable", "missing security header")) {
             return Category.MISCONFIG;
         }
         if (has(t, "graphql", "api spec", "spec exposed")) {

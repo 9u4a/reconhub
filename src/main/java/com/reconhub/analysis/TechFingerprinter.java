@@ -4,6 +4,7 @@ import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.responses.HttpResponse;
 import com.reconhub.core.BodyDecoder;
 import com.reconhub.core.DataStore;
+import com.reconhub.model.Finding;
 import com.reconhub.model.TechInfo;
 
 import java.util.LinkedHashSet;
@@ -55,7 +56,18 @@ public final class TechFingerprinter {
         }
 
         if (isHtml(contentType)) {
-            ti.setMissingSecurityHeaders(missingSecurityHeaders(response));
+            Set<String> missing = missingSecurityHeaders(response);
+            ti.setMissingSecurityHeaders(missing);
+            // Also surface as a Finding (not just the Tech tab) so it flows into severity counts and
+            // the SARIF/JSON/HTML/MD exports. Keyed per host (not per value) so repeated computations
+            // for the same host just bump the seen-count instead of piling up duplicate findings; the
+            // tradeoff is that if the missing-header set later shrinks/grows for the same host, the
+            // evidence text keeps showing the first-seen set rather than the latest one.
+            if (!missing.isEmpty()) {
+                store.recordFinding(new Finding("Missing security headers", Finding.Severity.LOW,
+                        "missing-headers|" + host, "https://" + host,
+                        String.join(", ", missing), false));
+            }
         }
     }
 

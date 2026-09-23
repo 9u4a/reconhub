@@ -42,7 +42,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         FindingsPanel findings = new FindingsPanel(store, settings, api, cheatsheet);
         JsAssetsPanel jsAssets = new JsAssetsPanel(store, api, ingestor);
         TechPanel tech = new TechPanel(store, api);
-        SettingsPanel settingsPanel = new SettingsPanel(api, store, settings, ingestor);
+        SettingsPanel settingsPanel = new SettingsPanel(api, store, settings, ingestor, bruteforce);
         BruteforcePanel bruteforcePanel = new BruteforcePanel(settings, bruteforce);
         dashboard.setBruteforce(bruteforce, settings);
         tech.setBruteforce(bruteforce, settings);
@@ -81,9 +81,18 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
                 tabs.setSelectedComponent(findings);
                 findings.searchFor(q);
             }
+            @Override public void filterJsAssets(String q) {
+                tabs.setSelectedComponent(jsAssets);
+                jsAssets.searchFor(q);
+            }
+            @Override public void filterTech(String q) {
+                tabs.setSelectedComponent(tech);
+                tech.searchFor(q);
+            }
         };
         dashboard.setNavigator(navigator);
         findings.setNavigator(navigator);
+        jsAssets.setNavigator(navigator);
 
         // Switching to a tab shows current data immediately -- it hasn't been refreshed while hidden.
         tabs.addChangeListener(e -> refreshSelected());

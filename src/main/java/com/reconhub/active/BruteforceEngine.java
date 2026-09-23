@@ -89,6 +89,16 @@ public final class BruteforceEngine {
     public List<KnownPaths.Entry> getWordlist() { return wordlist; }
     public List<BruteforceJob> jobs() { return jobs; }
 
+    /** Restores a job as a completed historical record from a previously-exported state file (see
+     * {@code export.StateSerializer}) -- appended straight to {@link #jobs()} for the Jobs/Hits view,
+     * never submitted to the dispatcher or re-run. */
+    public BruteforceJob restoreHistoricalJob(String host, String baseUrl, int budget, int sent,
+                                              boolean cancelled, boolean done, List<BruteforceJob.Hit> hits) {
+        BruteforceJob job = BruteforceJob.restored(host, baseUrl, budget, sent, hits, cancelled, done);
+        jobs.add(job);
+        return job;
+    }
+
     /** Rough request count a run would send (wordlist size + 2 baseline probes), capped by the budget. */
     public int estimateRequests() {
         return Math.min(wordlist.size() + 2, settings.getBruteforceMaxRequestsPerHost());
@@ -242,14 +252,19 @@ public final class BruteforceEngine {
         }
     }
 
-    private void record(String host, KnownPaths.Entry entry, int status, HttpRequestResponse rr) {
+    void record(String host, KnownPaths.Entry entry, int status, HttpRequestResponse rr) {   // package-private for headless testing
         String normalizedUrl = rr.request().url();
         String contentType = contentType(rr);
         store.recordEndpoint("GET", host, entry.path(), normalizedUrl, status, contentType,
                 "bruteforce", Set.of(), rr, Set.of());
 
         String tag = entry.tag();
-        if ("exposed".equals(tag) && status == 200) {
+        // exposed/admin/api also count a 401/403 as a hit worth flagging -- a credential-bearing file
+        // or admin surface returning "forbidden" still confirms it exists, which is itself useful
+        // recon. "debug" (diagnostic/console endpoints, source maps, etc.) previously produced no
+        // Finding at all regardless of status -- ~6% of the bundled wordlist silently never reached
+        // triage/exports/severity counts, only an Endpoint row.
+        if ("exposed".equals(tag) && (status == 200 || status == 401 || status == 403)) {
             store.recordFinding(new Finding(
                     "Exposed sensitive path (bruteforce): " + entry.path(), Finding.Severity.HIGH,
                     normalizedUrl, normalizedUrl,
@@ -258,6 +273,11 @@ public final class BruteforceEngine {
                 && (status == 200 || status == 401 || status == 403)) {
             store.recordFinding(new Finding(
                     "Known path found (bruteforce): " + entry.path(), Finding.Severity.LOW,
+                    normalizedUrl, normalizedUrl,
+                    "Known-path bruteforce hit, status " + status, false));
+        } else if ("debug".equals(tag) && status == 200) {
+            store.recordFinding(new Finding(
+                    "Debug/diagnostic path found (bruteforce): " + entry.path(), Finding.Severity.LOW,
                     normalizedUrl, normalizedUrl,
                     "Known-path bruteforce hit, status " + status, false));
         }

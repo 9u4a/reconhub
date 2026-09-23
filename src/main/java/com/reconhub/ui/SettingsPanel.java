@@ -1,6 +1,7 @@
 package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
+import com.reconhub.active.BruteforceEngine;
 import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.UserRuleStore;
 import com.reconhub.core.DataStore;
@@ -48,6 +49,7 @@ public final class SettingsPanel extends JPanel {
     private final DataStore store;
     private final Settings settings;
     private final TrafficIngestor ingestor;
+    private final BruteforceEngine bruteforce;
 
     private final JLabel status = new JLabel(" ");
     private final JTextField jsDir = new JTextField(36);
@@ -64,11 +66,12 @@ public final class SettingsPanel extends JPanel {
     private JTable rulesTableRef;
 
     public SettingsPanel(MontoyaApi api, DataStore store, Settings settings,
-                         TrafficIngestor ingestor) {
+                         TrafficIngestor ingestor, BruteforceEngine bruteforce) {
         this.api = api;
         this.store = store;
         this.settings = settings;
         this.ingestor = ingestor;
+        this.bruteforce = bruteforce;
 
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
@@ -218,8 +221,8 @@ public final class SettingsPanel extends JPanel {
         JButton sarif = new JButton("Export SARIF…");
         sarif.setToolTipText("SARIF 2.1.0 for CI / code-scanning (respects the scope options)");
         sarif.addActionListener(e -> exportSarif());
-        reportConfirmedOnly.setToolTipText("HTML/Markdown export: include only Confirmed findings");
-        reportExcludeFp.setToolTipText("HTML/Markdown export: drop findings marked False positive");
+        reportConfirmedOnly.setToolTipText("HTML/Markdown/JSON/SARIF export: include only Confirmed findings");
+        reportExcludeFp.setToolTipText("HTML/Markdown/JSON/SARIF export: drop findings marked False positive");
         p.add(ingestButton);
         p.add(clear);
         p.add(Box.createHorizontalStrut(16));
@@ -444,7 +447,8 @@ public final class SettingsPanel extends JPanel {
         if (f == null) {
             return;
         }
-        runExport(() -> JsonExporter.export(store, f.toPath()), f);
+        ReportOptions opts = reportOptions();
+        runExport(() -> JsonExporter.export(store, f.toPath(), opts), f);
     }
 
     private void exportHtml() {
@@ -480,7 +484,7 @@ public final class SettingsPanel extends JPanel {
             return;
         }
         boolean withMsgs = includeMessages.isSelected();
-        runExport(() -> StateSerializer.export(store, f.toPath(), withMsgs), f);
+        runExport(() -> StateSerializer.export(store, f.toPath(), withMsgs, bruteforce), f);
     }
 
     private void importState() {
@@ -501,7 +505,7 @@ public final class SettingsPanel extends JPanel {
             private Exception error;
             @Override protected String doInBackground() {
                 try {
-                    return StateSerializer.importInto(store, f.toPath(), clearFirst);
+                    return StateSerializer.importInto(store, f.toPath(), clearFirst, bruteforce);
                 } catch (Exception e) {
                     error = e;
                     return null;

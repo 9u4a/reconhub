@@ -53,11 +53,7 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
             addMenuItem(menu, "View payload cheatsheet (XXE)…", true,
                     () -> CheatsheetDialog.showFor(this, e.getPath(), List.of(xxe)));
         }
-        if (bruteforce != null && e.getHost() != null && !e.getHost().isBlank()) {
-            menu.addSeparator();
-            addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
-                    () -> RunBruteforceAction.run(this, bruteforce, settings, store, e.getHost()));
-        }
+        addBruteforceMenuItem(menu, bruteforce, settings, store, e.getHost());
     }
 
     @Override

@@ -24,14 +24,11 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
-import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridLayout;
 import java.awt.Insets;
-import java.awt.Toolkit;
-import java.awt.datatransfer.StringSelection;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.net.URI;
@@ -60,6 +57,8 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         void filterEndpoints(String query);
         void filterParameters(String query);
         void filterFindings(String query);
+        void filterJsAssets(String query);
+        void filterTech(String query);
     }
 
     private static final Color ACCENT = new Color(0x4da3ff);
@@ -453,8 +452,8 @@ public final class DashboardPanel extends JPanel implements Refreshable {
     private JPopupMenu hostMenu(String host) {
         JPopupMenu m = new JPopupMenu();
         boolean real = host != null && host.contains(".") && !host.startsWith("(");
-        item(m, "Copy host", host != null, () -> copy(host));
-        item(m, "Open in browser", real, () -> openBrowser("https://" + host));
+        item(m, "Copy host", host != null, () -> UiUtil.copyToClipboard(host));
+        item(m, "Open in browser", real, () -> UiUtil.openInBrowser(null, "https://" + host));
         m.addSeparator();
         item(m, "View endpoints for this host", navigator != null && real,
                 () -> navigator.filterEndpoints(host));
@@ -472,7 +471,7 @@ public final class DashboardPanel extends JPanel implements Refreshable {
 
     private JPopupMenu typeMenu(String type) {
         JPopupMenu m = new JPopupMenu();
-        item(m, "Copy type", type != null, () -> copy(type));
+        item(m, "Copy type", type != null, () -> UiUtil.copyToClipboard(type));
         item(m, "View findings of this type", navigator != null && type != null,
                 () -> navigator.filterFindings(type));
         return m;
@@ -481,8 +480,8 @@ public final class DashboardPanel extends JPanel implements Refreshable {
     private JPopupMenu notableMenu(String url) {
         JPopupMenu m = new JPopupMenu();
         boolean http = url != null && url.startsWith("http");
-        item(m, "Copy URL", url != null, () -> copy(url));
-        item(m, "Open in browser", http, () -> openBrowser(url));
+        item(m, "Copy URL", url != null, () -> UiUtil.copyToClipboard(url));
+        item(m, "Open in browser", http, () -> UiUtil.openInBrowser(null, url));
         m.addSeparator();
         item(m, "View in Endpoints", navigator != null && url != null,
                 () -> navigator.filterEndpoints(url));
@@ -504,22 +503,6 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         menu.add(it);
     }
 
-    private static void copy(String s) {
-        if (s != null) {
-            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(s), null);
-        }
-    }
-
-    private static void openBrowser(String url) {
-        try {
-            if (Desktop.isDesktopSupported()
-                    && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                Desktop.getDesktop().browse(URI.create(url));
-            }
-        } catch (Exception ignored) {
-            // browser not available / bad URL — ignore
-        }
-    }
 
     // ---- helpers --------------------------------------------------------
 
