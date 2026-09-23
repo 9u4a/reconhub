@@ -1,5 +1,6 @@
 package com.reconhub.ui;
 
+import burp.api.montoya.MontoyaApi;
 import com.reconhub.active.BruteforceEngine;
 import com.reconhub.active.BruteforceJob;
 import com.reconhub.active.KnownPaths;
@@ -25,7 +26,6 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
 import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -52,6 +52,7 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
 
     private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("HH:mm:ss");
 
+    private final MontoyaApi api;
     private final Settings settings;
     private final BruteforceEngine engine;
 
@@ -62,7 +63,8 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
     private final JTable hitTable = new JTable(hitModel);
     private final JTextArea logArea = new JTextArea();
 
-    public BruteforcePanel(Settings settings, BruteforceEngine engine) {
+    public BruteforcePanel(MontoyaApi api, Settings settings, BruteforceEngine engine) {
+        this.api = api;
         this.settings = settings;
         this.engine = engine;
         setLayout(new BorderLayout(0, 10));
@@ -114,10 +116,10 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
                 + "Sends requests for every path in the wordlist. Runs only on a host you explicitly "
                 + "pick, after you confirm (and can edit the target) in the dialog.");
         l.setOpaque(true);
-        l.setBackground(new Color(0x3a1414));
-        l.setForeground(new Color(0xff8a8a));
+        l.setBackground(SwingColors.bannerBg());
+        l.setForeground(SwingColors.bannerFg());
         l.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(0xff5c5c)),
+                BorderFactory.createLineBorder(SwingColors.severityFg(com.reconhub.model.Finding.Severity.HIGH)),
                 BorderFactory.createEmptyBorder(8, 12, 8, 12)));
         l.setFont(l.getFont().deriveFont(Font.BOLD, 13f));
         l.setAlignmentX(LEFT_ALIGNMENT);
@@ -290,7 +292,7 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
         copyUrl.addActionListener(e -> UiUtil.copyToClipboard(url));
         menu.add(copyUrl);
         JMenuItem open = new JMenuItem("Open in browser");
-        open.addActionListener(e -> UiUtil.openInBrowser(null, url));
+        open.addActionListener(e -> UiUtil.openInBrowser(api, url));
         menu.add(open);
         return menu;
     }

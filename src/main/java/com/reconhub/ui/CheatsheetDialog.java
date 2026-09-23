@@ -2,6 +2,7 @@ package com.reconhub.ui;
 
 import com.reconhub.analysis.PayloadCheatsheet;
 
+import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
@@ -14,12 +15,15 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
+import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.util.List;
 
 /**
@@ -53,6 +57,14 @@ public final class CheatsheetDialog extends JDialog {
         setPreferredSize(new Dimension(520, 460));
         pack();
         setLocationRelativeTo(owner);
+
+        // Esc closes the dialog -- the only custom JDialog in ReconHub, modeless by design (the
+        // analyst keeps it open while working the table), so a quick way to dismiss it matters.
+        getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "reconhub.closeDialog");
+        getRootPane().getActionMap().put("reconhub.closeDialog", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) { dispose(); }
+        });
     }
 
     private JComponent buildTab(PayloadCheatsheet.Set set) {

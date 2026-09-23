@@ -6,22 +6,28 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import com.reconhub.active.BruteforceEngine;
 import com.reconhub.core.BodyDecoder;
+import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.Settings;
 
+import javax.swing.AbstractAction;
 import javax.swing.Box;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.RowFilter;
 import javax.swing.Timer;
@@ -33,6 +39,10 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Dimension;
+import java.awt.Font;
+import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -57,6 +67,8 @@ import java.util.regex.PatternSyntaxException;
 public abstract class AbstractTablePanel<T> extends JPanel implements Refreshable {
 
     protected final MontoyaApi api;
+    /** Bookmarks/notes store, shared across every tab; null-tolerant (bookmark UI just doesn't show). */
+    protected final Bookmarks bookmarks;
 
     // NOTE: `rows` MUST be initialized before `table`, because `new JTable(model)` immediately
     // queries model.getRowCount() -> rows.size(). Field initializers run in declaration order.
@@ -71,6 +83,8 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
     private final JCheckBox bodyBox = new JCheckBox("Body", true);
     private final JCheckBox regexBox = new JCheckBox(".*", false);
     private final JCheckBox caseBox = new JCheckBox("Aa", false);
+    // Only shown when a bookmarks store was actually provided (see the ctor).
+    private final JCheckBox bookmarkOnlyBox = new JCheckBox("★ only", false);
     private final JLabel countLabel = new JLabel("0 rows");
     private final JScrollPane scrollPane = new JScrollPane(table);
     private final JPanel toolbarLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 6));
@@ -86,8 +100,9 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
     private MessageViewer viewer;   // set by installDetail when the detail is a MessageViewer
     private boolean refreshing;     // true while refreshData()
 
-    protected AbstractTablePanel(MontoyaApi api) {
+    protected AbstractTablePanel(MontoyaApi api, Bookmarks bookmarks) {
         this.api = api;
+        this.bookmarks = bookmarks;
         setLayout(new BorderLayout());
         debounce.setRepeats(false);
 
@@ -103,6 +118,10 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         toolbarLeft.add(bodyBox);
         toolbarLeft.add(regexBox);
         toolbarLeft.add(caseBox);
+        bookmarkOnlyBox.setVisible(bookmarks != null);
+        bookmarkOnlyBox.setToolTipText("Show only bookmarked rows");
+        bookmarkOnlyBox.addActionListener(e -> applySearch());
+        toolbarLeft.add(bookmarkOnlyBox);
         toolbarLeft.add(Box.createHorizontalStrut(10));
         toolbarLeft.add(countLabel);
 
@@ -121,7 +140,8 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         bodyBox.setToolTipText("Search inside request/response body (where available)");
         regexBox.setToolTipText("Regular-expression mode");
         caseBox.setToolTipText("Case sensitive");
-        searchField.setToolTipText("Space = AND, -term to exclude. e.g.  admin -logout");
+        searchField.setToolTipText("Space = AND, -term to exclude. e.g.  admin -logout"
+                + "   (Ctrl+F to focus here, Esc to clear)");
 
         table.setRowSorter(sorter);
         table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
@@ -147,6 +167,65 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         bodyBox.addActionListener(e -> applySearch());
         regexBox.addActionListener(e -> applySearch());
         caseBox.addActionListener(e -> applySearch());
+
+        // Esc, while the search field has focus, clears it and returns focus to the table -- local to
+        // this one component (WHEN_FOCUSED), so it can never intercept Esc anywhere else.
+        searchField.getInputMap(JComponent.WHEN_FOCUSED)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "reconhub.clearSearch");
+        searchField.getActionMap().put("reconhub.clearSearch", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) {
+                searchField.setText("");
+                applySearch();
+                table.requestFocusInWindow();
+            }
+        });
+
+        // Ctrl+B toggles the bookmark on the selected row -- shares the exact handler the "Bookmark
+        // this row" menu item uses. No-ops (silently) when no Bookmarks store was provided.
+        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_B, InputEvent.CTRL_DOWN_MASK), "reconhub.toggleBookmark");
+        table.getActionMap().put("reconhub.toggleBookmark", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) {
+                toggleBookmark(rowAt(table.getSelectedRow()));
+            }
+        });
+    }
+
+    /** Focuses the search field (bound to Ctrl+F on the current tab by {@code MainTab}). */
+    public void focusSearch() {
+        searchField.requestFocusInWindow();
+        searchField.selectAll();
+    }
+
+    /** Row identity key for bookmarking/notes (every model class already has one via {@code key()}).
+     * Default null: the bookmark menu items / highlight / quick filter simply don't appear. */
+    protected String rowKey(T row) {
+        return null;
+    }
+
+    private void toggleBookmark(T row) {
+        String key = row == null ? null : rowKey(row);
+        if (bookmarks == null || key == null) {
+            return;
+        }
+        bookmarks.setBookmarked(key, !bookmarks.isBookmarked(key));
+        table.repaint();
+    }
+
+    private void editNote(T row) {
+        String key = row == null ? null : rowKey(row);
+        if (bookmarks == null || key == null) {
+            return;
+        }
+        JTextArea area = new JTextArea(bookmarks.noteFor(key), 6, 40);
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        int choice = JOptionPane.showConfirmDialog(this, new JScrollPane(area),
+                "ReconHub — note", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+        if (choice == JOptionPane.OK_OPTION) {
+            bookmarks.setNote(key, area.getText());
+            table.repaint();
+        }
     }
 
     /**
@@ -211,8 +290,37 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
                 c.setBackground(t.getBackground());
                 c.setForeground(t.getForeground());
             }
-            styleCell(c, rowAt(row), col, sel);
+            T rowObj = rowAt(row);
+            styleCell(c, rowObj, col, sel);
+            applyBookmarkStyle(c, rowObj, col, sel);
             return c;
+        }
+    }
+
+    /** Base-class-level bookmark highlight/tooltip, applied on top of (never overriding) whatever
+     * {@link #styleCell} already set -- automatic for all five bookmark-capable panels, no per-subclass
+     * wiring needed beyond overriding {@link #rowKey}. */
+    private void applyBookmarkStyle(Component c, T row, int col, boolean sel) {
+        String key = row == null || bookmarks == null ? null : rowKey(row);
+        if (key == null || !bookmarks.isBookmarked(key)) {
+            return;
+        }
+        if (!sel) {
+            // A faint accent tint across the whole row -- subtle enough to not fight styleCell's own
+            // foreground colors (severity/category text stays readable), but visible at a glance.
+            java.awt.Color bg = c.getBackground();
+            java.awt.Color accent = SwingColors.ACCENT;
+            int r = (bg.getRed() * 9 + accent.getRed()) / 10;
+            int g = (bg.getGreen() * 9 + accent.getGreen()) / 10;
+            int b = (bg.getBlue() * 9 + accent.getBlue()) / 10;
+            c.setBackground(new java.awt.Color(r, g, b));
+        }
+        if (col == 0) {
+            c.setFont(c.getFont().deriveFont(Font.BOLD));
+        }
+        String note = bookmarks.noteFor(key);
+        if (!note.isEmpty() && c instanceof JComponent jc && jc.getToolTipText() == null) {
+            jc.setToolTipText("★ " + note);
         }
     }
 
@@ -293,10 +401,25 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         add(menu, "Copy as curl", row != null && requestFor(row) != null,
                 () -> UiUtil.copyToClipboard(toCurl(requestFor(row))));
         extraMenuItems(menu, row);
+
+        String key = row == null ? null : rowKey(row);
+        if (bookmarks != null && key != null) {
+            menu.addSeparator();
+            boolean marked = bookmarks.isBookmarked(key);
+            addMenuItem(menu, marked ? "★ Remove bookmark" : "☆ Bookmark this row (Ctrl+B)",
+                    true, () -> toggleBookmark(row));
+            addMenuItem(menu, "Edit note…", true, () -> editNote(row));
+        }
         return menu;
     }
 
-    /** Hook for subclasses to append their own right-click items (a separator is added first). */
+    /**
+     * Hook for subclasses to append their own right-click items. Unlike the base items above, this
+     * does <b>not</b> get a separator for free -- {@code buildMenu} calls it with no separator before
+     * or after, so add one yourself (with {@code menu.addSeparator()}) if your items should be visually
+     * grouped apart from the base Copy/Open/Send items. (Every current override does this already;
+     * this doc previously claimed the separator was automatic, which it never was.)
+     */
     protected void extraMenuItems(JPopupMenu menu, T row) {
         // subclasses override
     }
@@ -431,7 +554,7 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         // refresh tick rebuilt every row's full decoded request+response text just to match it against
         // zero patterns and discard it.
         boolean hasTerms = !includes.isEmpty() || !excludes.isEmpty();
-        sorter.setRowFilter(hasTerms || hasRowFilter()
+        sorter.setRowFilter(hasTerms || hasRowFilter() || bookmarkOnlyBox.isSelected()
                 ? new SearchFilter(includes, excludes, field, useBody) : null);
         updateCount();
         highlightViewer();
@@ -502,6 +625,11 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
             int idx = entry.getIdentifier();
             T row = (idx >= 0 && idx < rows.size()) ? rows.get(idx) : null;
             if (!rowIncluded(row)) {
+                return false;
+            }
+            if (bookmarkOnlyBox.isSelected()
+                    && (bookmarks == null || row == null
+                        || !bookmarks.isBookmarked(rowKey(row)))) {
                 return false;
             }
             if (includes.isEmpty() && excludes.isEmpty()) {

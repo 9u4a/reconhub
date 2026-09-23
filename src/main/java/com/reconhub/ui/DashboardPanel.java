@@ -1,5 +1,6 @@
 package com.reconhub.ui;
 
+import burp.api.montoya.MontoyaApi;
 import com.reconhub.analysis.ParameterClassifier;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Endpoint;
@@ -21,7 +22,6 @@ import javax.swing.JTable;
 import javax.swing.ListSelectionModel;
 import javax.swing.table.AbstractTableModel;
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
@@ -61,21 +61,12 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         void filterTech(String query);
     }
 
-    private static final Color ACCENT = new Color(0x4da3ff);
-    private static final Color MUTED = new Color(0x9aa4b2);
-    private static final Color LINE = new Color(0x2a313b);
-    private static final Map<Finding.Severity, Color> SEV_COLORS = new EnumMap<>(Finding.Severity.class);
-    static {
-        SEV_COLORS.put(Finding.Severity.HIGH, new Color(0xff5c5c));
-        SEV_COLORS.put(Finding.Severity.MEDIUM, new Color(0xffb020));
-        SEV_COLORS.put(Finding.Severity.LOW, new Color(0x4da3ff));
-        SEV_COLORS.put(Finding.Severity.INFO, new Color(0x7a8698));
-    }
     /** Param-name classes considered high-risk for the "Notable endpoints" list. */
     private static final Set<String> RISKY_CLASSES =
             Set.of("IDOR", "Redirect/SSRF", "File/Path", "SQLi/Sort", "Command", "Secret/Token");
 
     private final DataStore store;
+    private final MontoyaApi api;
     private Navigator navigator;
     private com.reconhub.active.BruteforceEngine bruteforce;
     private com.reconhub.core.Settings settings;
@@ -90,7 +81,7 @@ public final class DashboardPanel extends JPanel implements Refreshable {
     // Plain FlowLayout (not WrapLayout): the four chips never split across lines — when they don't
     // fit beside the pills the whole row drops to the next line as a single unit.
     private final JPanel severityRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-    private final BarChartPanel hostChart = new BarChartPanel("", 8, ACCENT);
+    private final BarChartPanel hostChart = new BarChartPanel("", 8, SwingColors.ACCENT);
     private final JPanel classChips = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 4));
 
     // Host scorecard: the visible table carries only Host/Endpoints/Params; the full per-host
@@ -114,8 +105,9 @@ public final class DashboardPanel extends JPanel implements Refreshable {
     private final JTable typeTable = new JTable(typeModel);
     private final JTable notableTable = new JTable(notableModel);
 
-    public DashboardPanel(DataStore store) {
+    public DashboardPanel(DataStore store, MontoyaApi api) {
         this.store = store;
+        this.api = api;
         setLayout(new BorderLayout(0, 12));
         setBorder(BorderFactory.createEmptyBorder(8, 16, 14, 16));
 
@@ -227,7 +219,8 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         }
         severityRow.removeAll();
         for (Finding.Severity sev : Finding.Severity.values()) {
-            severityRow.add(chip(sev.name() + "  " + sevCounts.getOrDefault(sev, 0), SEV_COLORS.get(sev)));
+            severityRow.add(SwingColors.chip(sev.name() + "  " + sevCounts.getOrDefault(sev, 0),
+                    SwingColors.severityFg(sev)));
         }
         severityRow.revalidate();
         severityRow.repaint();
@@ -327,17 +320,17 @@ public final class DashboardPanel extends JPanel implements Refreshable {
 
         JPanel counts = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 2));
         counts.setOpaque(false);
-        counts.add(chip("Endpoints  " + c[0], MUTED));
-        counts.add(chip("Parameters  " + c[1], MUTED));
+        counts.add(SwingColors.chip("Endpoints  " + c[0], SwingColors.MUTED));
+        counts.add(SwingColors.chip("Parameters  " + c[1], SwingColors.MUTED));
         col.add(leftAlign(counts));
         col.add(Box.createVerticalStrut(8));
 
         JPanel sev = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 2));
         sev.setOpaque(false);
-        sev.add(chip("HIGH  " + c[2], SEV_COLORS.get(Finding.Severity.HIGH)));
-        sev.add(chip("MEDIUM  " + c[3], SEV_COLORS.get(Finding.Severity.MEDIUM)));
-        sev.add(chip("LOW  " + c[4], SEV_COLORS.get(Finding.Severity.LOW)));
-        sev.add(chip("INFO  " + c[5], SEV_COLORS.get(Finding.Severity.INFO)));
+        sev.add(SwingColors.chip("HIGH  " + c[2], SwingColors.severityFg(Finding.Severity.HIGH)));
+        sev.add(SwingColors.chip("MEDIUM  " + c[3], SwingColors.severityFg(Finding.Severity.MEDIUM)));
+        sev.add(SwingColors.chip("LOW  " + c[4], SwingColors.severityFg(Finding.Severity.LOW)));
+        sev.add(SwingColors.chip("INFO  " + c[5], SwingColors.severityFg(Finding.Severity.INFO)));
         col.add(leftAlign(sev));
         col.add(Box.createVerticalStrut(12));
 
@@ -353,7 +346,7 @@ public final class DashboardPanel extends JPanel implements Refreshable {
             mh.add(muted("none"));
         } else {
             for (String n : names) {
-                mh.add(chip(n, SEV_COLORS.get(Finding.Severity.MEDIUM)));
+                mh.add(SwingColors.chip(n, SwingColors.severityFg(Finding.Severity.MEDIUM)));
             }
         }
         col.add(leftAlign(mh));
@@ -420,7 +413,7 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         if (counts.isEmpty()) {
             classChips.add(muted("None"));
         } else {
-            counts.forEach((cls, n) -> classChips.add(chip(cls + "  " + n, ACCENT)));
+            counts.forEach((cls, n) -> classChips.add(SwingColors.chip(cls + "  " + n, SwingColors.ACCENT)));
         }
         classChips.revalidate();
         classChips.repaint();
@@ -453,7 +446,12 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         JPopupMenu m = new JPopupMenu();
         boolean real = host != null && host.contains(".") && !host.startsWith("(");
         item(m, "Copy host", host != null, () -> UiUtil.copyToClipboard(host));
-        item(m, "Open in browser", real, () -> UiUtil.openInBrowser(null, "https://" + host));
+        // Reuses whatever scheme was actually observed for this host (RunBruteforceAction.inferScheme)
+        // instead of hardcoding https:// -- the same bug class already fixed on TechPanel.rowUrl and
+        // the bruteforce path (see CLAUDE.md): a hardcoded https:// silently fails for an http-only host
+        // (e.g. a local dev server).
+        item(m, "Open in browser", real,
+                () -> UiUtil.openInBrowser(api, RunBruteforceAction.inferScheme(store, host) + "://" + host));
         m.addSeparator();
         item(m, "View endpoints for this host", navigator != null && real,
                 () -> navigator.filterEndpoints(host));
@@ -481,7 +479,7 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         JPopupMenu m = new JPopupMenu();
         boolean http = url != null && url.startsWith("http");
         item(m, "Copy URL", url != null, () -> UiUtil.copyToClipboard(url));
-        item(m, "Open in browser", http, () -> UiUtil.openInBrowser(null, url));
+        item(m, "Open in browser", http, () -> UiUtil.openInBrowser(api, url));
         m.addSeparator();
         item(m, "View in Endpoints", navigator != null && url != null,
                 () -> navigator.filterEndpoints(url));
@@ -571,31 +569,19 @@ public final class DashboardPanel extends JPanel implements Refreshable {
     private JPanel pill(String title, JLabel value) {
         JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 5, 2));
         p.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(LINE),
+                BorderFactory.createLineBorder(SwingColors.line()),
                 BorderFactory.createEmptyBorder(1, 8, 1, 10)));
         JLabel t = new JLabel(title.toUpperCase());
         t.setFont(t.getFont().deriveFont(10.5f));
-        t.setForeground(MUTED);
+        t.setForeground(SwingColors.MUTED);
         p.add(t);
         p.add(value);
         return p;
     }
 
-    private static JLabel chip(String text, Color c) {
-        JLabel l = new JLabel(text);
-        l.setOpaque(true);
-        l.setBackground(new Color(c.getRed(), c.getGreen(), c.getBlue(), 38));
-        l.setForeground(c);
-        l.setFont(l.getFont().deriveFont(Font.BOLD, 12f));
-        l.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(c, 1, true),
-                BorderFactory.createEmptyBorder(3, 10, 3, 10)));
-        return l;
-    }
-
     private static JLabel muted(String text) {
         JLabel l = new JLabel(text);
-        l.setForeground(MUTED);
+        l.setForeground(SwingColors.MUTED);
         return l;
     }
 

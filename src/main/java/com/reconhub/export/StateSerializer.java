@@ -9,6 +9,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonIOException;
 import com.reconhub.active.BruteforceEngine;
 import com.reconhub.active.BruteforceJob;
+import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
@@ -60,6 +61,7 @@ public final class StateSerializer {
         List<JsAssetDto> jsAssets;
         List<TechDto> tech;
         List<BruteforceJobDto> bruteforceJobs;
+        List<BookmarkDto> bookmarks;
     }
 
     private static final class Counters {
@@ -117,17 +119,31 @@ public final class StateSerializer {
         List<HitDto> hits;
     }
 
+    // key == the row's own model key() -- see core.Bookmarks class javadoc for why one string-keyed
+    // map covers all five row types without a per-type DTO.
+    private static final class BookmarkDto {
+        String key, note;
+        boolean bookmarked;
+    }
+
     // ---- Export ---------------------------------------------------------
 
-    /** Same as {@link #export(DataStore, Path, boolean, BruteforceEngine)} with no bruteforce jobs
-     * captured (kept for any caller that doesn't have one handy). */
+    /** Same as {@link #export(DataStore, Path, boolean, BruteforceEngine, Bookmarks)} with no
+     * bruteforce jobs captured (kept for any caller that doesn't have one handy). */
     public static void export(DataStore store, Path file, boolean includeMessages)
             throws IOException {
-        export(store, file, includeMessages, null);
+        export(store, file, includeMessages, null, null);
+    }
+
+    /** Same as {@link #export(DataStore, Path, boolean, BruteforceEngine, Bookmarks)} with no
+     * bookmarks captured (kept for any caller that doesn't have one handy). */
+    public static void export(DataStore store, Path file, boolean includeMessages,
+                              BruteforceEngine bruteforce) throws IOException {
+        export(store, file, includeMessages, bruteforce, null);
     }
 
     public static void export(DataStore store, Path file, boolean includeMessages,
-                              BruteforceEngine bruteforce) throws IOException {
+                              BruteforceEngine bruteforce, Bookmarks bookmarks) throws IOException {
         State s = new State();
         s.format = FORMAT;
         s.version = VERSION;
@@ -252,6 +268,17 @@ public final class StateSerializer {
             }
         }
 
+        s.bookmarks = new ArrayList<>();
+        if (bookmarks != null) {
+            for (Map.Entry<String, Bookmarks.Entry> e : bookmarks.snapshotAll().entrySet()) {
+                BookmarkDto d = new BookmarkDto();
+                d.key = e.getKey();
+                d.bookmarked = e.getValue().bookmarked();
+                d.note = e.getValue().note();
+                s.bookmarks.add(d);
+            }
+        }
+
         Files.createDirectories(file.toAbsolutePath().getParent());
         // Stream straight to the file: GSON.toJson(s) + getBytes() used to hold the whole document
         // twice more in memory (a String and a byte[]) on top of the DTO graph -- with includeMessages
@@ -272,16 +299,23 @@ public final class StateSerializer {
 
     // ---- Import ---------------------------------------------------------
 
-    /** Same as {@link #importInto(DataStore, Path, boolean, BruteforceEngine)} with bruteforce jobs
-     * left out of the import (kept for any caller that doesn't have one handy). */
+    /** Same as {@link #importInto(DataStore, Path, boolean, BruteforceEngine, Bookmarks)} with
+     * bruteforce jobs left out of the import (kept for any caller that doesn't have one handy). */
     public static String importInto(DataStore store, Path file, boolean clearFirst)
             throws IOException {
-        return importInto(store, file, clearFirst, null);
+        return importInto(store, file, clearFirst, null, null);
+    }
+
+    /** Same as {@link #importInto(DataStore, Path, boolean, BruteforceEngine, Bookmarks)} with
+     * bookmarks left out of the import (kept for any caller that doesn't have one handy). */
+    public static String importInto(DataStore store, Path file, boolean clearFirst,
+                                    BruteforceEngine bruteforce) throws IOException {
+        return importInto(store, file, clearFirst, bruteforce, null);
     }
 
     /** @return a short summary of what was imported. */
     public static String importInto(DataStore store, Path file, boolean clearFirst,
-                                    BruteforceEngine bruteforce) throws IOException {
+                                    BruteforceEngine bruteforce, Bookmarks bookmarks) throws IOException {
         State s;
         try (Reader r = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             s = GSON.fromJson(r, State.class);
@@ -377,10 +411,25 @@ public final class StateSerializer {
             }
         }
 
+        // Merge, never clear -- bookmarks are user-authored, not scraped traffic data, so they're
+        // deliberately not touched by clearFirst/store.clear() (same reasoning as core.Bookmarks not
+        // living inside DataStore at all). An entry already present locally for a key not in this file
+        // is left alone.
+        int marks = 0;
+        if (s.bookmarks != null && bookmarks != null) {
+            for (BookmarkDto d : s.bookmarks) {
+                if (d.key != null) {
+                    bookmarks.restore(d.key, new Bookmarks.Entry(d.bookmarked, d.note == null ? "" : d.note));
+                    marks++;
+                }
+            }
+        }
+
         store.fireChanged();
-        return String.format("Imported %d endpoints, %d parameters, %d findings, %d JS, %d hosts%s%s.",
+        return String.format("Imported %d endpoints, %d parameters, %d findings, %d JS, %d hosts%s%s%s.",
                 endpoints, params, findings, js, tech,
                 jobs > 0 ? ", " + jobs + " bruteforce jobs" : "",
+                marks > 0 ? ", " + marks + " bookmarks" : "",
                 s.includesMessages ? " (with messages)" : "");
     }
 

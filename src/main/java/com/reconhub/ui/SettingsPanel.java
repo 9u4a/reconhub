@@ -4,6 +4,7 @@ import burp.api.montoya.MontoyaApi;
 import com.reconhub.active.BruteforceEngine;
 import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.UserRuleStore;
+import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Finding;
 import com.reconhub.core.Settings;
@@ -50,6 +51,7 @@ public final class SettingsPanel extends JPanel {
     private final Settings settings;
     private final TrafficIngestor ingestor;
     private final BruteforceEngine bruteforce;
+    private final Bookmarks bookmarks;
 
     private final JLabel status = new JLabel(" ");
     private final JTextField jsDir = new JTextField(36);
@@ -66,12 +68,13 @@ public final class SettingsPanel extends JPanel {
     private JTable rulesTableRef;
 
     public SettingsPanel(MontoyaApi api, DataStore store, Settings settings,
-                         TrafficIngestor ingestor, BruteforceEngine bruteforce) {
+                         TrafficIngestor ingestor, BruteforceEngine bruteforce, Bookmarks bookmarks) {
         this.api = api;
         this.store = store;
         this.settings = settings;
         this.ingestor = ingestor;
         this.bruteforce = bruteforce;
+        this.bookmarks = bookmarks;
 
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
@@ -484,7 +487,7 @@ public final class SettingsPanel extends JPanel {
             return;
         }
         boolean withMsgs = includeMessages.isSelected();
-        runExport(() -> StateSerializer.export(store, f.toPath(), withMsgs, bruteforce), f);
+        runExport(() -> StateSerializer.export(store, f.toPath(), withMsgs, bruteforce, bookmarks), f);
     }
 
     private void importState() {
@@ -505,7 +508,7 @@ public final class SettingsPanel extends JPanel {
             private Exception error;
             @Override protected String doInBackground() {
                 try {
-                    return StateSerializer.importInto(store, f.toPath(), clearFirst, bruteforce);
+                    return StateSerializer.importInto(store, f.toPath(), clearFirst, bruteforce, bookmarks);
                 } catch (Exception e) {
                     error = e;
                     return null;
@@ -589,16 +592,13 @@ public final class SettingsPanel extends JPanel {
         }
     }
 
-    private static final java.awt.Color ACCENT = new java.awt.Color(0x4da3ff);
-    private static final java.awt.Color RULE = new java.awt.Color(0x2a313b);
-
     /** A prominent, full-width section header: accent title over a separator line. */
     private static JLabel section(String title) {
         JLabel l = new JLabel(title.toUpperCase());
         l.setFont(l.getFont().deriveFont(java.awt.Font.BOLD, 13.5f));
-        l.setForeground(ACCENT);
+        l.setForeground(SwingColors.ACCENT);
         l.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 0, 1, 0, RULE),
+                BorderFactory.createMatteBorder(0, 0, 1, 0, SwingColors.line()),
                 BorderFactory.createEmptyBorder(8, 0, 5, 0)));
         l.setAlignmentX(Component.LEFT_ALIGNMENT);
         // Stretch full width in the Y-axis BoxLayout so the underline spans the panel.

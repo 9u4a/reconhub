@@ -35,7 +35,12 @@ introspection**(스키마를 실제로 파싱해 타입.필드를 엔드포인�
 **모든 탭 공통**: 한/영·본문 검색(정규식·다중 AND·제외·컬럼 지정), 정렬 3단계(오름 → 내림 → 기본),
 CSV 내보내기, 행 우클릭 Copy/Open/Repeater/Intruder/curl. Request/Response 뷰어가 있는 탭(Endpoints·
 Parameters·Findings·JS Assets)에서 JS 응답이면 **Beautify JS** 토글로 한 줄로 압축된 minified 본문을
-줄바꿈·들여쓰기해서 열람(화면 표시만 바꿈 — 캡처된 응답 자체나 탐지 로직에는 영향 없음).
+줄바꿈·들여쓰기해서 열람(화면 표시만 바꿈 — 캡처된 응답 자체나 탐지 로직에는 영향 없음). 인벤토리
+탭(Endpoints·Parameters·Findings·JS Assets·Tech)은 행 우클릭 **★ Bookmark / Edit note…**(또는
+`Ctrl+B`)로 북마크·메모 가능 — Burp 재시작 후에도 유지, `★ only` 체크박스로 북마크된 행만 필터,
+State Export/Import에도 보존. **키보드 단축키**: `Ctrl+1`~`Ctrl+8`로 탭 전환, `Ctrl+F`로 현재 탭
+검색창 포커스, 검색창에서 `Esc`로 검색어 지우기. **다크테마**: Burp의 라이트/다크 테마를 따라감(실시간
+전환 반영, 최대 1초 지연).
 
 ## 사용법
 

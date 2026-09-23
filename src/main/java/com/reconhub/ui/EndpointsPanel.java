@@ -4,6 +4,7 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.active.BruteforceEngine;
 import com.reconhub.analysis.PayloadCheatsheet;
+import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.Settings;
 import com.reconhub.model.Endpoint;
@@ -26,13 +27,15 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
     private BruteforceEngine bruteforce;
     private Settings settings;
 
-    public EndpointsPanel(DataStore store, MontoyaApi api, PayloadCheatsheet cheatsheet) {
-        super(api);
+    public EndpointsPanel(DataStore store, MontoyaApi api, PayloadCheatsheet cheatsheet, Bookmarks bookmarks) {
+        super(api, bookmarks);
         this.store = store;
         this.cheatsheet = cheatsheet;
         this.viewer = new MessageViewer(api);
         installDetail(viewer);
     }
+
+    @Override protected String rowKey(Endpoint e) { return e == null ? null : e.key(); }
 
     /** Wires the (ACTIVE) known-path bruteforce action for this tab's right-click menu; called once. */
     public void setBruteforce(BruteforceEngine engine, Settings settings) {

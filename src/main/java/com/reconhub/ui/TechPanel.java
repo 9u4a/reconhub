@@ -2,6 +2,7 @@ package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
 import com.reconhub.active.BruteforceEngine;
+import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.Settings;
 import com.reconhub.model.TechInfo;
@@ -27,13 +28,15 @@ public final class TechPanel extends AbstractTablePanel<TechInfo> {
     private BruteforceEngine bruteforce;
     private Settings settings;
 
-    public TechPanel(DataStore store, MontoyaApi api) {
-        super(api);
+    public TechPanel(DataStore store, MontoyaApi api, Bookmarks bookmarks) {
+        super(api, bookmarks);
         this.store = store;
         detailBody.setLayout(new BoxLayout(detailBody, BoxLayout.Y_AXIS));
         detailBody.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
         installDetail(new JScrollPane(detailBody));
     }
+
+    @Override protected String rowKey(TechInfo t) { return t == null ? null : t.key(); }
 
     /** Wires the (ACTIVE) known-path bruteforce action for this tab's right-click menu; called once. */
     public void setBruteforce(BruteforceEngine engine, Settings settings) {
@@ -74,7 +77,7 @@ public final class TechPanel extends AbstractTablePanel<TechInfo> {
         JPanel wrap = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 3));
         wrap.setAlignmentX(Component.LEFT_ALIGNMENT);
         JLabel t = new JLabel(title + ":");
-        t.setForeground(new java.awt.Color(0x9aa4b2));
+        t.setForeground(SwingColors.MUTED);
         wrap.add(t);
         if (items.isEmpty()) {
             wrap.add(new JLabel("(none)"));

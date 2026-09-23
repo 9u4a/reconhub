@@ -6,6 +6,7 @@ import com.reconhub.active.BruteforceEngine;
 import com.reconhub.active.KnownPaths;
 import com.reconhub.analysis.PatternRegistry;
 import com.reconhub.analysis.PayloadCheatsheet;
+import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.ScopeFilter;
 import com.reconhub.core.Settings;
@@ -28,6 +29,7 @@ public final class ReconHubExtension implements BurpExtension {
     @Override
     public void initialize(MontoyaApi api) {
         api.extension().setName("ReconHub");
+        MainTab.initTheme(api);   // before any UI is built, so every panel's colors are theme-correct
 
         PatternRegistry patterns = PatternRegistry.load();
         for (String err : patterns.loadErrors()) {
@@ -43,6 +45,7 @@ public final class ReconHubExtension implements BurpExtension {
         // fixes autoIngestOnLoad's previous "no chance to turn it off before it fires" ordering issue,
         // since a saved false now loads before the auto-ingest check further down.
         Settings settings = Settings.load(api);
+        Bookmarks bookmarks = Bookmarks.load(api);
         TrafficIngestor ingestor = new TrafficIngestor(api, store, settings, patterns);
 
         PayloadCheatsheet cheatsheet = PayloadCheatsheet.load();
@@ -62,11 +65,12 @@ public final class ReconHubExtension implements BurpExtension {
         api.http().registerHttpHandler(ingestor);
         api.userInterface().registerContextMenuItemsProvider(new SendToReconHubMenu(ingestor));
 
-        JComponent tab = buildUi(api, store, settings, ingestor, cheatsheet, bruteforce);
+        JComponent tab = buildUi(api, store, settings, ingestor, cheatsheet, bruteforce, bookmarks);
         api.userInterface().registerSuiteTab("ReconHub", tab);
 
         api.extension().registerUnloadingHandler(() -> {
             settings.save(api);
+            bookmarks.save(api);
             ingestor.shutdown();
             bruteforce.shutdown();
         });
@@ -83,10 +87,10 @@ public final class ReconHubExtension implements BurpExtension {
 
     private static JComponent buildUi(MontoyaApi api, DataStore store, Settings settings,
                                       TrafficIngestor ingestor, PayloadCheatsheet cheatsheet,
-                                      BruteforceEngine bruteforce) {
+                                      BruteforceEngine bruteforce, Bookmarks bookmarks) {
         AtomicReference<JComponent> ref = new AtomicReference<>();
         Runnable build = () -> ref.set(
-                new MainTab(api, store, settings, ingestor, cheatsheet, bruteforce).component());
+                new MainTab(api, store, settings, ingestor, cheatsheet, bruteforce, bookmarks).component());
         if (SwingUtilities.isEventDispatchThread()) {
             build.run();
         } else {

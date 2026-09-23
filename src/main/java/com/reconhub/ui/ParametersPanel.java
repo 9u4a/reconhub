@@ -5,6 +5,7 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.active.BruteforceEngine;
 import com.reconhub.analysis.ParameterClassifier;
 import com.reconhub.analysis.PayloadCheatsheet;
+import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.Settings;
 import com.reconhub.model.ParameterInfo;
@@ -34,13 +35,15 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
     private BruteforceEngine bruteforce;
     private Settings settings;
 
-    public ParametersPanel(DataStore store, MontoyaApi api, PayloadCheatsheet cheatsheet) {
-        super(api);
+    public ParametersPanel(DataStore store, MontoyaApi api, PayloadCheatsheet cheatsheet, Bookmarks bookmarks) {
+        super(api, bookmarks);
         this.store = store;
         this.cheatsheet = cheatsheet;
         this.viewer = new MessageViewer(api);
         installDetail(viewer);
     }
+
+    @Override protected String rowKey(ParameterInfo p) { return p == null ? null : p.key(); }
 
     /** Wires the (ACTIVE) known-path bruteforce action for this tab's right-click menu; called once. */
     public void setBruteforce(BruteforceEngine engine, Settings settings) {

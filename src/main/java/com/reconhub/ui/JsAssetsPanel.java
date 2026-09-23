@@ -2,6 +2,7 @@ package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
+import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.TrafficIngestor;
 import com.reconhub.model.Endpoint;
@@ -50,8 +51,8 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
     private volatile String currentSavedPath = "";
     private DashboardPanel.Navigator navigator;
 
-    public JsAssetsPanel(DataStore store, MontoyaApi api, TrafficIngestor ingestor) {
-        super(api);
+    public JsAssetsPanel(DataStore store, MontoyaApi api, TrafficIngestor ingestor, Bookmarks bookmarks) {
+        super(api, bookmarks);
         this.store = store;
         this.ingestor = ingestor;
         this.viewer = new MessageViewer(api);
@@ -82,6 +83,8 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
     public void setNavigator(DashboardPanel.Navigator navigator) {
         this.navigator = navigator;
     }
+
+    @Override protected String rowKey(JsAsset a) { return a == null ? null : a.key(); }
 
     @Override
     protected void extraMenuItems(JPopupMenu menu, JsAsset a) {

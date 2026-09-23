@@ -6,6 +6,7 @@ import com.reconhub.active.BruteforceEngine;
 import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.JwtDecoder;
 import com.reconhub.analysis.PayloadCheatsheet;
+import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.Settings;
 import com.reconhub.model.Finding;
@@ -53,8 +54,8 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     private BruteforceEngine bruteforce;
 
     public FindingsPanel(DataStore store, Settings settings, MontoyaApi api,
-                         PayloadCheatsheet cheatsheet) {
-        super(api);
+                         PayloadCheatsheet cheatsheet, Bookmarks bookmarks) {
+        super(api, bookmarks);
         this.store = store;
         this.settings = settings;
         this.cheatsheet = cheatsheet;
@@ -97,6 +98,8 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
             addToToolbar(b);
         }
     }
+
+    @Override protected String rowKey(Finding f) { return f == null ? null : f.key(); }
 
     // rowIncluded below can hide rows on its own (severity threshold, muted categories, quick-filter
     // toggles) independent of the search box -- the filter must stay installed even with an empty
