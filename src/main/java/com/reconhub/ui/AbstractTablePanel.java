@@ -11,9 +11,9 @@ import com.reconhub.core.DataStore;
 import com.reconhub.core.Settings;
 
 import javax.swing.AbstractAction;
+import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.JButton;
-import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
@@ -27,6 +27,7 @@ import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.JToggleButton;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.RowFilter;
@@ -81,11 +82,15 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
 
     private final JTextField searchField = new JTextField(30);
     private final JComboBox<String> fieldBox = new JComboBox<>();
-    private final JCheckBox bodyBox = new JCheckBox("Body", true);
-    private final JCheckBox regexBox = new JCheckBox(".*", false);
-    private final JCheckBox caseBox = new JCheckBox("Aa", false);
-    // Only shown when a bookmarks store was actually provided (see the ctor).
-    private final JCheckBox bookmarkOnlyBox = new JCheckBox("★ only", false);
+    // Toggle buttons, not checkboxes (0.38.1+) -- a checkbox's tiny square indicator is easy to miss
+    // at a glance among several crammed together; a toggle button's own background clearly shows
+    // on/off, and doesn't need the indicator box at all. See searchToggle() below.
+    private final JToggleButton bodyBox = searchToggle("Body", true, SwingColors.ACCENT);
+    private final JToggleButton regexBox = searchToggle(".*", false, SwingColors.ACCENT);
+    private final JToggleButton caseBox = searchToggle("Aa", false, SwingColors.ACCENT);
+    // Only shown when a bookmarks store was actually provided (see the ctor). Tinted with the same
+    // gold used for a bookmarked row's own highlight, so the two visually associate.
+    private final JToggleButton bookmarkOnlyBox = searchToggle("★ only", false, SwingColors.BOOKMARK);
     private final JLabel countLabel = new JLabel("0 rows");
     private final JScrollPane scrollPane = new JScrollPane(table);
     private final JPanel toolbarLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 6));
@@ -107,7 +112,11 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         setLayout(new BorderLayout());
         debounce.setRepeats(false);
 
-        // Left cluster: search controls + subclass quick-filters + row count.
+        // Left cluster: search controls + subclass quick-filters + row count, grouped visually with
+        // thin vertical separators (0.38.1+) rather than left to run together -- several small toggle
+        // buttons/checkboxes in a row with only the default 6px FlowLayout gap read as one cramped
+        // blob; a separator between each logical group (search text vs. search modifiers vs. bookmark
+        // filter vs. count) makes the grouping obvious at a glance.
         toolbarLeft.add(new JLabel("Search:"));
         toolbarLeft.add(searchField);
         fieldBox.addItem("All");
@@ -115,15 +124,23 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
             fieldBox.addItem(c);
         }
         toolbarLeft.add(fieldBox);
+
+        toolbarLeft.add(toolbarSeparator());
         bodyBox.setVisible(supportsBodySearch());
         toolbarLeft.add(bodyBox);
         toolbarLeft.add(regexBox);
         toolbarLeft.add(caseBox);
+
+        if (bookmarks != null) {
+            toolbarLeft.add(toolbarSeparator());
+        }
         bookmarkOnlyBox.setVisible(bookmarks != null);
-        bookmarkOnlyBox.setToolTipText("Show only bookmarked rows");
+        bookmarkOnlyBox.setToolTipText("Show only bookmarked rows (Ctrl+B toggles the selected row)");
         bookmarkOnlyBox.addActionListener(e -> applySearch());
         toolbarLeft.add(bookmarkOnlyBox);
-        toolbarLeft.add(Box.createHorizontalStrut(10));
+
+        toolbarLeft.add(toolbarSeparator());
+        toolbarLeft.add(Box.createHorizontalStrut(4));
         toolbarLeft.add(countLabel);
 
         // Right cluster: the CSV export button, pinned to the far right edge.
@@ -192,6 +209,29 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
                 toggleBookmark(rowAt(table.getSelectedRow()));
             }
         });
+    }
+
+    /** A small, tightly-margined toggle button for the search toolbar (Body/.*machine/Aa/★ only) --
+     * its own background clearly shows on/off (blended toward {@code tint} when selected), unlike a
+     * checkbox's small indicator square, which is easy to miss among several crammed together. */
+    private static JToggleButton searchToggle(String text, boolean selected, java.awt.Color tint) {
+        JToggleButton b = new JToggleButton(text, selected);
+        b.setMargin(new java.awt.Insets(1, 6, 1, 6));
+        b.setFocusPainted(false);
+        java.awt.Color defaultBg = b.getBackground();
+        Runnable restyle = () -> b.setBackground(
+                b.isSelected() ? SwingColors.blend(defaultBg, tint, 0.45) : defaultBg);
+        restyle.run();
+        b.addItemListener(e -> restyle.run());
+        return b;
+    }
+
+    /** A thin vertical rule for visually grouping the search toolbar's clusters (search text vs.
+     * search modifiers vs. bookmark filter vs. row count) apart from each other. */
+    private static javax.swing.JSeparator toolbarSeparator() {
+        javax.swing.JSeparator s = new javax.swing.JSeparator(SwingConstants.VERTICAL);
+        s.setPreferredSize(new Dimension(2, 20));
+        return s;
     }
 
     /** Focuses the search field (bound to Ctrl+F on the current tab by {@code MainTab}). */
@@ -310,21 +350,27 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
 
     /** Base-class-level bookmark highlight/tooltip, applied on top of (never overriding) whatever
      * {@link #styleCell} already set -- automatic for all five bookmark-capable panels, no per-subclass
-     * wiring needed beyond overriding {@link #rowKey}. */
+     * wiring needed beyond overriding {@link #rowKey}. Bold-only on column 0 (the original design) was
+     * hard to spot at a glance, so this is now a background tint strong enough to read on its own,
+     * plus a gold left-edge marker on column 0 -- neither depends on text color to be visible, so
+     * neither fights whatever severity/category foreground color {@link #styleCell} already set. */
     private void applyBookmarkStyle(Component c, T row, int col, boolean sel) {
         String key = row == null || bookmarks == null ? null : rowKey(row);
         if (key == null || !bookmarks.isBookmarked(key)) {
             return;
         }
         if (!sel) {
-            // A faint accent tint across the whole row -- subtle enough to not fight styleCell's own
-            // foreground colors (severity/category text stays readable), but visible at a glance. Blends
-            // from whatever background is already set (the plain table background, or the zebra stripe
-            // on an odd row), so the two compose instead of one clobbering the other.
-            c.setBackground(SwingColors.blend(c.getBackground(), SwingColors.ACCENT, 0.1));
+            // Blends from whatever background is already set (the plain table background, or the
+            // zebra stripe on an odd row), so the two compose instead of one clobbering the other.
+            c.setBackground(SwingColors.bookmarkTint(c.getBackground()));
         }
         if (col == 0) {
             c.setFont(c.getFont().deriveFont(Font.BOLD));
+            if (c instanceof JComponent jc) {
+                jc.setBorder(BorderFactory.createCompoundBorder(
+                        BorderFactory.createMatteBorder(0, 3, 0, 0, SwingColors.BOOKMARK),
+                        BorderFactory.createEmptyBorder(0, 1, 0, 0)));
+            }
         }
         String note = bookmarks.noteFor(key);
         if (!note.isEmpty() && c instanceof JComponent jc && jc.getToolTipText() == null) {

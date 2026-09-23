@@ -156,6 +156,21 @@ final class SwingColors {
         };
     }
 
+    // ---- bookmarks (0.38.1+) -- a distinct gold/star hue, deliberately NOT reused from the severity/
+    // category palette above: every other hue there (red/orange/blue/purple/green/pink/gray) is
+    // already a text foreground color somewhere, so tinting a bookmarked row's background with one of
+    // them would read as "this row is also HIGH/MEDIUM/..." rather than "this row is bookmarked". Gold
+    // has no other meaning anywhere else in ReconHub's palette. ----
+
+    static final Color BOOKMARK = new Color(0xe0c341);
+
+    /** Background tint for a bookmarked row -- a stronger blend than the zebra stripe's 0.08 (see
+     * {@link #stripe}) so it reads clearly at a glance even stacked on top of a striped row, on either
+     * theme, and doesn't depend on font weight alone to be noticeable. */
+    static Color bookmarkTint(Color base) {
+        return blend(base, BOOKMARK, 0.22);
+    }
+
     /** A rounded, tinted label used as a "chip". */
     static JLabel chip(String text, Color color) {
         JLabel l = new JLabel(text);
