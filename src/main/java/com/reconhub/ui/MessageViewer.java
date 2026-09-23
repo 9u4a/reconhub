@@ -104,6 +104,7 @@ public final class MessageViewer extends JPanel {
         beautifyBox.setToolTipText(beautifyTooltip(resp, canBeautify));
         if (resp == null) {
             responseEditor.setResponse(emptyResponse);
+            repaintEditors();
             return;
         }
         if (canBeautify && beautifyBox.isSelected()) {
@@ -112,6 +113,7 @@ public final class MessageViewer extends JPanel {
                 String pretty = JsBeautifier.beautify(BodyDecoder.decode(resp));
                 byte[] bytes = BodyDecoder.encode(pretty, contentType);
                 responseEditor.setResponse(resp.withBody(ByteArray.byteArray(bytes)));
+                repaintEditors();
                 return;
             } catch (RuntimeException ignored) {
                 // fall through to the original, unmodified response
@@ -119,6 +121,26 @@ public final class MessageViewer extends JPanel {
         }
         responseEditor.setResponse(resp);   // the exact original object -- a guaranteed byte-identical
                                              // restore when Beautify is off or fails
+        repaintEditors();
+    }
+
+    /**
+     * Forces a full repaint of both editors after their content changes. Defensive, not a confirmed
+     * fix: {@code setRequest}/{@code setResponse} are Burp's own API and should already repaint
+     * themselves, and the actual glyph rendering happens entirely inside Burp's closed-source editor
+     * component -- ReconHub draws none of that text itself (see the class javadoc). Reported symptom
+     * this guards against: intermittent overlapping/garbled text in the Request|Response panes,
+     * user-observed as resolution/DPI-dependent (doesn't reproduce on a differently-scaled monitor) --
+     * that profile matches a known class of Java2D/Swing HiDPI text-rendering bug on Windows with
+     * mixed-DPI multi-monitor setups, not something fixable from extension code. This just removes one
+     * possible contributing factor (a stale repaint region left over from the previous row) in case the
+     * editor's own invalidation doesn't always fire reliably under those same DPI-transition conditions.
+     */
+    private void repaintEditors() {
+        requestEditor.uiComponent().revalidate();
+        requestEditor.uiComponent().repaint();
+        responseEditor.uiComponent().revalidate();
+        responseEditor.uiComponent().repaint();
     }
 
     /** True when {@code resp} looks like JavaScript and isn't too large to reformat responsively. */
