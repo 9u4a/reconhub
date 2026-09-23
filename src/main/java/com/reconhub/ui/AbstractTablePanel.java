@@ -80,6 +80,13 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
     // Sorting cycles ascending -> descending -> unsorted (default order) on repeated header clicks.
     private final TriStateRowSorter<Model> sorter = new TriStateRowSorter<>(model);
 
+    // The field-selector combo's fixed display width across every tab -- see the ctor comment where
+    // it's applied via setPrototypeDisplayValue(). Endpoints' "Content-Type" is the longest column name
+    // among the tabs that are meant to look identical (Endpoints/Parameters/Findings/JS Assets); Tech's
+    // considerably longer "Missing security headers" is the one column name expected to actually need
+    // ellipsizing.
+    private static final String FIELD_BOX_WIDTH_REFERENCE = "Content-Type";
+
     private final JTextField searchField = new JTextField(30);
     private final JComboBox<String> fieldBox = new JComboBox<>();
     // Toggle buttons, not checkboxes (0.38.1+) -- a checkbox's tiny square indicator is easy to miss
@@ -123,6 +130,14 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         for (String c : columns()) {
             fieldBox.addItem(c);
         }
+        // Fixed width across every tab (0.38.2+) -- previously each combo auto-sized to its own widest
+        // column name, so e.g. Tech ("Missing security headers") ended up visibly wider than Endpoints
+        // ("Content-Type", the longest name here and so the reference every tab is now calibrated to).
+        // A name that doesn't fit is ellipsized by the renderer below, never silently clipped mid-glyph.
+        fieldBox.setPrototypeDisplayValue(FIELD_BOX_WIDTH_REFERENCE);
+        fieldBox.setRenderer(new EllipsisComboRenderer());
+        fieldBox.setToolTipText((String) fieldBox.getSelectedItem());
+        fieldBox.addItemListener(e -> fieldBox.setToolTipText((String) fieldBox.getSelectedItem()));
         toolbarLeft.add(fieldBox);
 
         toolbarLeft.add(toolbarSeparator());
@@ -232,6 +247,48 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         javax.swing.JSeparator s = new javax.swing.JSeparator(SwingConstants.VERTICAL);
         s.setPreferredSize(new Dimension(2, 20));
         return s;
+    }
+
+    /** Renders {@link #fieldBox}'s items ellipsized to fit the box's fixed width (see
+     * {@link #FIELD_BOX_WIDTH_REFERENCE}) instead of being silently clipped mid-glyph at the component
+     * edge; the untruncated name is always available as a tooltip, both in the dropdown list and (via
+     * the ctor's item listener) on the closed combo itself. */
+    private final class EllipsisComboRenderer extends javax.swing.DefaultListCellRenderer {
+        @Override
+        public Component getListCellRendererComponent(javax.swing.JList<?> list, Object value, int index,
+                                                       boolean isSelected, boolean cellHasFocus) {
+            JLabel c = (JLabel) super.getListCellRendererComponent(
+                    list, value, index, isSelected, cellHasFocus);
+            String full = value == null ? "" : value.toString();
+            // index == -1 means "rendering the current selection on the closed combo itself" (the
+            // Swing convention), as opposed to a row inside the open dropdown list.
+            int avail = (index < 0 ? fieldBox.getWidth() - 28 : list.getWidth() - 8);
+            if (avail > 0) {
+                c.setText(ellipsize(full, c.getFontMetrics(c.getFont()), avail));
+            }
+            c.setToolTipText(full);
+            return c;
+        }
+    }
+
+    /** Truncates {@code text} to fit {@code maxWidth} pixels (measured with {@code fm}), appending an
+     * ellipsis when it doesn't fit whole. Never throws on a {@code maxWidth} too small even for the
+     * ellipsis alone -- returns just the ellipsis in that case.
+     * Package-private for headless testing (see {@code EllipsisTruncationTest}). */
+    static String ellipsize(String text, java.awt.FontMetrics fm, int maxWidth) {
+        if (fm.stringWidth(text) <= maxWidth) {
+            return text;
+        }
+        String ellipsis = "…";
+        int budget = maxWidth - fm.stringWidth(ellipsis);
+        if (budget <= 0) {
+            return ellipsis;
+        }
+        int cut = text.length();
+        while (cut > 0 && fm.stringWidth(text.substring(0, cut)) > budget) {
+            cut--;
+        }
+        return text.substring(0, cut) + ellipsis;
     }
 
     /** Focuses the search field (bound to Ctrl+F on the current tab by {@code MainTab}). */
