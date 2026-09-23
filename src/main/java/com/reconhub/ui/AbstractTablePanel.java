@@ -30,6 +30,7 @@ import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.RowFilter;
+import javax.swing.SwingConstants;
 import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -147,7 +148,9 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         table.setFillsViewportHeight(true);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        table.setDefaultRenderer(Object.class, new StyledRenderer());
+        StyledRenderer styledRenderer = new StyledRenderer();
+        table.setDefaultRenderer(Object.class, styledRenderer);
+        table.setDefaultRenderer(Integer.class, styledRenderer);
         add(scrollPane, BorderLayout.CENTER);
 
         table.getSelectionModel().addListSelectionListener(e -> {
@@ -277,7 +280,10 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         // subclasses override
     }
 
-    /** Shared renderer that resets colors then delegates to {@link #styleCell}. */
+    /** Shared renderer that resets colors then delegates to {@link #styleCell}. Registered for both
+     * {@code Object.class} and {@code Integer.class} (see the ctor) so numeric columns (Status, Seen,
+     * Size, ...) get the exact same striping/bookmark/styleCell treatment as text columns instead of
+     * silently falling back to Swing's own built-in Number renderer, which used to skip all of it. */
     private final class StyledRenderer extends DefaultTableCellRenderer {
         @Override
         public Component getTableCellRendererComponent(JTable t, Object value, boolean sel,
@@ -287,9 +293,14 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
                 c.setBackground(t.getSelectionBackground());
                 c.setForeground(t.getSelectionForeground());
             } else {
-                c.setBackground(t.getBackground());
+                // Zebra stripe every other (view) row, purely to make a wide multi-column table easier
+                // to track by eye -- view row index, not model index, so it stays stable across sorts.
+                c.setBackground(row % 2 == 1 ? SwingColors.stripe(t.getBackground()) : t.getBackground());
                 c.setForeground(t.getForeground());
             }
+            // Swing's replaced built-in Number renderer right-aligns; replicate that so registering
+            // this renderer for Integer.class (see ctor) doesn't flip numeric columns to left-aligned.
+            setHorizontalAlignment(value instanceof Number ? SwingConstants.RIGHT : SwingConstants.LEFT);
             T rowObj = rowAt(row);
             styleCell(c, rowObj, col, sel);
             applyBookmarkStyle(c, rowObj, col, sel);
@@ -307,13 +318,10 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         }
         if (!sel) {
             // A faint accent tint across the whole row -- subtle enough to not fight styleCell's own
-            // foreground colors (severity/category text stays readable), but visible at a glance.
-            java.awt.Color bg = c.getBackground();
-            java.awt.Color accent = SwingColors.ACCENT;
-            int r = (bg.getRed() * 9 + accent.getRed()) / 10;
-            int g = (bg.getGreen() * 9 + accent.getGreen()) / 10;
-            int b = (bg.getBlue() * 9 + accent.getBlue()) / 10;
-            c.setBackground(new java.awt.Color(r, g, b));
+            // foreground colors (severity/category text stays readable), but visible at a glance. Blends
+            // from whatever background is already set (the plain table background, or the zebra stripe
+            // on an odd row), so the two compose instead of one clobbering the other.
+            c.setBackground(SwingColors.blend(c.getBackground(), SwingColors.ACCENT, 0.1));
         }
         if (col == 0) {
             c.setFont(c.getFont().deriveFont(Font.BOLD));

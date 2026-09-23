@@ -7,7 +7,12 @@ import com.reconhub.model.Finding;
 
 import javax.swing.BorderFactory;
 import javax.swing.JLabel;
+import javax.swing.JTable;
+import javax.swing.SwingConstants;
+import javax.swing.table.DefaultTableCellRenderer;
+import javax.swing.table.TableCellRenderer;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Font;
 
 /**
@@ -100,6 +105,55 @@ final class SwingColors {
     /** The Bruteforce tab's ACTIVE banner text/border color. */
     static Color bannerFg() {
         return isDark() ? BANNER_FG_DARK : BANNER_FG_LIGHT;
+    }
+
+    // ---- zebra striping (0.37.0+) -- every table in ReconHub renders every other row very slightly
+    // tinted, purely so a wide table with many columns stays easy to track by eye across the row. ----
+
+    /** Blends {@code base} toward {@code toward} by {@code amount} (0..1). Shared by zebra striping
+     * and the bookmark row tint (AbstractTablePanel). */
+    static Color blend(Color base, Color toward, double amount) {
+        int r = (int) Math.round(base.getRed() * (1 - amount) + toward.getRed() * amount);
+        int g = (int) Math.round(base.getGreen() * (1 - amount) + toward.getGreen() * amount);
+        int b = (int) Math.round(base.getBlue() * (1 - amount) + toward.getBlue() * amount);
+        return new Color(r, g, b);
+    }
+
+    /** Zebra-stripe background for an odd view row, derived from {@code tableBg} (the table/selection
+     * background actually in play) rather than a hardcoded pair of light/dark constants -- a single
+     * small blend toward {@link #MUTED} reads correctly on either theme without a branch. */
+    static Color stripe(Color tableBg) {
+        return blend(tableBg, MUTED, 0.08);
+    }
+
+    /**
+     * A striping-only {@link TableCellRenderer} for the tables outside {@code AbstractTablePanel}
+     * (Dashboard's host/type/notable tables, the Bruteforce tab's job/hit tables) that don't already
+     * have a custom renderer of their own. Register it for both {@code Object.class} and {@code
+     * Integer.class} -- {@code JTable} otherwise renders any {@code Integer}-typed column (declared via
+     * {@code getColumnClass}) with its own built-in right-aligned {@code Number} renderer, which would
+     * silently skip whatever is registered only for {@code Object.class} (the exact gap that made
+     * numeric columns in the data tabs look inconsistent before this).
+     */
+    static TableCellRenderer stripedRenderer() {
+        return new DefaultTableCellRenderer() {
+            @Override
+            public Component getTableCellRendererComponent(JTable t, Object value, boolean sel,
+                                                            boolean focus, int row, int col) {
+                Component c = super.getTableCellRendererComponent(t, value, sel, focus, row, col);
+                if (sel) {
+                    c.setBackground(t.getSelectionBackground());
+                    c.setForeground(t.getSelectionForeground());
+                } else {
+                    c.setBackground(row % 2 == 1 ? stripe(t.getBackground()) : t.getBackground());
+                    c.setForeground(t.getForeground());
+                }
+                // Swing's own built-in Number renderer right-aligns numeric columns; replicate that
+                // here since this renderer replaces it (registered for Integer.class too, see below).
+                setHorizontalAlignment(value instanceof Number ? SwingConstants.RIGHT : SwingConstants.LEFT);
+                return c;
+            }
+        };
     }
 
     /** A rounded, tinted label used as a "chip". */

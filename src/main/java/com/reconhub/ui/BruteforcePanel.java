@@ -196,6 +196,8 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
     private JComponent jobsPanel() {
         jobTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         jobTable.setRowHeight(22);
+        jobTable.setDefaultRenderer(Object.class, SwingColors.stripedRenderer());
+        jobTable.setDefaultRenderer(Integer.class, SwingColors.stripedRenderer());
         jobTable.getColumnModel().getColumn(0).setPreferredWidth(220);
         for (int i = 1; i < 4; i++) {
             jobTable.getColumnModel().getColumn(i).setPreferredWidth(90);
@@ -244,6 +246,8 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
     private JComponent hitsPanel() {
         hitTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         hitTable.setRowHeight(22);
+        hitTable.setDefaultRenderer(Object.class, SwingColors.stripedRenderer());
+        hitTable.setDefaultRenderer(Integer.class, SwingColors.stripedRenderer());
         int[] widths = {160, 220, 60, 80, 70};
         for (int i = 0; i < widths.length; i++) {
             hitTable.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);

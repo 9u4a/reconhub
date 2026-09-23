@@ -5,7 +5,11 @@ import com.reconhub.core.ApiStub;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.awt.Color;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -80,5 +84,49 @@ class SwingColorsTest {
         assertFalse(darkLine.equals(lightLine), "line() must differ between themes");
         assertFalse(darkBannerBg.equals(lightBannerBg), "bannerBg() must differ between themes");
         assertFalse(darkBannerFg.equals(lightBannerFg), "bannerFg() must differ between themes");
+    }
+
+    // ---- blend()/stripe() -- the zebra-striping math (0.37.0) --------------------------------------
+
+    @Test
+    void blendZeroReturnsBaseUnchanged() {
+        Color base = new Color(0x1e1e1e);
+        assertEquals(base, SwingColors.blend(base, Color.WHITE, 0.0));
+    }
+
+    @Test
+    void blendOneReturnsTowardUnchanged() {
+        Color toward = new Color(0x9aa4b2);
+        assertEquals(toward, SwingColors.blend(Color.BLACK, toward, 1.0));
+    }
+
+    @Test
+    void blendHalfwayIsTheAverage() {
+        Color base = new Color(0, 0, 0);
+        Color toward = new Color(200, 100, 50);
+        Color mid = SwingColors.blend(base, toward, 0.5);
+        assertEquals(100, mid.getRed());
+        assertEquals(50, mid.getGreen());
+        assertEquals(25, mid.getBlue());
+    }
+
+    @Test
+    void stripeAlwaysDiffersFromTheBaseBackground() {
+        // Must produce a visibly different (if subtle) color from both a typical dark and a typical
+        // light table background -- a striped renderer that computed the same color back would be a
+        // silent no-op bug (nothing would actually stripe).
+        assertNotEquals(new Color(0x1e1e1e), SwingColors.stripe(new Color(0x1e1e1e)));
+        assertNotEquals(Color.WHITE, SwingColors.stripe(Color.WHITE));
+    }
+
+    @Test
+    void stripeMovesTowardMutedNotAwayFromIt() {
+        Color darkBg = new Color(0x1e1e1e);
+        Color striped = SwingColors.stripe(darkBg);
+        // MUTED (0x9aa4b2) is lighter than a typical dark background -- striping a dark background
+        // should lighten it slightly, not darken it further.
+        assertTrue(striped.getRed() > darkBg.getRed());
+        assertTrue(striped.getGreen() > darkBg.getGreen());
+        assertTrue(striped.getBlue() > darkBg.getBlue());
     }
 }

@@ -595,6 +595,12 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         t.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
         // Header clicks cycle ascending -> descending -> unsorted (default order).
         t.setRowSorter(new TriStateRowSorter<>(t.getModel()));
+        // Zebra-striped, same as every AbstractTablePanel table -- registered for both Object.class
+        // and Integer.class (SimpleModel declares Integer.class for its count columns), or the count
+        // columns would silently fall back to Swing's own unstriped built-in Number renderer.
+        javax.swing.table.TableCellRenderer striped = SwingColors.stripedRenderer();
+        t.setDefaultRenderer(Object.class, striped);
+        t.setDefaultRenderer(Integer.class, striped);
         t.setRowHeight(24);
         t.setShowGrid(false);
         t.setIntercellSpacing(new Dimension(0, 0));

@@ -19,6 +19,7 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
 
     private static final String[] COLS =
             {"Method", "Host", "Path", "Status", "Content-Type", "Params", "Auth", "Source"};
+    private static final int COL_STATUS = 3;
     private static final int COL_AUTH = 6;
 
     private final DataStore store;
@@ -130,7 +131,23 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
 
     @Override
     protected void styleCell(Component comp, Endpoint e, int viewColumn, boolean selected) {
-        if (e == null || selected || viewColumn != COL_AUTH) {
+        if (e == null || selected) {
+            return;
+        }
+        if (viewColumn == COL_STATUS) {
+            // Color the Status cell by HTTP status class -- 2xx OK, 5xx worth a second look (server
+            // errors can leak stack traces/paths), everything else (3xx/4xx) stays the default color
+            // since 404 in particular is by far the most common status in a recon dataset and coloring
+            // it would just be noise.
+            int status = e.getLastStatusCode();
+            if (status >= 200 && status < 300) {
+                comp.setForeground(SwingColors.OK);
+            } else if (status >= 500) {
+                comp.setForeground(SwingColors.WARN);
+            }
+            return;
+        }
+        if (viewColumn != COL_AUTH) {
             return;
         }
         // Highlight endpoints observed WITHOUT credentials (potential unauthenticated access).
