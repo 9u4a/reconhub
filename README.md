@@ -12,14 +12,14 @@
 
 | 탭 | 한 줄 설명 |
 |----|------|
-| **Dashboard** | 요약 통계 + 호스트 스코어카드, 다른 탭으로 크로스탭 이동 |
+| **Dashboard** | 요약 통계 + 호스트 스코어카드, 다른 탭으로 크로스탭 이동, **호스트 데이터 삭제** |
 | **Endpoints** | 엔드포인트 인벤토리 (dedup, Auth 관찰) |
 | **Parameters** | 파라미터 + 취약점 후보 Class 자동 분류 |
 | **Findings** | 탐지 결과 심각도/카테고리 집계 + 트리아지 |
 | **JS Assets** | JS 파일 수집·분석 (엔드포인트/시크릿 추출) |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 체크 |
 | **Bruteforce** ⚠**ACTIVE** | 알려진 경로(관리자·API·노출 파일 등) 탐색 |
-| **Settings** | 스코프·규칙·Ingest·내보내기·State 백업 |
+| **Settings** | 스코프·규칙·Ingest·내보내기·State 백업, **스코프 밖 호스트 일괄 삭제** |
 
 **탐지 항목**: 시크릿(API 키/JWT/쿠키값 포함)·PII·오픈 리다이렉트·반사 XSS 후보·응답 시그니처(스택
 트레이스/SQL 에러)·CORS/쿠키/CSP/캐시 미스컨피그·노출 파일(`.env`·`.git`)·OpenAPI/Swagger·GraphQL
@@ -49,7 +49,10 @@ Settings에서 **JSON/HTML/Markdown/SARIF** 리포트·워드리스트·**State 
 
 ### Dashboard
 카운트·심각도 요약, **호스트 스코어카드**(선택 시 심각도별·누락 보안헤더 상세), Top findings·주목
-엔드포인트·파라미터 클래스. 우클릭으로 다른 탭에서 필터링해 보기.
+엔드포인트·파라미터 클래스. 우클릭으로 다른 탭에서 필터링해 보기. 호스트 우클릭 **Delete all data for
+this host…**로 그 호스트의 엔드포인트/파라미터/파인딩/JS/Tech 데이터를 전부 삭제(삭제 전 건수 미리보기,
+확인 필수, Burp 자체 Proxy History/Site Map은 건드리지 않음) — Endpoints/Parameters/Findings/Tech
+탭에서도 동일 메뉴 제공.
 
 ### Endpoints
 method+정규화 URL로 dedup한 인벤토리(인증 관찰 Auth 컬럼 포함), 행 선택 시 원문 Request/Response.
@@ -89,7 +92,9 @@ Export/Import에도 완료 기록으로 보존**.
 
 ### Settings
 스코프·패시브 토글·커스텀 탐지 규칙·Ingest·내보내기·State 백업. 모든 설정은 **Burp 재시작 후에도
-유지**(extension preferences에 저장).
+유지**(extension preferences에 저장). **Remove out-of-scope hosts…**로 현재 스코프(Burp Scope +
+include/exclude 정규식) 밖의 호스트를 한 번에 찾아서 일괄 삭제 — 사이트맵 전체를 ingest한 뒤 불필요한
+호스트가 섞여 들어왔을 때 유용(Scope Mode가 "All"이면 스코프 밖이 없으므로 항상 "없음"으로 나옴).
 
 ### 탐지 항목 상세
 API 키/토큰·JWT·인증 헤더·스토리지 URL 등 **시크릿**(응답 본문뿐 아니라 **쿠키 값**도 스캔 — 쿠키로

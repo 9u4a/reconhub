@@ -6,7 +6,9 @@ import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.UserRuleStore;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.ScopeFilter;
 import com.reconhub.model.Finding;
+import com.reconhub.model.TechInfo;
 import com.reconhub.core.Settings;
 import com.reconhub.core.TrafficIngestor;
 import com.reconhub.export.HtmlReporter;
@@ -26,6 +28,7 @@ import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
@@ -41,7 +44,9 @@ import java.awt.FlowLayout;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.TreeSet;
 
 /** Configuration + actions: scope, JS saving, ingest/clear, and JSON/HTML export. */
 public final class SettingsPanel extends JPanel {
@@ -215,6 +220,12 @@ public final class SettingsPanel extends JPanel {
         ingestButton.addActionListener(e -> doIngest());
         JButton clear = new JButton("Clear data");
         clear.addActionListener(e -> doClear());
+        JButton removeOutOfScope = new JButton("Remove out-of-scope hosts…");
+        removeOutOfScope.setToolTipText("Delete all data for every known host that Burp's scope "
+                + "(and any include/exclude regex above) would reject -- only meaningful when Scope "
+                + "Mode is \"Burp Scope\" or a regex is set; with Scope Mode \"All\" nothing is ever "
+                + "out of scope");
+        removeOutOfScope.addActionListener(e -> doRemoveOutOfScope());
         JButton json = new JButton("Export JSON…");
         json.addActionListener(e -> exportJson());
         JButton html = new JButton("Export HTML…");
@@ -228,6 +239,7 @@ public final class SettingsPanel extends JPanel {
         reportExcludeFp.setToolTipText("HTML/Markdown/JSON/SARIF export: drop findings marked False positive");
         p.add(ingestButton);
         p.add(clear);
+        p.add(removeOutOfScope);
         p.add(Box.createHorizontalStrut(16));
         p.add(json);
         p.add(html);
@@ -402,6 +414,64 @@ public final class SettingsPanel extends JPanel {
                     progress.setValue(done);
                     progress.setString(done + " / " + total);
                 }));
+    }
+
+    /**
+     * Bulk cleanup for "ingested a whole site map and out-of-scope noise came along" -- scans every
+     * host ReconHub has ever recorded against the current {@link ScopeFilter} (Burp scope +
+     * include/exclude regex) and, after one confirmation naming every host, removes each via {@link
+     * DataStore#deleteHost}. A fresh {@link ScopeFilter} is constructed here rather than threading a
+     * shared one through the constructor -- it's cheap/stateless enough that {@code ReconHubExtension}
+     * and {@code TrafficIngestor} already each build their own independently.
+     */
+    private void doRemoveOutOfScope() {
+        ScopeFilter scopeFilter = new ScopeFilter(api, settings);
+        // Union of two sources rather than trusting either alone: hostCounts is bumped for every
+        // processed request (core/DataStore.countRequest), and TechInfo is created for every host
+        // TechFingerprinter ever sees regardless of content type -- between them this should be the
+        // complete set of hosts ReconHub knows about, but there's no cost to being extra sure.
+        java.util.Set<String> hosts = new TreeSet<>(store.hostCounts().keySet());
+        for (TechInfo t : store.snapshotTech()) {
+            hosts.add(t.getHost());
+        }
+        List<String> outOfScope = new ArrayList<>();
+        for (String host : hosts) {
+            if (host == null || host.isBlank()) {
+                continue;
+            }
+            String url = RunBruteforceAction.inferScheme(store, host) + "://" + host;
+            if (!scopeFilter.inScope(url)) {
+                outOfScope.add(host);
+            }
+        }
+        if (outOfScope.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "No out-of-scope hosts found.",
+                    "ReconHub", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+        JList<String> list = new JList<>(outOfScope.toArray(new String[0]));
+        JScrollPane listScroll = new JScrollPane(list);
+        listScroll.setPreferredSize(new Dimension(320, Math.min(outOfScope.size(), 12) * 18 + 10));
+        JPanel message = new JPanel(new java.awt.BorderLayout(0, 8));
+        message.add(new JLabel("Delete ALL ReconHub data for " + outOfScope.size()
+                + " out-of-scope host(s)? This cannot be undone."), java.awt.BorderLayout.NORTH);
+        message.add(listScroll, java.awt.BorderLayout.CENTER);
+        int choice = JOptionPane.showConfirmDialog(this, message,
+                "ReconHub — remove out-of-scope hosts", JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+        if (choice != JOptionPane.OK_OPTION) {
+            return;
+        }
+        int ep = 0, pm = 0, fd = 0, js = 0;
+        for (String host : outOfScope) {
+            DataStore.HostDeleteResult r = store.deleteHost(host);
+            ep += r.endpoints();
+            pm += r.parameters();
+            fd += r.findings();
+            js += r.jsAssets();
+        }
+        setStatus("Removed " + outOfScope.size() + " out-of-scope host(s): " + ep + " endpoints, "
+                + pm + " parameters, " + fd + " findings, " + js + " JS assets.");
     }
 
     private void doClear() {

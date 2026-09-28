@@ -58,6 +58,7 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
                     () -> CheatsheetDialog.showFor(this, e.getPath(), List.of(xxe)));
         }
         addBruteforceMenuItem(menu, bruteforce, settings, store, e.getHost());
+        addDeleteHostMenuItem(menu, store, e.getHost());
     }
 
     @Override

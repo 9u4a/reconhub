@@ -7,6 +7,7 @@ import com.reconhub.model.JsAsset;
 import com.reconhub.model.ParameterInfo;
 import com.reconhub.model.TechInfo;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -14,6 +15,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 
 /**
  * Central, thread-safe in-memory model for everything ReconHub extracts.
@@ -275,6 +277,85 @@ public final class DataStore {
                 .sorted((a, b) -> Integer.compare(b.getValue().get(), a.getValue().get()))
                 .forEach(e -> out.put(e.getKey(), e.getValue().get()));
         return out;
+    }
+
+    // ---- Per-host delete --------------------------------------------------
+
+    /** Counts of what {@link #deleteHost} actually removed, for a confirmation/summary message. */
+    public record HostDeleteResult(int endpoints, int parameters, int findings, int jsAssets, boolean tech) {}
+
+    /**
+     * Removes every {@link Endpoint}/{@link ParameterInfo}/{@link Finding}/{@link JsAsset}/{@link
+     * TechInfo} attributed to {@code host}, plus its {@link #hostCounts} entry. Only ReconHub's own
+     * model is touched -- Burp's Proxy History/Site Map is never affected.
+     *
+     * <p><b>Deliberately does not touch {@code Bookmarks}</b> -- same reasoning as {@link #clear()} not
+     * touching it (user-authored data, kept in a separate class specifically so bulk-delete operations
+     * here can't reach it). A bookmark on a now-removed row becomes an orphan (its key simply never
+     * matches a row again) -- harmless, but not cleaned up automatically.
+     *
+     * <p>{@code requestsProcessed}/{@code statusCodeCounts}/{@code contentTypeCounts} are also left
+     * alone -- there's no way to accurately subtract one host's contribution back out of those running
+     * totals after the fact.
+     */
+    public HostDeleteResult deleteHost(String host) {
+        if (host == null || host.isBlank()) {
+            return new HostDeleteResult(0, 0, 0, 0, false);
+        }
+        int ep = removeIf(endpoints, e -> host.equals(e.getHost()));
+        int pm = removeIf(parameters, p -> host.equals(p.getHost()));
+        int fd = removeIf(findings, f -> host.equals(hostOf(f.getLocationUrl())));
+        int js = removeIf(jsAssets, a -> host.equals(hostOf(a.getUrl())));
+        boolean tech = techByHost.remove(host) != null;
+        // Mod counters bump only when the key set actually changed for that collection -- same
+        // invariant as every record*/restore* method above (0.35.0's snapshot-cache design).
+        if (ep > 0) {
+            endpointsMod.incrementAndGet();
+        }
+        if (pm > 0) {
+            parametersMod.incrementAndGet();
+        }
+        if (fd > 0) {
+            findingsMod.incrementAndGet();
+        }
+        if (js > 0) {
+            jsAssetsMod.incrementAndGet();
+        }
+        if (tech) {
+            techMod.incrementAndGet();
+        }
+        hostCounts.remove(host);
+        fireChanged();
+        return new HostDeleteResult(ep, pm, fd, js, tech);
+    }
+
+    private static <T> int removeIf(Map<String, T> map, Predicate<T> pred) {
+        int[] n = {0};
+        // ConcurrentHashMap's values() view supports removeIf as a weakly-consistent bulk operation --
+        // safe alongside concurrent record*() calls on the ingest thread.
+        map.values().removeIf(v -> {
+            if (pred.test(v)) {
+                n[0]++;
+                return true;
+            }
+            return false;
+        });
+        return n[0];
+    }
+
+    /** Same logic as the near-identical helpers in {@code ui.DashboardPanel}/{@code ui.FindingsPanel}
+     * -- kept as its own copy here (not consolidated) since {@code core} can't depend on {@code ui},
+     * and {@link Finding}/{@link JsAsset} have no host field of their own to key {@link #deleteHost} on. */
+    private static String hostOf(String url) {
+        if (url == null || url.isBlank()) {
+            return "";
+        }
+        try {
+            URI u = URI.create(url);
+            return u.getHost() != null ? u.getHost() : "";
+        } catch (RuntimeException ignored) {
+            return "";
+        }
     }
 
     /** Clears every collection and counter (used by the "Clear" button). */

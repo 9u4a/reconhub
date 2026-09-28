@@ -14,6 +14,7 @@ import javax.swing.BoxLayout;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
@@ -464,7 +465,39 @@ public final class DashboardPanel extends JPanel implements Refreshable {
             item(m, "Run known-path bruteforce on this host… (active)", true,
                     () -> RunBruteforceAction.run(this, bruteforce, settings, store, host));
         }
+        if (real) {
+            m.addSeparator();
+            item(m, "Delete all data for this host…", true, () -> confirmAndDeleteHost(host));
+        }
         return m;
+    }
+
+    /** Confirms (showing a pre-delete count from the already-cached {@link #hostStats}) then removes
+     * every row attributed to {@code host} via {@link DataStore#deleteHost}. */
+    private void confirmAndDeleteHost(String host) {
+        int[] c = hostStats.get(host);   // [ep, param, H, M, L, I, missHdr] -- see buildHostScorecard
+        String preview = c == null ? ""
+                : "\n\n" + c[0] + " endpoints, " + c[1] + " parameters, "
+                        + (c[2] + c[3] + c[4] + c[5]) + " findings, and its Tech entry"
+                        + " (JS assets aren't tracked per-host here, but will be included if any match).";
+        int choice = JOptionPane.showConfirmDialog(this,
+                "Delete ALL ReconHub data for " + host + "?" + preview
+                        + "\n\nThis only removes it from ReconHub's own model -- it does not touch Burp's "
+                        + "own Proxy History/Site Map. Bookmarks/notes on now-removed rows are left in "
+                        + "place (orphaned, harmless).\n\nThis cannot be undone.",
+                "ReconHub — delete host data", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+        if (choice != JOptionPane.OK_OPTION) {
+            return;
+        }
+        DataStore.HostDeleteResult r = store.deleteHost(host);
+        JOptionPane.showMessageDialog(this,
+                "Removed for " + host + ":\n"
+                        + r.endpoints() + " endpoints\n"
+                        + r.parameters() + " parameters\n"
+                        + r.findings() + " findings\n"
+                        + r.jsAssets() + " JS assets\n"
+                        + (r.tech() ? "Tech entry removed" : "(no Tech entry)"),
+                "ReconHub", JOptionPane.INFORMATION_MESSAGE);
     }
 
     private JPopupMenu typeMenu(String type) {

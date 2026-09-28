@@ -85,6 +85,7 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
             PayloadCheatsheetMenu.addTo(menu, this, cheatsheet, p.getName(), suggested);
         }
         addBruteforceMenuItem(menu, bruteforce, settings, store, p.getHost());
+        addDeleteHostMenuItem(menu, store, p.getHost());
     }
 
     @Override

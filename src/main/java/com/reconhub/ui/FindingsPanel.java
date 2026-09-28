@@ -258,6 +258,7 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
             PayloadCheatsheetMenu.addTo(menu, this, cheatsheet, f.getType(), suggested);
         }
         addBruteforceMenuItem(menu, bruteforce, settings, store, host);
+        addDeleteHostMenuItem(menu, store, host);
         menu.addSeparator();
         for (Finding.Triage t : Finding.Triage.values()) {
             boolean current = f.getTriage() == t;

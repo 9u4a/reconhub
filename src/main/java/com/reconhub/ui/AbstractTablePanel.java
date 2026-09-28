@@ -557,6 +557,29 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
                 () -> RunBruteforceAction.run(this, bruteforce, settings, store, host));
     }
 
+    /**
+     * Adds "Delete all data for this host…" -- the same {@link DataStore#deleteHost} action
+     * {@code DashboardPanel}'s host-scorecard menu offers, so a host doesn't have to be noticed on
+     * Dashboard specifically to get rid of it. No pre-delete count preview here (unlike Dashboard,
+     * which already caches per-host counts for its scorecard) -- just a confirm-then-delete.
+     */
+    protected void addDeleteHostMenuItem(JPopupMenu menu, DataStore store, String host) {
+        if (store == null || host == null || host.isBlank()) {
+            return;
+        }
+        menu.addSeparator();
+        addMenuItem(menu, "Delete all data for this host…", true, () -> {
+            int choice = JOptionPane.showConfirmDialog(this,
+                    "Delete ALL ReconHub data for " + host + "? This cannot be undone.\n\n"
+                            + "(Only removes it from ReconHub's own model -- Burp's Proxy History/Site "
+                            + "Map is untouched. Bookmarks/notes on now-removed rows are left in place.)",
+                    "ReconHub — delete host data", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+            if (choice == JOptionPane.OK_OPTION) {
+                store.deleteHost(host);
+            }
+        });
+    }
+
     private void add(JPopupMenu menu, String label, boolean enabled, Runnable action) {
         JMenuItem item = new JMenuItem(label);
         item.setEnabled(enabled);

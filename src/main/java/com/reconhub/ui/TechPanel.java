@@ -50,6 +50,7 @@ public final class TechPanel extends AbstractTablePanel<TechInfo> {
             return;
         }
         addBruteforceMenuItem(menu, bruteforce, settings, store, t.getHost());
+        addDeleteHostMenuItem(menu, store, t.getHost());
     }
 
     @Override
