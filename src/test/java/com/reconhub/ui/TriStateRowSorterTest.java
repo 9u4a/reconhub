@@ -11,13 +11,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@code TriStateRowSorter.toggleSortOrder} -- 0.40.0's multi-column sort fix. Pure logic (a
- * {@code TableModel} is all a {@code RowSorter} needs; nothing here requires a display), verified
- * against the exact behavior {@code javax.swing.DefaultRowSorter#toggleSortOrder} has in JDK 21's own
- * source (read directly from {@code lib/src.zip} before writing this): a plain click promotes the
- * clicked column to primary and keeps prior sort columns as secondary/tertiary, up to {@code
- * getMaxSortKeys()} (default 3) -- this class only changes what happens when the *already-primary*
- * column is re-clicked a second time (removed, instead of stock's cycle back to ascending).
+ * {@code TriStateRowSorter.toggleSortOrder} -- 0.40.1's default-single/Shift-multi split. A plain
+ * click (the default, {@code multiKeyDown == false}) sorts by only the clicked column, replacing any
+ * other active keys -- 0.40.0 originally made every plain click do multi-column sort unconditionally
+ * (mirroring stock {@code DefaultRowSorter}'s own JDK behavior), but that was reported as inconvenient
+ * as the default, so it's now opt-in via {@code setMultiKeyDown(true)} (wired to Shift+click by {@code
+ * installMultiSortHeader}, not exercised here -- these tests drive the flag directly). Pure logic (a
+ * {@code TableModel} is all a {@code RowSorter} needs; nothing here requires a display).
  */
 class TriStateRowSorterTest {
 
@@ -31,6 +31,8 @@ class TriStateRowSorterTest {
     private static List<Integer> columnsOf(List<? extends SortKey> keys) {
         return keys.stream().map(SortKey::getColumn).toList();
     }
+
+    // ---- default (plain click) -- single column only -----------------------------------------------
 
     @Test
     void firstClickOnAColumnSortsAscendingByThatColumnAlone() {
@@ -59,9 +61,45 @@ class TriStateRowSorterTest {
     }
 
     @Test
-    void clickingADifferentColumnAddsItAsPrimaryAndKeepsThePriorAsSecondary() {
-        // The core fix: this used to wipe column 0's sort entirely. Now it must survive as secondary.
+    void plainClickOnADifferentColumnReplacesTheSortEntirely() {
+        // The whole point of 0.40.1: without the modifier, a new column's click wipes any other key.
         var sorter = new TriStateRowSorter<>(new FakeModel());
+        sorter.toggleSortOrder(0);
+        sorter.toggleSortOrder(1);
+        assertEquals(List.of(1), columnsOf(sorter.getSortKeys()));
+    }
+
+    @Test
+    void plainClickAfterAMultiColumnSortCollapsesBackToOneColumn() {
+        var sorter = new TriStateRowSorter<>(new FakeModel());
+        sorter.setMultiKeyDown(true);
+        sorter.toggleSortOrder(0);
+        sorter.toggleSortOrder(1);   // [1,0] via the multi-key path
+        assertEquals(2, sorter.getSortKeys().size());
+
+        sorter.setMultiKeyDown(false);
+        sorter.toggleSortOrder(2);   // plain click -- must discard both prior keys
+        assertEquals(List.of(2), columnsOf(sorter.getSortKeys()));
+    }
+
+    @Test
+    void unsortableColumnIsANoOpRegardlessOfModifier() {
+        var sorter = new TriStateRowSorter<>(new FakeModel());
+        sorter.setSortable(2, false);
+        sorter.toggleSortOrder(2);
+        assertTrue(sorter.getSortKeys().isEmpty());
+
+        sorter.setMultiKeyDown(true);
+        sorter.toggleSortOrder(2);
+        assertTrue(sorter.getSortKeys().isEmpty());
+    }
+
+    // ---- Shift+click (multiKeyDown) -- genuine multi-column sort ------------------------------------
+
+    @Test
+    void multiKeyClickOnADifferentColumnAddsItAsPrimaryAndKeepsThePriorAsSecondary() {
+        var sorter = new TriStateRowSorter<>(new FakeModel());
+        sorter.setMultiKeyDown(true);
         sorter.toggleSortOrder(0);   // [0-asc]
         sorter.toggleSortOrder(1);   // [1-asc, 0-asc]
         assertEquals(List.of(1, 0), columnsOf(sorter.getSortKeys()));
@@ -70,20 +108,21 @@ class TriStateRowSorterTest {
     }
 
     @Test
-    void reClickingASecondaryColumnPromotesItToPrimaryAscending() {
+    void multiKeyReClickingASecondaryColumnPromotesItToPrimaryAscending() {
         var sorter = new TriStateRowSorter<>(new FakeModel());
+        sorter.setMultiKeyDown(true);
         sorter.toggleSortOrder(0);   // [0-asc]
         sorter.toggleSortOrder(1);   // [1-asc, 0-asc]
         sorter.toggleSortOrder(0);   // re-click the now-secondary column 0 -> promoted to primary
         assertEquals(List.of(0, 1), columnsOf(sorter.getSortKeys()));
         assertEquals(SortOrder.ASCENDING, sorter.getSortKeys().get(0).getSortOrder());
-        // column 1 keeps whatever order it had (still ascending, untouched by the promotion)
         assertEquals(SortOrder.ASCENDING, sorter.getSortKeys().get(1).getSortOrder());
     }
 
     @Test
-    void clearingThePrimaryColumnLeavesTheSecondaryKeysIntact() {
+    void multiKeyClearingThePrimaryColumnLeavesTheSecondaryKeysIntact() {
         var sorter = new TriStateRowSorter<>(new FakeModel());
+        sorter.setMultiKeyDown(true);
         sorter.toggleSortOrder(0);   // [0-asc]
         sorter.toggleSortOrder(1);   // [1-asc, 0-asc]
         sorter.toggleSortOrder(1);   // 1 is primary -> desc: [1-desc, 0-asc]
@@ -92,21 +131,14 @@ class TriStateRowSorterTest {
     }
 
     @Test
-    void fourthDistinctColumnEvictsTheOldestKeyAtTheDefaultMaxOfThree() {
+    void multiKeyFourthDistinctColumnEvictsTheOldestKeyAtTheDefaultMaxOfThree() {
         var sorter = new TriStateRowSorter<>(new FakeModel());
+        sorter.setMultiKeyDown(true);
         sorter.toggleSortOrder(0);   // [0]
         sorter.toggleSortOrder(1);   // [1,0]
         sorter.toggleSortOrder(2);   // [2,1,0]
         assertEquals(3, sorter.getMaxSortKeys());
         sorter.toggleSortOrder(3);   // [3,2,1] -- column 0 falls off the end
         assertEquals(List.of(3, 2, 1), columnsOf(sorter.getSortKeys()));
-    }
-
-    @Test
-    void unsortableColumnIsANoOp() {
-        var sorter = new TriStateRowSorter<>(new FakeModel());
-        sorter.setSortable(2, false);
-        sorter.toggleSortOrder(2);
-        assertTrue(sorter.getSortKeys().isEmpty());
     }
 }
