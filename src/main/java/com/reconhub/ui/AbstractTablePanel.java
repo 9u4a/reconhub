@@ -177,6 +177,7 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
                 + "   (Ctrl+F to focus here, Esc to clear)");
 
         table.setRowSorter(sorter);
+        TriStateRowSorter.installMultiSortHeader(table);
         table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
         table.setFillsViewportHeight(true);
         table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);

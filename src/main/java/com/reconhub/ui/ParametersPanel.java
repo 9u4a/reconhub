@@ -35,12 +35,38 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
     private BruteforceEngine bruteforce;
     private Settings settings;
 
+    // Burp-History-filter-style checklist quick filters (0.40.0+).
+    private final ColumnValueFilter<ParameterInfo> locationFilter =
+            new ColumnValueFilter<>("Location", p -> p.getLocation().name());
+    private final ColumnValueFilter<ParameterInfo> classFilter =
+            new ColumnValueFilter<>("Class", p -> ParameterClassifier.classifyJoined(p.getName()));
+
     public ParametersPanel(DataStore store, MontoyaApi api, PayloadCheatsheet cheatsheet, Bookmarks bookmarks) {
         super(api, bookmarks);
         this.store = store;
         this.cheatsheet = cheatsheet;
         this.viewer = new MessageViewer(api);
         installDetail(viewer);
+
+        locationFilter.setOnChange(this::reapplyFilter);
+        classFilter.setOnChange(this::reapplyFilter);
+        addToToolbar(locationFilter.component());
+        addToToolbar(classFilter.component());
+    }
+
+    @Override protected boolean hasRowFilter() { return true; }
+
+    @Override
+    protected boolean rowIncluded(ParameterInfo p) {
+        return p == null || (locationFilter.test(p) && classFilter.test(p));
+    }
+
+    @Override
+    public void refreshData() {
+        super.refreshData();
+        List<ParameterInfo> rows = store.snapshotParameters();
+        locationFilter.refreshAvailableValues(rows);
+        classFilter.refreshAvailableValues(rows);
     }
 
     @Override protected String rowKey(ParameterInfo p) { return p == null ? null : p.key(); }

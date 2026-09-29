@@ -25,9 +25,10 @@
 트레이스/SQL 에러)·CORS/쿠키/CSP/캐시 미스컨피그·노출 파일(`.env`·`.git`)·OpenAPI/Swagger·GraphQL
 introspection·소스맵 노출·주석·누락 보안 헤더.
 
-**공통 기능**: 검색(정규식·AND·본문)·정렬·CSV 내보내기·행 우클릭 Copy/Repeater/Intruder/curl·JS
-Beautify·**북마크/메모**·**키보드 단축키**·**다크테마 자동 대응**·**모든 표 줄무늬(zebra) 배경**.
-자세한 내용은 아래 [기능 상세](#기능-상세) 참고.
+**공통 기능**: 검색(정규식·AND·본문)·**다중 컬럼 정렬**·CSV 내보내기·행 우클릭 Copy/Repeater/Intruder/
+curl·JS Beautify·**북마크/메모**·**키보드 단축키**·**다크테마 자동 대응**·**모든 표 줄무늬(zebra)
+배경**. Endpoints·Parameters는 **체크박스 다중값 필터**(Burp History 필터처럼)도 제공. 자세한 내용은
+아래 [기능 상세](#기능-상세) 참고.
 
 ## 사용법
 
@@ -56,14 +57,16 @@ this host…**로 그 호스트의 엔드포인트/파라미터/파인딩/JS/Tec
 
 ### Endpoints
 method+정규화 URL로 dedup한 인벤토리(인증 관찰 Auth 컬럼 포함), 행 선택 시 원문 Request/Response.
-**XML/SOAP** Content-Type이면 우클릭 **View payload cheatsheet (XXE)…** 제공.
+**XML/SOAP** Content-Type이면 우클릭 **View payload cheatsheet (XXE)…** 제공. 검색창 옆 **Method/
+Status/Type 필터 버튼**으로 값을 체크박스로 골라 필터링(Burp History 필터처럼, 여러 개 동시 선택 가능).
 
 ### Parameters
 엔드포인트별 파라미터(query/body/JSON/cookie) + 취약점 후보 **Class** 자동 분류(IDOR·Redirect/SSRF·
 File/Path·SQLi/Sort·Command·**SSTI**). 우클릭 **Payload cheatsheet ▸**로 자동 제안 클래스는 원클릭,
 **전체 클래스도 항상 수동으로 직접 선택 가능**(Basic/Bypass·우회 페이로드, Intruder에 클래스당 2세트
 등록). **JSON 파라미터**는 Prototype Pollution, **직렬화 값처럼 보이는 파라미터**(Java/PHP
-serialize·ViewState)는 Deserialization이 이름과 무관하게 자동 제안.
+serialize·ViewState)는 Deserialization이 이름과 무관하게 자동 제안. **Location/Class 필터 버튼**으로
+체크박스 다중값 필터링.
 
 ### Findings
 시크릿·PII·미스컨피그 등을 심각도·**카테고리**로 집계(필터·트리아지·JWT 디코드, 행 선택 시 원문).
@@ -111,6 +114,14 @@ introspection**(스키마를 실제로 파싱해 타입.필드를 엔드포인�
 우클릭 Copy/Open/Repeater/Intruder/curl. Request/Response 뷰어가 있는 탭(Endpoints·Parameters·
 Findings·JS Assets)에서 JS 응답이면 **Beautify JS** 토글로 한 줄로 압축된 minified 본문을 줄바꿈·
 들여쓰기해서 열람(화면 표시만 바꿈 — 캡처된 응답 자체나 탐지 로직에는 영향 없음).
+
+**다중 컬럼 정렬**: 컬럼 헤더를 클릭하면 그 컬럼이 1순위 정렬 기준이 되고, 이전에 클릭했던 컬럼은
+2·3순위로 밀려서 유지됨(예: Host 클릭 후 Status 클릭 → Host 안에서 Status로 정렬) — 헤더에 "2"·"3"
+같은 작은 숫자로 순위 표시. 1순위 컬럼을 다시 클릭하면 오름차순 → 내림차순 → 정렬 해제로 순환.
+
+**체크박스 다중값 필터**(Endpoints/Parameters): 검색창 옆 필터 버튼을 누르면 그 컬럼에 현재 존재하는
+모든 값이 체크박스로 나열됨 — 체크 해제한 값만 숨김(여러 개를 연달아 체크/해제 가능, 팝업이 자동으로
+안 닫힘). 데이터가 갱신되면 목록도 자동으로 최신화.
 
 인벤토리 탭(Endpoints·Parameters·Findings·JS Assets·Tech)은 행 우클릭 **★ Bookmark / Edit note…**
 (또는 `Ctrl+B`)로 북마크·메모 가능 — Burp 재시작 후에도 유지, `★ only` 체크박스로 북마크된 행만

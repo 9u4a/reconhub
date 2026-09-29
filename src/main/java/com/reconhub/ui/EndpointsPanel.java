@@ -28,12 +28,45 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
     private BruteforceEngine bruteforce;
     private Settings settings;
 
+    // Burp-History-filter-style checklist quick filters (0.40.0+) -- Method/Status/Content-Type are
+    // exactly the kind of open-ended-but-repetitive column Burp's own filter dialog offers checkboxes
+    // for, unlike e.g. Path which is different on every row and wouldn't benefit from a checklist.
+    private final ColumnValueFilter<Endpoint> methodFilter =
+            new ColumnValueFilter<>("Method", Endpoint::getMethod);
+    private final ColumnValueFilter<Endpoint> statusFilter = new ColumnValueFilter<>("Status",
+            e -> e.getLastStatusCode() == 0 ? null : String.valueOf(e.getLastStatusCode()));
+    private final ColumnValueFilter<Endpoint> ctFilter =
+            new ColumnValueFilter<>("Type", e -> shortCt(e.getContentType()));
+
     public EndpointsPanel(DataStore store, MontoyaApi api, PayloadCheatsheet cheatsheet, Bookmarks bookmarks) {
         super(api, bookmarks);
         this.store = store;
         this.cheatsheet = cheatsheet;
         this.viewer = new MessageViewer(api);
         installDetail(viewer);
+
+        methodFilter.setOnChange(this::reapplyFilter);
+        statusFilter.setOnChange(this::reapplyFilter);
+        ctFilter.setOnChange(this::reapplyFilter);
+        addToToolbar(methodFilter.component());
+        addToToolbar(statusFilter.component());
+        addToToolbar(ctFilter.component());
+    }
+
+    @Override protected boolean hasRowFilter() { return true; }
+
+    @Override
+    protected boolean rowIncluded(Endpoint e) {
+        return e == null || (methodFilter.test(e) && statusFilter.test(e) && ctFilter.test(e));
+    }
+
+    @Override
+    public void refreshData() {
+        super.refreshData();
+        List<Endpoint> rows = store.snapshotEndpoints();
+        methodFilter.refreshAvailableValues(rows);
+        statusFilter.refreshAvailableValues(rows);
+        ctFilter.refreshAvailableValues(rows);
     }
 
     @Override protected String rowKey(Endpoint e) { return e == null ? null : e.key(); }
