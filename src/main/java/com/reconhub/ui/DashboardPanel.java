@@ -3,6 +3,7 @@ package com.reconhub.ui;
 import burp.api.montoya.MontoyaApi;
 import com.reconhub.analysis.ParameterClassifier;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.Hosts;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
 import com.reconhub.model.ParameterInfo;
@@ -13,6 +14,7 @@ import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JList;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -181,9 +183,16 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         for (int i = 0; i < hw.length; i++) {
             hostTable.getColumnModel().getColumn(i).setPreferredWidth(hw[i]);
         }
-        hostTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        // MULTIPLE_INTERVAL_SELECTION (0.41.0): lets Ctrl/Shift pick several hosts at once for the
+        // "Delete all data for N selected hosts…" menu item below (see hostMenu/selectedHosts).
+        hostTable.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         hostTable.getSelectionModel().addListSelectionListener(e -> {
             if (e.getValueIsAdjusting()) {
+                return;
+            }
+            // 2+ hosts selected: which one's detail would even show? Leave the detail card on
+            // whatever it was already showing rather than picking one arbitrarily.
+            if (hostTable.getSelectedRowCount() != 1) {
                 return;
             }
             int view = hostTable.getSelectedRow();
@@ -237,19 +246,19 @@ public final class DashboardPanel extends JPanel implements Refreshable {
                                     List<Finding> finds) {
         Map<String, int[]> byHost = new TreeMap<>();   // [ep, param, H, M, L, I, missHdr]
         for (Endpoint e : eps) {
-            row(byHost, hostLabel(e.getHost()))[0]++;
+            row(byHost, Hosts.label(e.getHost()))[0]++;
         }
         for (ParameterInfo p : params) {
-            row(byHost, hostLabel(p.getHost()))[1]++;
+            row(byHost, Hosts.label(p.getHost()))[1]++;
         }
         for (Finding f : finds) {
             int idx = 2 + f.getSeverity().ordinal();   // HIGH..INFO -> 2..5
-            row(byHost, hostLabel(hostOf(f.getLocationUrl())))[idx]++;
+            row(byHost, Hosts.labelOf(f.getLocationUrl()))[idx]++;
         }
         hostMissHeaders.clear();
         for (TechInfo t : store.snapshotTech()) {
             List<String> miss = new ArrayList<>(t.getMissingSecurityHeaders());
-            String label = hostLabel(t.getHost());
+            String label = Hosts.label(t.getHost());
             row(byHost, label)[6] = miss.size();
             hostMissHeaders.put(label, miss);
         }
@@ -434,7 +443,12 @@ public final class DashboardPanel extends JPanel implements Refreshable {
                 if (view < 0) {
                     return;
                 }
-                t.setRowSelectionInterval(view, view);
+                // Only move the selection when the right-clicked row is outside it -- preserves a
+                // multi-row selection (hostTable, 0.41.0) so right-clicking inside it opens a menu for
+                // the whole selection instead of collapsing it down to the one row under the cursor.
+                if (!t.isRowSelected(view)) {
+                    t.setRowSelectionInterval(view, view);
+                }
                 JPopupMenu m = menuForModelRow.apply(t.convertRowIndexToModel(view));
                 if (m != null) {
                     m.show(t, e.getX(), e.getY());
@@ -467,36 +481,74 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         }
         if (real) {
             m.addSeparator();
-            item(m, "Delete all data for this host…", true, () -> confirmAndDeleteHost(host));
+            // 2+ hosts selected (Ctrl/Shift-click, 0.41.0) and the right-clicked row is one of them ->
+            // delete the whole selection; otherwise (no multi-selection, or right-clicked outside it)
+            // this is a single-host delete same as before installPopup preserved selections.
+            List<String> selected = selectedHosts();
+            if (selected.size() > 1 && selected.contains(host)) {
+                item(m, "Delete all data for " + selected.size() + " selected hosts…", true,
+                        () -> confirmAndDeleteHosts(selected));
+            } else {
+                item(m, "Delete all data for this host…", true,
+                        () -> confirmAndDeleteHosts(List.of(host)));
+            }
         }
         return m;
     }
 
-    /** Confirms (showing a pre-delete count from the already-cached {@link #hostStats}) then removes
-     * every row attributed to {@code host} via {@link DataStore#deleteHost}. */
-    private void confirmAndDeleteHost(String host) {
-        int[] c = hostStats.get(host);   // [ep, param, H, M, L, I, missHdr] -- see buildHostScorecard
-        String preview = c == null ? ""
-                : "\n\n" + c[0] + " endpoints, " + c[1] + " parameters, "
-                        + (c[2] + c[3] + c[4] + c[5]) + " findings, and its Tech entry"
-                        + " (JS assets aren't tracked per-host here, but will be included if any match).";
-        int choice = JOptionPane.showConfirmDialog(this,
-                "Delete ALL ReconHub data for " + host + "?" + preview
-                        + "\n\nThis only removes it from ReconHub's own model -- it does not touch Burp's "
-                        + "own Proxy History/Site Map. Bookmarks/notes on now-removed rows are left in "
-                        + "place (orphaned, harmless).\n\nThis cannot be undone.",
+    /** The currently-selected, "real" (see {@code hostMenu}) hosts in {@link #hostTable}, in table
+     * order. Used to decide between a single- and multi-host delete in {@link #hostMenu}. */
+    private List<String> selectedHosts() {
+        List<String> out = new ArrayList<>();
+        for (int view : hostTable.getSelectedRows()) {
+            String host = (String) hostModel.getValueAt(hostTable.convertRowIndexToModel(view), 0);
+            if (host != null && host.contains(".") && !host.startsWith("(")) {
+                out.add(host);
+            }
+        }
+        return out;
+    }
+
+    /** Confirms (showing a pre-delete count summed from the already-cached {@link #hostStats}) then
+     * removes every row attributed to any host in {@code hosts} via {@link DataStore#deleteHosts} --
+     * one call regardless of how many hosts, not one call per host. */
+    private void confirmAndDeleteHosts(List<String> hosts) {
+        int ep = 0, pm = 0, fd = 0;
+        for (String host : hosts) {
+            int[] c = hostStats.get(host);   // [ep, param, H, M, L, I, missHdr] -- see buildHostScorecard
+            if (c != null) {
+                ep += c[0];
+                pm += c[1];
+                fd += c[2] + c[3] + c[4] + c[5];
+            }
+        }
+        String who = hosts.size() == 1 ? hosts.get(0) : hosts.size() + " selected hosts";
+        JPanel message = new JPanel(new java.awt.BorderLayout(0, 8));
+        message.add(new JLabel("<html>Delete ALL ReconHub data for " + who + "?<br><br>"
+                + ep + " endpoints, " + pm + " parameters, " + fd + " findings, and Tech entries"
+                + " (JS assets aren't tracked per-host here, but will be included if any match).<br><br>"
+                + "This only removes it from ReconHub's own model -- it does not touch Burp's own Proxy "
+                + "History/Site Map. Bookmarks/notes on now-removed rows are left in place (orphaned, "
+                + "harmless).<br><br>This cannot be undone.</html>"), java.awt.BorderLayout.NORTH);
+        if (hosts.size() > 1) {
+            JList<String> list = new JList<>(hosts.toArray(new String[0]));
+            JScrollPane listScroll = new JScrollPane(list);
+            listScroll.setPreferredSize(new Dimension(320, Math.min(hosts.size(), 12) * 18 + 10));
+            message.add(listScroll, java.awt.BorderLayout.CENTER);
+        }
+        int choice = JOptionPane.showConfirmDialog(this, message,
                 "ReconHub — delete host data", JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
         if (choice != JOptionPane.OK_OPTION) {
             return;
         }
-        DataStore.HostDeleteResult r = store.deleteHost(host);
+        DataStore.HostDeleteResult r = store.deleteHosts(new java.util.HashSet<>(hosts));
         JOptionPane.showMessageDialog(this,
-                "Removed for " + host + ":\n"
+                "Removed for " + who + ":\n"
                         + r.endpoints() + " endpoints\n"
                         + r.parameters() + " parameters\n"
                         + r.findings() + " findings\n"
                         + r.jsAssets() + " JS assets\n"
-                        + (r.tech() ? "Tech entry removed" : "(no Tech entry)"),
+                        + (r.tech() ? "Tech entries removed" : "(no Tech entries)"),
                 "ReconHub", JOptionPane.INFORMATION_MESSAGE);
     }
 
@@ -539,25 +591,6 @@ public final class DashboardPanel extends JPanel implements Refreshable {
 
     private static int[] row(Map<String, int[]> m, String host) {
         return m.computeIfAbsent(host, k -> new int[7]);
-    }
-
-    private static String hostLabel(String host) {
-        return host == null || host.isBlank() ? "(relative / JS)" : host;
-    }
-
-    private static String hostOf(String url) {
-        if (url == null || url.isBlank()) {
-            return "";
-        }
-        try {
-            URI u = URI.create(url);
-            if (u.getHost() != null) {
-                return u.getHost();
-            }
-        } catch (RuntimeException ignored) {
-            // non-URL location
-        }
-        return "";
     }
 
     private static String pathOf(String url) {

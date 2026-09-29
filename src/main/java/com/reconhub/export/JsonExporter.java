@@ -32,40 +32,42 @@ public final class JsonExporter {
         export(store, file, ReportOptions.all());
     }
 
-    /** As {@link #export(DataStore, Path)}, but findings are filtered by {@code opts} first -- the
-     * JSON export was previously the only one of the four report formats that ignored the Confirmed-
-     * only / Exclude-FP options. */
+    /** As {@link #export(DataStore, Path)}, but every section is filtered by {@code opts} first (see
+     * {@link ReportData}) -- covers both the finding-triage options and (0.41.0) bookmarked-only across
+     * all five row types. */
     public static void export(DataStore store, Path file, ReportOptions opts) throws IOException {
+        ReportOptions o = opts == null ? ReportOptions.all() : opts;
+        ReportData data = ReportData.of(store, o);
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("generatedAt", Instant.now().toString());
-        root.put("summary", summary(store));
-        root.put("endpoints", endpoints(store));
-        root.put("parameters", parameters(store));
-        root.put("findings", findings(store, opts));
-        root.put("jsAssets", jsAssets(store));
-        root.put("technologies", technologies(store));
+        root.put("summary", summary(store, data));
+        root.put("endpoints", endpoints(data));
+        root.put("parameters", parameters(data));
+        root.put("findings", findings(data));
+        root.put("jsAssets", jsAssets(data));
+        root.put("technologies", technologies(data));
 
         Files.createDirectories(file.toAbsolutePath().getParent());
         Files.write(file, GSON.toJson(root).getBytes(StandardCharsets.UTF_8));
     }
 
-    private static Map<String, Object> summary(DataStore store) {
+    private static Map<String, Object> summary(DataStore store, ReportData data) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("requestsProcessed", store.getRequestsProcessed());
-        m.put("endpointCount", store.snapshotEndpoints().size());
-        m.put("parameterCount", store.snapshotParameters().size());
-        m.put("findingCount", store.snapshotFindings().size());
-        m.put("jsAssetCount", store.snapshotJsAssets().size());
-        m.put("hostCount", store.snapshotTech().size());
+        m.put("endpointCount", data.endpoints().size());
+        m.put("parameterCount", data.parameters().size());
+        m.put("findingCount", data.findings().size());
+        m.put("jsAssetCount", data.jsAssets().size());
+        m.put("hostCount", data.tech().size());
         m.put("statusCodeCounts", store.statusCodeCounts());
         m.put("hostCounts", store.hostCounts());
         m.put("contentTypeCounts", store.contentTypeCounts());
         return m;
     }
 
-    private static List<Map<String, Object>> endpoints(DataStore store) {
+    private static List<Map<String, Object>> endpoints(ReportData data) {
         List<Map<String, Object>> out = new ArrayList<>();
-        for (Endpoint e : store.snapshotEndpoints()) {
+        for (Endpoint e : data.endpoints()) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("method", e.getMethod());
             m.put("host", e.getHost());
@@ -82,9 +84,9 @@ public final class JsonExporter {
         return out;
     }
 
-    private static List<Map<String, Object>> parameters(DataStore store) {
+    private static List<Map<String, Object>> parameters(ReportData data) {
         List<Map<String, Object>> out = new ArrayList<>();
-        for (ParameterInfo p : store.snapshotParameters()) {
+        for (ParameterInfo p : data.parameters()) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("host", p.getHost());
             m.put("endpoint", p.getEndpointPath());
@@ -99,12 +101,9 @@ public final class JsonExporter {
         return out;
     }
 
-    private static List<Map<String, Object>> findings(DataStore store, ReportOptions opts) {
+    private static List<Map<String, Object>> findings(ReportData data) {
         List<Map<String, Object>> out = new ArrayList<>();
-        for (Finding f : store.snapshotFindings()) {
-            if (!opts.includes(f)) {
-                continue;
-            }
+        for (Finding f : data.findings()) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("type", f.getType());
             m.put("category", FindingTaxonomy.categoryOf(f.getType()).label());
@@ -119,9 +118,9 @@ public final class JsonExporter {
         return out;
     }
 
-    private static List<Map<String, Object>> jsAssets(DataStore store) {
+    private static List<Map<String, Object>> jsAssets(ReportData data) {
         List<Map<String, Object>> out = new ArrayList<>();
-        for (JsAsset a : store.snapshotJsAssets()) {
+        for (JsAsset a : data.jsAssets()) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("url", a.getUrl());
             m.put("sha256", a.getSha256());
@@ -135,9 +134,9 @@ public final class JsonExporter {
         return out;
     }
 
-    private static List<Map<String, Object>> technologies(DataStore store) {
+    private static List<Map<String, Object>> technologies(ReportData data) {
         List<Map<String, Object>> out = new ArrayList<>();
-        for (TechInfo t : store.snapshotTech()) {
+        for (TechInfo t : data.tech()) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("host", t.getHost());
             m.put("technologies", t.getTechnologies());

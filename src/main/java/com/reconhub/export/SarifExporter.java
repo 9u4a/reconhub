@@ -38,11 +38,11 @@ public final class SarifExporter {
         JsonArray results = new JsonArray();
         Map<String, JsonObject> rules = new LinkedHashMap<>();   // ruleId(type) -> rule object
 
-        List<Finding> findings = store.snapshotFindings();
+        // SARIF only reports findings, so ReportData's other four collections go unused here -- still
+        // goes through it (rather than a hand-rolled opt.includes(f) loop) so the bookmark filter
+        // (0.41.0) is applied the same way as in every other exporter.
+        List<Finding> findings = ReportData.of(store, opt).findings();
         for (Finding f : findings) {
-            if (!opt.includes(f)) {
-                continue;
-            }
             String ruleId = f.getType();
             rules.computeIfAbsent(ruleId, id -> {
                 JsonObject rule = new JsonObject();

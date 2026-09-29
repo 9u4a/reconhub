@@ -46,6 +46,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.TreeSet;
 
 /** Configuration + actions: scope, JS saving, ingest/clear, and JSON/HTML export. */
@@ -68,6 +69,7 @@ public final class SettingsPanel extends JPanel {
     // Report scope (applies to HTML & Markdown export).
     private final JCheckBox reportConfirmedOnly = new JCheckBox("Confirmed only", false);
     private final JCheckBox reportExcludeFp = new JCheckBox("Exclude false positives", false);
+    private final JCheckBox reportBookmarkedOnly = new JCheckBox("Bookmarked only", false);
 
     private final RulesModel rulesModel = new RulesModel();
     private JTable rulesTableRef;
@@ -237,6 +239,8 @@ public final class SettingsPanel extends JPanel {
         sarif.addActionListener(e -> exportSarif());
         reportConfirmedOnly.setToolTipText("HTML/Markdown/JSON/SARIF export: include only Confirmed findings");
         reportExcludeFp.setToolTipText("HTML/Markdown/JSON/SARIF export: drop findings marked False positive");
+        reportBookmarkedOnly.setToolTipText("HTML/Markdown/JSON/SARIF export: include only bookmarked (★) "
+                + "rows -- applies to every section (Endpoints/Parameters/Findings/JS/Tech), not just Findings");
         p.add(ingestButton);
         p.add(clear);
         p.add(removeOutOfScope);
@@ -248,11 +252,13 @@ public final class SettingsPanel extends JPanel {
         p.add(Box.createHorizontalStrut(10));
         p.add(reportConfirmedOnly);
         p.add(reportExcludeFp);
+        p.add(reportBookmarkedOnly);
         return p;
     }
 
     private ReportOptions reportOptions() {
-        return new ReportOptions(reportConfirmedOnly.isSelected(), reportExcludeFp.isSelected());
+        return new ReportOptions(reportConfirmedOnly.isSelected(), reportExcludeFp.isSelected(),
+                reportBookmarkedOnly.isSelected(), bookmarks);
     }
 
     private JPanel minSeverityRow() {
@@ -419,10 +425,17 @@ public final class SettingsPanel extends JPanel {
     /**
      * Bulk cleanup for "ingested a whole site map and out-of-scope noise came along" -- scans every
      * host ReconHub has ever recorded against the current {@link ScopeFilter} (Burp scope +
-     * include/exclude regex) and, after one confirmation naming every host, removes each via {@link
-     * DataStore#deleteHost}. A fresh {@link ScopeFilter} is constructed here rather than threading a
-     * shared one through the constructor -- it's cheap/stateless enough that {@code ReconHubExtension}
-     * and {@code TrafficIngestor} already each build their own independently.
+     * include/exclude regex) and, after one confirmation naming every host, removes them all via
+     * {@link DataStore#deleteHosts}. A fresh {@link ScopeFilter} is constructed here rather than
+     * threading a shared one through the constructor -- it's cheap/stateless enough that {@code
+     * ReconHubExtension} and {@code TrafficIngestor} already each build their own independently.
+     *
+     * <p>0.41.0: both the scheme lookup and the delete used to happen once per host inside this loop
+     * ({@code RunBruteforceAction.inferScheme} itself re-scans all endpoints on every call, and the old
+     * per-host {@code deleteHost} re-scans all 5 collections on every call) -- O(hosts &times; rows)
+     * against exactly the scenario this button targets, where both host count and row count are large
+     * right after a whole site map was ingested. {@link RunBruteforceAction#schemesByHost} and {@link
+     * DataStore#deleteHosts} each do their respective full scan exactly once instead.
      */
     private void doRemoveOutOfScope() {
         ScopeFilter scopeFilter = new ScopeFilter(api, settings);
@@ -434,13 +447,14 @@ public final class SettingsPanel extends JPanel {
         for (TechInfo t : store.snapshotTech()) {
             hosts.add(t.getHost());
         }
+        Map<String, String> schemes = RunBruteforceAction.schemesByHost(store);
         List<String> outOfScope = new ArrayList<>();
         for (String host : hosts) {
             if (host == null || host.isBlank()) {
                 continue;
             }
-            String url = RunBruteforceAction.inferScheme(store, host) + "://" + host;
-            if (!scopeFilter.inScope(url)) {
+            String scheme = schemes.getOrDefault(host.toLowerCase(java.util.Locale.ROOT), "https");
+            if (!scopeFilter.inScope(scheme + "://" + host)) {
                 outOfScope.add(host);
             }
         }
@@ -462,16 +476,10 @@ public final class SettingsPanel extends JPanel {
         if (choice != JOptionPane.OK_OPTION) {
             return;
         }
-        int ep = 0, pm = 0, fd = 0, js = 0;
-        for (String host : outOfScope) {
-            DataStore.HostDeleteResult r = store.deleteHost(host);
-            ep += r.endpoints();
-            pm += r.parameters();
-            fd += r.findings();
-            js += r.jsAssets();
-        }
-        setStatus("Removed " + outOfScope.size() + " out-of-scope host(s): " + ep + " endpoints, "
-                + pm + " parameters, " + fd + " findings, " + js + " JS assets.");
+        DataStore.HostDeleteResult r = store.deleteHosts(new java.util.HashSet<>(outOfScope));
+        setStatus("Removed " + outOfScope.size() + " out-of-scope host(s): " + r.endpoints()
+                + " endpoints, " + r.parameters() + " parameters, " + r.findings() + " findings, "
+                + r.jsAssets() + " JS assets.");
     }
 
     private void doClear() {

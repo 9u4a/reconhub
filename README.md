@@ -12,14 +12,14 @@
 
 | 탭 | 한 줄 설명 |
 |----|------|
-| **Dashboard** | 요약 통계 + 호스트 스코어카드, 다른 탭으로 크로스탭 이동, **호스트 데이터 삭제** |
+| **Dashboard** | 요약 통계 + 호스트 스코어카드, 다른 탭으로 크로스탭 이동, **호스트 데이터 삭제(다중 선택)** |
 | **Endpoints** | 엔드포인트 인벤토리 (dedup, Auth 관찰) |
 | **Parameters** | 파라미터 + 취약점 후보 Class 자동 분류 |
 | **Findings** | 탐지 결과 심각도/카테고리 집계 + 트리아지 |
 | **JS Assets** | JS 파일 수집·분석 (엔드포인트/시크릿 추출) |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 체크 |
 | **Bruteforce** ⚠**ACTIVE** | 알려진 경로(관리자·API·노출 파일 등) 탐색 |
-| **Settings** | 스코프·규칙·Ingest·내보내기·State 백업, **스코프 밖 호스트 일괄 삭제** |
+| **Settings** | 스코프·규칙·Ingest·내보내기(**북마크만** 옵션 포함)·State 백업, **스코프 밖 호스트 일괄 삭제** |
 
 **탐지 항목**: 시크릿(API 키/JWT/쿠키값 포함)·PII·오픈 리다이렉트·반사 XSS 후보·응답 시그니처(스택
 트레이스/SQL 에러)·CORS/쿠키/CSP/캐시 미스컨피그·노출 파일(`.env`·`.git`)·OpenAPI/Swagger·GraphQL
@@ -27,8 +27,8 @@ introspection·소스맵 노출·주석·누락 보안 헤더.
 
 **공통 기능**: 검색(정규식·AND·본문)·정렬(**`Shift`+클릭으로 다중 컬럼**)·CSV 내보내기·행 우클릭 Copy/Repeater/Intruder/
 curl·JS Beautify·**북마크/메모**·**키보드 단축키**·**다크테마 자동 대응**·**모든 표 줄무늬(zebra)
-배경**. Endpoints·Parameters는 **체크박스 다중값 필터**(Burp History 필터처럼)도 제공. 자세한 내용은
-아래 [기능 상세](#기능-상세) 참고.
+배경**. Endpoints·Parameters는 **체크박스 다중값 필터**(Burp History 필터처럼)도 제공, Findings·Tech는
+**Host 체크박스 필터**도 제공. 자세한 내용은 아래 [기능 상세](#기능-상세) 참고.
 
 ## 사용법
 
@@ -52,8 +52,8 @@ Settings에서 **JSON/HTML/Markdown/SARIF** 리포트·워드리스트·**State 
 카운트·심각도 요약, **호스트 스코어카드**(선택 시 심각도별·누락 보안헤더 상세), Top findings·주목
 엔드포인트·파라미터 클래스. 우클릭으로 다른 탭에서 필터링해 보기. 호스트 우클릭 **Delete all data for
 this host…**로 그 호스트의 엔드포인트/파라미터/파인딩/JS/Tech 데이터를 전부 삭제(삭제 전 건수 미리보기,
-확인 필수, Burp 자체 Proxy History/Site Map은 건드리지 않음) — Endpoints/Parameters/Findings/Tech
-탭에서도 동일 메뉴 제공.
+확인 필수, Burp 자체 Proxy History/Site Map은 건드리지 않음) — **Ctrl/Shift로 여러 호스트 다중 선택 후
+한 번에 삭제**도 가능. Endpoints/Parameters/Findings/Tech 탭에서도 동일(단일 호스트) 삭제 메뉴 제공.
 
 ### Endpoints
 method+정규화 URL로 dedup한 인벤토리(인증 관찰 Auth 컬럼 포함), 행 선택 시 원문 Request/Response.
@@ -71,7 +71,8 @@ serialize·ViewState)는 Deserialization이 이름과 무관하게 자동 제안
 ### Findings
 시크릿·PII·미스컨피그 등을 심각도·**카테고리**로 집계(필터·트리아지·JWT 디코드, 행 선택 시 원문).
 우클릭 **Payload cheatsheet ▸**로 반사 XSS·오픈 리다이렉트는 자동 제안, **전체 클래스도 수동 선택
-가능**.
+가능**. 검색창 옆 **Host 필터 버튼**으로 여러 호스트를 체크박스로 골라 필터링(심각도/카테고리 필터와
+동시 적용).
 
 ### JS Assets
 JS 수집(SHA-256 dedup·옵션 저장) + 내부 엔드포인트·시크릿 추출. 해시 이름 코드-스플릿 청크를 열어보지
@@ -80,7 +81,8 @@ JS 수집(SHA-256 dedup·옵션 저장) + 내부 엔드포인트·시크릿 추�
 file(s)…**로 로컬에서 불러와 동일 분석.
 
 ### Tech
-호스트별 기술 식별 + 보안 헤더 누락 체크(Findings에도 동일 항목이 LOW로 집계).
+호스트별 기술 식별 + 보안 헤더 누락 체크(Findings에도 동일 항목이 LOW로 집계). 검색창 옆 **Host 필터
+버튼**으로 여러 호스트를 체크박스로 골라 필터링.
 
 ### Bruteforce ⚠ACTIVE
 알려진 경로(관리자 패널·API 문서·노출 파일·CI/CD·IDE 아티팩트 등, 내장 워드리스트 약 380개) 탐색.
@@ -98,6 +100,9 @@ Export/Import에도 완료 기록으로 보존**.
 유지**(extension preferences에 저장). **Remove out-of-scope hosts…**로 현재 스코프(Burp Scope +
 include/exclude 정규식) 밖의 호스트를 한 번에 찾아서 일괄 삭제 — 사이트맵 전체를 ingest한 뒤 불필요한
 호스트가 섞여 들어왔을 때 유용(Scope Mode가 "All"이면 스코프 밖이 없으므로 항상 "없음"으로 나옴).
+내보내기(HTML/Markdown/JSON/SARIF) 옆 **Confirmed only / Exclude false positives / Bookmarked only**
+체크박스로 리포트 범위를 좁힐 수 있음 — **Bookmarked only는 Findings뿐 아니라 Endpoints/Parameters/
+JS/Tech 전 섹션에 적용**.
 
 ### 탐지 항목 상세
 API 키/토큰·JWT·인증 헤더·스토리지 URL 등 **시크릿**(응답 본문뿐 아니라 **쿠키 값**도 스캔 — 쿠키로
@@ -120,9 +125,10 @@ Findings·JS Assets)에서 JS 응답이면 **Beautify JS** 토글로 한 줄로 
 2·3순위로 유지됨(예: Host 클릭 후 `Shift`+Status 클릭 → Host 안에서 Status로 정렬), 헤더에 "2"·"3"
 같은 작은 숫자로 순위 표시.
 
-**체크박스 다중값 필터**(Endpoints/Parameters): 검색창 옆 필터 버튼을 누르면 그 컬럼에 현재 존재하는
-모든 값이 체크박스로 나열됨 — 체크 해제한 값만 숨김(여러 개를 연달아 체크/해제 가능, 팝업이 자동으로
-안 닫힘). 데이터가 갱신되면 목록도 자동으로 최신화.
+**체크박스 다중값 필터**(Endpoints/Parameters의 Method·Status·Type·Location·Class, Findings/Tech의
+Host): 검색창 옆 필터 버튼을 누르면 그 컬럼에 현재 존재하는 모든 값이 체크박스로 나열됨 — 체크 해제한
+값만 숨김(여러 개를 연달아 체크/해제 가능, 팝업이 자동으로 안 닫힘). 데이터가 갱신되면 목록도 자동으로
+최신화.
 
 인벤토리 탭(Endpoints·Parameters·Findings·JS Assets·Tech)은 행 우클릭 **★ Bookmark / Edit note…**
 (또는 `Ctrl+B`)로 북마크·메모 가능 — Burp 재시작 후에도 유지, `★ only` 체크박스로 북마크된 행만

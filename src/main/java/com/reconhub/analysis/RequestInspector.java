@@ -6,6 +6,7 @@ import burp.api.montoya.http.message.params.ParsedHttpParameter;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import burp.api.montoya.http.message.responses.HttpResponse;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.Hosts;
 import com.reconhub.model.Finding;
 
 import java.net.URI;
@@ -47,7 +48,7 @@ public final class RequestInspector {
         if (request == null) {
             return;
         }
-        String host = hostOf(url);
+        String host = Hosts.of(url);
         String path = pathOf(url);
         boolean html = contentType != null && contentType.toLowerCase(Locale.ROOT).contains("html");
         int status = response != null ? response.statusCode() : 0;
@@ -195,15 +196,6 @@ public final class RequestInspector {
         Finding f = new Finding(type, sev, key, url, evidence, false);
         f.setMessages(rr);
         return store.recordFinding(f);
-    }
-
-    private static String hostOf(String url) {
-        try {
-            String h = URI.create(url).getHost();
-            return h == null ? "" : h;
-        } catch (RuntimeException e) {
-            return "";
-        }
     }
 
     private static String pathOf(String url) {

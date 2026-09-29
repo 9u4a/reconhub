@@ -28,15 +28,35 @@ public final class TechPanel extends AbstractTablePanel<TechInfo> {
     private BruteforceEngine bruteforce;
     private Settings settings;
 
+    // Same Burp-History-filter-style checklist as Endpoints/Parameters/Findings (0.41.0) -- one row per
+    // host here, so the value is picking several hosts at once, not narrowing within one. Technologies/
+    // Missing-headers aren't candidates: both hold several values per row, which doesn't fit
+    // ColumnValueFilter's one-value-per-row model (same reason 0.40.0 skipped them).
+    private final ColumnValueFilter<TechInfo> hostFilter =
+            new ColumnValueFilter<>("Host", TechInfo::getHost);
+
     public TechPanel(DataStore store, MontoyaApi api, Bookmarks bookmarks) {
         super(api, bookmarks);
         this.store = store;
         detailBody.setLayout(new BoxLayout(detailBody, BoxLayout.Y_AXIS));
         detailBody.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
         installDetail(new JScrollPane(detailBody));
+
+        hostFilter.setOnChange(this::reapplyFilter);
+        addToToolbar(hostFilter.component());
     }
 
     @Override protected String rowKey(TechInfo t) { return t == null ? null : t.key(); }
+
+    @Override protected boolean hasRowFilter() { return true; }
+
+    @Override protected boolean rowIncluded(TechInfo t) { return t == null || hostFilter.test(t); }
+
+    @Override
+    public void refreshData() {
+        super.refreshData();
+        hostFilter.refreshAvailableValues(store.snapshotTech());
+    }
 
     /** Wires the (ACTIVE) known-path bruteforce action for this tab's right-click menu; called once. */
     public void setBruteforce(BruteforceEngine engine, Settings settings) {

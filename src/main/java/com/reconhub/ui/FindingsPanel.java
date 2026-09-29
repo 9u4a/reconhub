@@ -8,6 +8,7 @@ import com.reconhub.analysis.JwtDecoder;
 import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.Hosts;
 import com.reconhub.core.Settings;
 import com.reconhub.model.Finding;
 
@@ -21,7 +22,6 @@ import javax.swing.JTextArea;
 import javax.swing.JToggleButton;
 import java.awt.Component;
 import java.awt.Font;
-import java.net.URI;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
@@ -49,6 +49,11 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     /** Category filter; null = show all. */
     private FindingTaxonomy.Category activeCategory;
     private final JComboBox<String> catBox = new JComboBox<>();
+    // Burp-History-filter-style checklist quick filter (0.41.0), same widget/pattern as Endpoints'
+    // Method/Status/Type filters -- lets several hosts be picked at once, which the search box alone
+    // can't express. ANDed alongside severity/category below, not a replacement for them.
+    private final ColumnValueFilter<Finding> hostFilter =
+            new ColumnValueFilter<>("Host", f -> Hosts.labelOf(f.getLocationUrl()));
     private boolean rebuildingCatBox;
     private DashboardPanel.Navigator navigator;
     private BruteforceEngine bruteforce;
@@ -97,6 +102,9 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
             });
             addToToolbar(b);
         }
+
+        hostFilter.setOnChange(this::reapplyFilter);
+        addToToolbar(hostFilter.component());
     }
 
     @Override protected String rowKey(Finding f) { return f == null ? null : f.key(); }
@@ -118,7 +126,7 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         }
         boolean sevOk = activeSeverities.isEmpty() || activeSeverities.contains(f.getSeverity());
         boolean catOk = activeCategory == null || cat == activeCategory;
-        return sevOk && catOk;
+        return sevOk && catOk && hostFilter.test(f);
     }
 
     /** Wires cross-tab navigation (finding → related endpoints/parameters). */
@@ -134,13 +142,15 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     @Override
     public void refreshData() {
         super.refreshData();
+        List<Finding> rows = store.snapshotFindings();
         // Live per-category counts in the filter combo.
         Map<FindingTaxonomy.Category, Integer> counts =
                 new EnumMap<>(FindingTaxonomy.Category.class);
-        for (Finding f : store.snapshotFindings()) {
+        for (Finding f : rows) {
             counts.merge(FindingTaxonomy.categoryOf(f.getType()), 1, Integer::sum);
         }
         rebuildCategoryItems(counts);
+        hostFilter.refreshAvailableValues(rows);
     }
 
     /** Rebuilds the category combo items as "Label (count)" while preserving the selection. */
@@ -242,7 +252,7 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         if (f == null) {
             return;
         }
-        String host = hostOf(f.getLocationUrl());
+        String host = Hosts.of(f.getLocationUrl());
         if (navigator != null && !host.isEmpty()) {
             menu.addSeparator();
             addMenuItem(menu, "View endpoints for " + host, true,
@@ -267,18 +277,6 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
                         f.setTriage(t);
                         store.fireChanged();
                     });
-        }
-    }
-
-    private static String hostOf(String url) {
-        if (url == null || !url.startsWith("http")) {
-            return "";
-        }
-        try {
-            String h = URI.create(url).getHost();
-            return h == null ? "" : h;
-        } catch (RuntimeException e) {
-            return "";
         }
     }
 

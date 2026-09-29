@@ -7,11 +7,11 @@ import com.reconhub.model.JsAsset;
 import com.reconhub.model.ParameterInfo;
 import com.reconhub.model.TechInfo;
 
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -302,11 +302,31 @@ public final class DataStore {
         if (host == null || host.isBlank()) {
             return new HostDeleteResult(0, 0, 0, 0, false);
         }
-        int ep = removeIf(endpoints, e -> host.equals(e.getHost()));
-        int pm = removeIf(parameters, p -> host.equals(p.getHost()));
-        int fd = removeIf(findings, f -> host.equals(hostOf(f.getLocationUrl())));
-        int js = removeIf(jsAssets, a -> host.equals(hostOf(a.getUrl())));
-        boolean tech = techByHost.remove(host) != null;
+        return deleteHosts(Set.of(host));
+    }
+
+    /**
+     * Bulk version of {@link #deleteHost} -- removes every row attributed to any host in {@code hosts}.
+     * Scans each of the 5 collections exactly once regardless of how many hosts are given, instead of
+     * once per host (0.41.0: the previous "call {@link #deleteHost} in a loop" pattern used by {@code
+     * SettingsPanel.doRemoveOutOfScope} was O(hosts &times; rows) -- a real cost once a whole site map
+     * has been ingested and both host count and row count are large). Mod-counter and {@code
+     * Bookmarks}-preservation semantics are identical to {@link #deleteHost}.
+     */
+    public HostDeleteResult deleteHosts(Set<String> hosts) {
+        if (hosts == null || hosts.isEmpty()) {
+            return new HostDeleteResult(0, 0, 0, 0, false);
+        }
+        int ep = removeIf(endpoints, e -> hosts.contains(e.getHost()));
+        int pm = removeIf(parameters, p -> hosts.contains(p.getHost()));
+        int fd = removeIf(findings, f -> hosts.contains(Hosts.of(f.getLocationUrl())));
+        int js = removeIf(jsAssets, a -> hosts.contains(Hosts.of(a.getUrl())));
+        boolean tech = false;
+        for (String host : hosts) {
+            if (techByHost.remove(host) != null) {
+                tech = true;
+            }
+        }
         // Mod counters bump only when the key set actually changed for that collection -- same
         // invariant as every record*/restore* method above (0.35.0's snapshot-cache design).
         if (ep > 0) {
@@ -324,7 +344,7 @@ public final class DataStore {
         if (tech) {
             techMod.incrementAndGet();
         }
-        hostCounts.remove(host);
+        hostCounts.keySet().removeAll(hosts);
         fireChanged();
         return new HostDeleteResult(ep, pm, fd, js, tech);
     }
@@ -341,21 +361,6 @@ public final class DataStore {
             return false;
         });
         return n[0];
-    }
-
-    /** Same logic as the near-identical helpers in {@code ui.DashboardPanel}/{@code ui.FindingsPanel}
-     * -- kept as its own copy here (not consolidated) since {@code core} can't depend on {@code ui},
-     * and {@link Finding}/{@link JsAsset} have no host field of their own to key {@link #deleteHost} on. */
-    private static String hostOf(String url) {
-        if (url == null || url.isBlank()) {
-            return "";
-        }
-        try {
-            URI u = URI.create(url);
-            return u.getHost() != null ? u.getHost() : "";
-        } catch (RuntimeException ignored) {
-            return "";
-        }
     }
 
     /** Clears every collection and counter (used by the "Clear" button). */

@@ -3,6 +3,7 @@ package com.reconhub.export;
 import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.ParameterClassifier;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.Hosts;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
 import com.reconhub.model.JsAsset;
@@ -21,7 +22,8 @@ import java.util.List;
 
 /**
  * Renders the {@link DataStore} into a Markdown report (for pasting into tickets / docs). Sensitive
- * values are masked, matching the HTML report. Honors {@link ReportOptions} for finding filtering.
+ * values are masked, matching the HTML report. Honors {@link ReportOptions} for filtering (finding
+ * triage, and -- 0.41.0 -- bookmarked-only across every section).
  */
 public final class MarkdownReporter {
 
@@ -33,35 +35,37 @@ public final class MarkdownReporter {
 
     public static void export(DataStore store, Path file, ReportOptions options) throws IOException {
         ReportOptions opt = options == null ? ReportOptions.all() : options;
+        // One snapshot-and-filter pass, shared by every section below -- see ReportData javadoc.
+        ReportData data = ReportData.of(store, opt);
         StringBuilder b = new StringBuilder();
         b.append("# ReconHub Report\n\n")
                 .append("_Generated ")
                 .append(ZonedDateTime.now().format(DateTimeFormatter.RFC_1123_DATE_TIME))
                 .append("_\n\n");
 
-        summary(b, store, opt);
-        hostRisk(b, store, opt);
-        findings(b, store, opt);
-        endpoints(b, store);
-        parameters(b, store);
-        jsFiles(b, store);
-        tech(b, store);
+        summary(b, store, data);
+        hostRisk(b, data);
+        findings(b, data);
+        endpoints(b, data);
+        parameters(b, data);
+        jsFiles(b, data);
+        tech(b, data);
 
         Files.createDirectories(file.toAbsolutePath().getParent());
         Files.write(file, b.toString().getBytes(StandardCharsets.UTF_8));
     }
 
-    private static void summary(StringBuilder b, DataStore store, ReportOptions opt) {
+    private static void summary(StringBuilder b, DataStore store, ReportData data) {
         b.append("## Summary\n\n");
         b.append("| Metric | Count |\n| --- | --- |\n");
         row(b, "Requests", store.getRequestsProcessed());
-        row(b, "Endpoints", store.snapshotEndpoints().size());
-        row(b, "Parameters", store.snapshotParameters().size());
-        row(b, "Findings", store.snapshotFindings().size());
-        row(b, "JS files", store.snapshotJsAssets().size());
-        row(b, "Hosts", store.snapshotTech().size());
+        row(b, "Endpoints", data.endpoints().size());
+        row(b, "Parameters", data.parameters().size());
+        row(b, "Findings", data.findings().size());
+        row(b, "JS files", data.jsAssets().size());
+        row(b, "Hosts", data.tech().size());
 
-        List<Finding> shown = filtered(store.snapshotFindings(), opt);
+        List<Finding> shown = data.findings();
         EnumMap<Finding.Severity, Integer> sev = new EnumMap<>(Finding.Severity.class);
         for (Finding f : shown) {
             sev.merge(f.getSeverity(), 1, Integer::sum);
@@ -74,13 +78,13 @@ public final class MarkdownReporter {
         b.append(String.join(" · ", parts)).append("\n\n");
     }
 
-    private static void hostRisk(StringBuilder b, DataStore store, ReportOptions opt) {
+    private static void hostRisk(StringBuilder b, ReportData data) {
         java.util.Map<String, int[]> byHost = new java.util.TreeMap<>();   // [ep, H, M, L, I]
-        for (Endpoint e : store.snapshotEndpoints()) {
-            byHost.computeIfAbsent(hostLabel(e.getHost()), k -> new int[5])[0]++;
+        for (Endpoint e : data.endpoints()) {
+            byHost.computeIfAbsent(Hosts.label(e.getHost()), k -> new int[5])[0]++;
         }
-        for (Finding f : filtered(store.snapshotFindings(), opt)) {
-            byHost.computeIfAbsent(hostLabel(hostOf(f.getLocationUrl())), k -> new int[5])
+        for (Finding f : data.findings()) {
+            byHost.computeIfAbsent(Hosts.labelOf(f.getLocationUrl()), k -> new int[5])
                     [1 + f.getSeverity().ordinal()]++;
         }
         b.append("## Host risk\n\n");
@@ -106,25 +110,9 @@ public final class MarkdownReporter {
         b.append('\n');
     }
 
-    private static String hostLabel(String host) {
-        return host == null || host.isBlank() ? "(relative / JS)" : host;
-    }
-
-    private static String hostOf(String url) {
-        if (url == null || url.isBlank()) {
-            return "";
-        }
-        try {
-            String h = java.net.URI.create(url).getHost();
-            return h == null ? "" : h;
-        } catch (RuntimeException e) {
-            return "";
-        }
-    }
-
-    private static void findings(StringBuilder b, DataStore store, ReportOptions opt) {
+    private static void findings(StringBuilder b, ReportData data) {
         b.append("## Findings & Secrets\n\n");
-        List<Finding> findings = filtered(store.snapshotFindings(), opt);
+        List<Finding> findings = data.findings();
         if (findings.isEmpty()) {
             b.append("_No findings._\n\n");
             return;
@@ -145,9 +133,9 @@ public final class MarkdownReporter {
         b.append('\n');
     }
 
-    private static void endpoints(StringBuilder b, DataStore store) {
+    private static void endpoints(StringBuilder b, ReportData data) {
         b.append("## Endpoints\n\n");
-        List<Endpoint> eps = store.snapshotEndpoints();
+        List<Endpoint> eps = data.endpoints();
         if (eps.isEmpty()) {
             b.append("_No endpoints._\n\n");
             return;
@@ -168,9 +156,9 @@ public final class MarkdownReporter {
         b.append('\n');
     }
 
-    private static void parameters(StringBuilder b, DataStore store) {
+    private static void parameters(StringBuilder b, ReportData data) {
         b.append("## Parameters\n\n");
-        List<ParameterInfo> params = store.snapshotParameters();
+        List<ParameterInfo> params = data.parameters();
         if (params.isEmpty()) {
             b.append("_No parameters._\n\n");
             return;
@@ -191,9 +179,9 @@ public final class MarkdownReporter {
         b.append('\n');
     }
 
-    private static void jsFiles(StringBuilder b, DataStore store) {
+    private static void jsFiles(StringBuilder b, ReportData data) {
         b.append("## JavaScript Files\n\n");
-        List<JsAsset> assets = store.snapshotJsAssets();
+        List<JsAsset> assets = data.jsAssets();
         if (assets.isEmpty()) {
             b.append("_No JS files collected._\n\n");
             return;
@@ -212,9 +200,9 @@ public final class MarkdownReporter {
         b.append('\n');
     }
 
-    private static void tech(StringBuilder b, DataStore store) {
+    private static void tech(StringBuilder b, ReportData data) {
         b.append("## Technologies & Security Headers\n\n");
-        List<TechInfo> techs = store.snapshotTech();
+        List<TechInfo> techs = data.tech();
         if (techs.isEmpty()) {
             b.append("_No technology data._\n\n");
             return;
@@ -230,16 +218,6 @@ public final class MarkdownReporter {
     }
 
     // ---- helpers --------------------------------------------------------
-
-    private static List<Finding> filtered(List<Finding> findings, ReportOptions opt) {
-        List<Finding> out = new ArrayList<>();
-        for (Finding f : findings) {
-            if (opt.includes(f)) {
-                out.add(f);
-            }
-        }
-        return out;
-    }
 
     private static void row(StringBuilder b, String label, int n) {
         b.append("| ").append(label).append(" | ").append(n).append(" |\n");

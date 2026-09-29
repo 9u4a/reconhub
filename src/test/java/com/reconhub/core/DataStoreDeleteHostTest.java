@@ -135,4 +135,66 @@ class DataStoreDeleteHostTest {
         store.deleteHost("h.example");
         assertTrue(fired[0]);
     }
+
+    // ---- deleteHosts (0.41.0 bulk version, backing deleteHost above) --------------------------------
+
+    @Test
+    void deleteHostsWithEmptySetIsANoOp() {
+        DataStore store = populated();
+        int before = store.snapshotEndpoints().size();
+
+        DataStore.HostDeleteResult r = store.deleteHosts(Set.of());
+
+        assertEquals(0, r.endpoints());
+        assertFalse(r.tech());
+        assertEquals(before, store.snapshotEndpoints().size());
+    }
+
+    @Test
+    void deleteHostsWithNullSetIsANoOp() {
+        DataStore store = populated();
+        int before = store.snapshotEndpoints().size();
+        DataStore.HostDeleteResult r = store.deleteHosts(null);
+        assertEquals(0, r.endpoints());
+        assertEquals(before, store.snapshotEndpoints().size());
+    }
+
+    @Test
+    void deletingMultipleHostsAtOnceRemovesAllOfThem() {
+        DataStore store = populated();
+        DataStore.HostDeleteResult r = store.deleteHosts(Set.of("h.example", "other.example"));
+
+        assertEquals(3, r.endpoints());    // 2 + 1
+        assertEquals(2, r.parameters());
+        assertEquals(2, r.findings());
+        assertEquals(2, r.jsAssets());
+        assertTrue(r.tech());
+        assertTrue(store.snapshotEndpoints().isEmpty());
+        assertTrue(store.snapshotTech().isEmpty());
+    }
+
+    @Test
+    void deleteHostsIgnoresUnknownHostsMixedIntoTheSet() {
+        DataStore store = populated();
+        DataStore.HostDeleteResult r = store.deleteHosts(Set.of("h.example", "never-seen.example"));
+
+        assertEquals(2, r.endpoints());   // only h.example's rows
+        assertTrue(store.snapshotEndpoints().stream().anyMatch(e -> "other.example".equals(e.getHost())));
+    }
+
+    @Test
+    void bulkDeleteMatchesSumOfSequentialSingleDeletes() {
+        DataStore bulk = populated();
+        DataStore sequential = populated();
+
+        DataStore.HostDeleteResult bulkResult = bulk.deleteHosts(Set.of("h.example", "other.example"));
+        DataStore.HostDeleteResult r1 = sequential.deleteHost("h.example");
+        DataStore.HostDeleteResult r2 = sequential.deleteHost("other.example");
+
+        assertEquals(r1.endpoints() + r2.endpoints(), bulkResult.endpoints());
+        assertEquals(r1.parameters() + r2.parameters(), bulkResult.parameters());
+        assertEquals(r1.findings() + r2.findings(), bulkResult.findings());
+        assertEquals(r1.jsAssets() + r2.jsAssets(), bulkResult.jsAssets());
+        assertEquals(r1.tech() || r2.tech(), bulkResult.tech());
+    }
 }

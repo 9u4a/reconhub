@@ -4,12 +4,12 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.HashUtil;
+import com.reconhub.core.Hosts;
 import com.reconhub.core.Settings;
 import com.reconhub.export.JsFileWriter;
 import com.reconhub.model.JsAsset;
 
 import java.io.IOException;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -97,7 +97,7 @@ public final class JsAnalyzer {
     /** @return the distinct links discovered (insertion order), so the caller can both count them and
      * sample a few for {@link #buildPreview}. */
     private List<String> extractEndpoints(String jsUrl, String body) {
-        String host = hostOf(jsUrl);
+        String host = Hosts.of(jsUrl);
         // LinkedHashSet, not HashSet: preview sampling needs a deterministic order (the same body is
         // only ever analyzed once, due to SHA-256 dedup, so its preview must come out the same way
         // every time -- not depend on HashSet's unspecified iteration order).
@@ -112,7 +112,7 @@ public final class JsAnalyzer {
                 if (!isInterestingLink(link) || !seen.add(link)) {
                     continue;
                 }
-                String linkHost = link.startsWith("http") ? hostOf(link) : host;
+                String linkHost = link.startsWith("http") ? Hosts.of(link) : host;
                 store.recordEndpoint("JS", linkHost, link, link, 0, "", "js",
                         Set.of(), null, Set.of(jsUrl));
             }
@@ -168,12 +168,4 @@ public final class JsAnalyzer {
         return link.startsWith("/") || link.startsWith("http") || link.contains("/");
     }
 
-    private static String hostOf(String url) {
-        try {
-            URI uri = URI.create(url);
-            return uri.getHost() != null ? uri.getHost() : "";
-        } catch (RuntimeException e) {
-            return "";
-        }
-    }
 }

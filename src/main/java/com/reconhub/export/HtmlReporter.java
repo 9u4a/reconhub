@@ -3,6 +3,7 @@ package com.reconhub.export;
 import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.ParameterClassifier;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.Hosts;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
 import com.reconhub.model.JsAsset;
@@ -49,30 +50,34 @@ public final class HtmlReporter {
     }
 
     private static String buildBody(DataStore store, ReportOptions options) {
+        // One snapshot-and-filter pass, shared by every section below -- see ReportData javadoc for
+        // why (used to be per-section store.snapshotX() calls, findings filtered by hand in each of
+        // several places, and the bookmark filter (0.41.0) could only ever have reached Findings).
+        ReportData data = ReportData.of(store, options);
         StringBuilder b = new StringBuilder();
-        summarySection(b, store, options);
-        hostRiskSection(b, store, options);
+        summarySection(b, store, data);
+        hostRiskSection(b, data);
         chartsSection(b, store);
-        findingsSection(b, store, options);
-        endpointsSection(b, store);
-        parametersSection(b, store);
-        jsSection(b, store);
-        techSection(b, store);
+        findingsSection(b, data);
+        endpointsSection(b, data);
+        parametersSection(b, data);
+        jsSection(b, data);
+        techSection(b, data);
         return b.toString();
     }
 
-    private static void summarySection(StringBuilder b, DataStore store, ReportOptions options) {
+    private static void summarySection(StringBuilder b, DataStore store, ReportData data) {
         b.append("<section id=\"summary\"><h2>Summary</h2><div class=\"cards\">");
         card(b, store.getRequestsProcessed(), "Requests");
-        card(b, store.snapshotEndpoints().size(), "Endpoints");
-        card(b, store.snapshotParameters().size(), "Parameters");
-        card(b, store.snapshotFindings().size(), "Findings");
-        card(b, store.snapshotJsAssets().size(), "JS files");
-        card(b, store.snapshotTech().size(), "Hosts");
+        card(b, data.endpoints().size(), "Endpoints");
+        card(b, data.parameters().size(), "Parameters");
+        card(b, data.findings().size(), "Findings");
+        card(b, data.jsAssets().size(), "JS files");
+        card(b, data.tech().size(), "Hosts");
         b.append("</div>");
 
         // Severity summary over the findings that pass the report filter.
-        var shown = filtered(store.snapshotFindings(), options);
+        var shown = data.findings();
         java.util.EnumMap<Finding.Severity, Integer> sev =
                 new java.util.EnumMap<>(Finding.Severity.class);
         for (Finding f : shown) {
@@ -102,13 +107,13 @@ public final class HtmlReporter {
         b.append("</div></section>");
     }
 
-    private static void hostRiskSection(StringBuilder b, DataStore store, ReportOptions options) {
+    private static void hostRiskSection(StringBuilder b, ReportData data) {
         java.util.Map<String, int[]> byHost = new java.util.TreeMap<>();   // [ep, H, M, L, I]
-        for (Endpoint e : store.snapshotEndpoints()) {
-            hostRow(byHost, hostLabel(e.getHost()))[0]++;
+        for (Endpoint e : data.endpoints()) {
+            hostRow(byHost, Hosts.label(e.getHost()))[0]++;
         }
-        for (Finding f : filtered(store.snapshotFindings(), options)) {
-            hostRow(byHost, hostLabel(hostOf(f.getLocationUrl())))[1 + f.getSeverity().ordinal()]++;
+        for (Finding f : data.findings()) {
+            hostRow(byHost, Hosts.labelOf(f.getLocationUrl()))[1 + f.getSeverity().ordinal()]++;
         }
         b.append("<section id=\"hostrisk\"><h2>Host risk</h2>");
         if (byHost.isEmpty()) {
@@ -138,22 +143,6 @@ public final class HtmlReporter {
         return m.computeIfAbsent(host, k -> new int[5]);
     }
 
-    private static String hostLabel(String host) {
-        return host == null || host.isBlank() ? "(relative / JS)" : host;
-    }
-
-    private static String hostOf(String url) {
-        if (url == null || url.isBlank()) {
-            return "";
-        }
-        try {
-            String h = java.net.URI.create(url).getHost();
-            return h == null ? "" : h;
-        } catch (RuntimeException e) {
-            return "";
-        }
-    }
-
     private static void chartsSection(StringBuilder b, DataStore store) {
         b.append("<section id=\"charts\"><h2>Distribution</h2>");
         b.append("<div style=\"display:flex;gap:32px;flex-wrap:wrap\">");
@@ -163,9 +152,9 @@ public final class HtmlReporter {
         b.append("</div></section>");
     }
 
-    private static void findingsSection(StringBuilder b, DataStore store, ReportOptions options) {
+    private static void findingsSection(StringBuilder b, ReportData data) {
         b.append("<section id=\"findings\"><h2>Findings &amp; Secrets</h2>");
-        var findings = filtered(store.snapshotFindings(), options);
+        var findings = data.findings();
         if (findings.isEmpty()) {
             b.append("<p class=\"muted\">No findings.</p></section>");
             return;
@@ -192,9 +181,9 @@ public final class HtmlReporter {
         b.append("</tbody></table></section>");
     }
 
-    private static void endpointsSection(StringBuilder b, DataStore store) {
+    private static void endpointsSection(StringBuilder b, ReportData data) {
         b.append("<section id=\"endpoints\"><h2>Endpoints</h2>");
-        var endpoints = store.snapshotEndpoints();
+        var endpoints = data.endpoints();
         if (endpoints.isEmpty()) {
             b.append("<p class=\"muted\">No endpoints.</p></section>");
             return;
@@ -214,9 +203,9 @@ public final class HtmlReporter {
         b.append("</tbody></table></section>");
     }
 
-    private static void parametersSection(StringBuilder b, DataStore store) {
+    private static void parametersSection(StringBuilder b, ReportData data) {
         b.append("<section id=\"parameters\"><h2>Parameters</h2>");
-        var params = store.snapshotParameters();
+        var params = data.parameters();
         if (params.isEmpty()) {
             b.append("<p class=\"muted\">No parameters.</p></section>");
             return;
@@ -240,9 +229,9 @@ public final class HtmlReporter {
         b.append("</tbody></table></section>");
     }
 
-    private static void jsSection(StringBuilder b, DataStore store) {
+    private static void jsSection(StringBuilder b, ReportData data) {
         b.append("<section id=\"js\"><h2>JavaScript Files</h2>");
-        var assets = store.snapshotJsAssets();
+        var assets = data.jsAssets();
         if (assets.isEmpty()) {
             b.append("<p class=\"muted\">No JS files collected.</p></section>");
             return;
@@ -260,9 +249,9 @@ public final class HtmlReporter {
         b.append("</tbody></table></section>");
     }
 
-    private static void techSection(StringBuilder b, DataStore store) {
+    private static void techSection(StringBuilder b, ReportData data) {
         b.append("<section id=\"tech\"><h2>Technologies &amp; Security Headers</h2>");
-        var techs = store.snapshotTech();
+        var techs = data.tech();
         if (techs.isEmpty()) {
             b.append("<p class=\"muted\">No technology data.</p></section>");
             return;
@@ -285,20 +274,6 @@ public final class HtmlReporter {
     }
 
     // ---- helpers --------------------------------------------------------
-
-    private static java.util.List<Finding> filtered(java.util.List<Finding> findings,
-                                                    ReportOptions options) {
-        if (options == null) {
-            return findings;
-        }
-        java.util.List<Finding> out = new java.util.ArrayList<>();
-        for (Finding f : findings) {
-            if (options.includes(f)) {
-                out.add(f);
-            }
-        }
-        return out;
-    }
 
     private static void card(StringBuilder b, int n, String label) {
         b.append("<div class=\"card\"><div class=\"n\">").append(n)

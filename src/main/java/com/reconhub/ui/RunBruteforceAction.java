@@ -14,6 +14,9 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 import java.awt.Component;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * Shared "run known-path bruteforce on this host" action, invoked from a host/endpoint/parameter
@@ -87,22 +90,46 @@ public final class RunBruteforceAction {
      * {@code "https"}), or {@code "https"} if the host has no recorded endpoint yet. Prevents
      * defaulting to https against a host only ever seen over plain http (or vice versa), which would
      * make every probe fail its TLS handshake.
+     *
+     * <p>Delegates to {@link #schemesByHost} so the two never drift apart. Fine for the single-host
+     * call sites this was written for (a right-click action on one host, once per click) -- each such
+     * call still scans {@code store.snapshotEndpoints()} once, same as before 0.41.0. A caller that
+     * needs the scheme for <em>many</em> hosts at once should call {@link #schemesByHost} directly
+     * instead of calling this in a loop (that used to be an O(hosts &times; endpoints) trap --
+     * see {@code SettingsPanel.doRemoveOutOfScope}).
      */
     static String inferScheme(DataStore store, String host) {   // package-private for headless testing
-        if (store != null && host != null) {
-            for (Endpoint e : store.snapshotEndpoints()) {
-                if (host.equalsIgnoreCase(e.getHost())) {
-                    String url = e.getNormalizedUrl();
-                    if (url != null && url.startsWith("http://")) {
-                        return "http";
-                    }
-                    if (url != null && url.startsWith("https://")) {
-                        return "https";
-                    }
-                }
+        if (store == null || host == null) {
+            return "https";
+        }
+        return schemesByHost(store).getOrDefault(host.toLowerCase(Locale.ROOT), "https");
+    }
+
+    /**
+     * The scheme observed for every host that has at least one recorded endpoint, computed in a single
+     * pass over {@link DataStore#snapshotEndpoints()} -- for callers that need this for many hosts at
+     * once (unlike {@link #inferScheme}, which is for one host per call). Keyed by lower-cased host,
+     * matching {@link #inferScheme}'s case-insensitive comparison. When a host has endpoints recorded
+     * under both schemes, the first one encountered in {@code snapshotEndpoints()}'s (deterministic)
+     * order wins -- the same "first match" semantics {@link #inferScheme}'s linear scan had.
+     */
+    static Map<String, String> schemesByHost(DataStore store) {   // package-private for headless testing
+        Map<String, String> schemes = new HashMap<>();
+        if (store == null) {
+            return schemes;
+        }
+        for (Endpoint e : store.snapshotEndpoints()) {
+            String host = e.getHost();
+            String url = e.getNormalizedUrl();
+            if (host == null || url == null) {
+                continue;
+            }
+            String scheme = url.startsWith("http://") ? "http" : url.startsWith("https://") ? "https" : null;
+            if (scheme != null) {
+                schemes.putIfAbsent(host.toLowerCase(Locale.ROOT), scheme);
             }
         }
-        return "https";
+        return schemes;
     }
 
     private static Component left(Component c) {
