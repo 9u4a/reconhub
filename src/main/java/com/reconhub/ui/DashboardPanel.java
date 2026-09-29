@@ -40,6 +40,7 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -244,6 +245,10 @@ public final class DashboardPanel extends JPanel implements Refreshable {
 
     private void buildHostScorecard(List<Endpoint> eps, List<ParameterInfo> params,
                                     List<Finding> finds) {
+        // Captured BEFORE hostModel.setRows() below replaces the row list (which clears the JTable's
+        // selection outright, same as any fireTableDataChanged()) -- must be read against the OLD
+        // model/view mapping, not the new one.
+        Set<String> priorSelection = currentlySelectedHosts();
         Map<String, int[]> byHost = new TreeMap<>();   // [ep, param, H, M, L, I, missHdr]
         for (Endpoint e : eps) {
             row(byHost, Hosts.label(e.getHost()))[0]++;
@@ -281,28 +286,57 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         }
         hostModel.setRows(trimmed);
 
-        // Keep the selected host across refreshes; otherwise show the top host.
-        String want = selectedHost != null && hostStats.containsKey(selectedHost)
-                ? selectedHost
-                : (trimmed.isEmpty() ? null : (String) trimmed.get(0)[0]);
-        if (want == null) {
-            updateHostDetail(null);
+        // Keep whatever was selected across refreshes -- multi-row included (0.41.0). Before this, only
+        // a single `selectedHost` field was ever remembered and re-applied via setSelectionInterval,
+        // which silently collapsed a Ctrl/Shift multi-selection down to one row on the very next
+        // refresh tick (hostModel.setRows() above clears the selection outright, and the old code only
+        // ever restored one row afterward) -- easy to hit in practice since Dashboard refreshes on every
+        // DataStore change while it's the visible tab, often well under a second.
+        Set<String> stillPresent = new LinkedHashSet<>();
+        for (String host : priorSelection) {
+            if (hostStats.containsKey(host)) {
+                stillPresent.add(host);
+            }
+        }
+        if (!stillPresent.isEmpty()) {
+            selectRows(stillPresent);
+        } else if (!trimmed.isEmpty()) {
+            selectRows(Set.of((String) trimmed.get(0)[0]));
         } else {
-            selectRow(want);
+            updateHostDetail(null);
         }
     }
 
-    private void selectRow(String host) {
-        for (int i = 0; i < hostModel.getRowCount(); i++) {
-            if (host.equals(hostModel.getValueAt(i, 0))) {
-                int view = hostTable.convertRowIndexToView(i);
-                if (view >= 0) {
-                    hostTable.getSelectionModel().setSelectionInterval(view, view);
-                }
-                break;
+    /** The hosts currently selected in {@link #hostTable}, read against whatever {@link #hostModel}
+     * currently holds. Unlike {@link #selectedHosts()} (used by {@code hostMenu}), this doesn't filter
+     * to "real" hosts -- it exists purely to preserve exact selection identity across a refresh. */
+    private Set<String> currentlySelectedHosts() {
+        Set<String> out = new LinkedHashSet<>();
+        for (int view : hostTable.getSelectedRows()) {
+            int model = hostTable.convertRowIndexToModel(view);
+            if (model >= 0 && model < hostModel.getRowCount()) {
+                out.add((String) hostModel.getValueAt(model, 0));
             }
         }
-        updateHostDetail(host);
+        return out;
+    }
+
+    /** Re-selects every host in {@code hosts} that's present in the current {@link #hostModel} (others
+     * are silently dropped -- a host that vanished this refresh can't stay selected). Updates the detail
+     * card only when exactly one ends up selected, matching the selection-listener's own rule. */
+    private void selectRows(Set<String> hosts) {
+        hostTable.clearSelection();
+        for (int i = 0; i < hostModel.getRowCount(); i++) {
+            if (hosts.contains(hostModel.getValueAt(i, 0))) {
+                int view = hostTable.convertRowIndexToView(i);
+                if (view >= 0) {
+                    hostTable.getSelectionModel().addSelectionInterval(view, view);
+                }
+            }
+        }
+        if (hosts.size() == 1) {
+            updateHostDetail(hosts.iterator().next());
+        }
     }
 
     /** Rebuilds the right-hand detail card for one host (severity chips + missing-header names). */
