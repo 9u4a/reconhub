@@ -3,6 +3,7 @@ package com.reconhub.ui;
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.active.BruteforceEngine;
+import com.reconhub.active.MatchReplaceEngine;
 import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
@@ -10,8 +11,10 @@ import com.reconhub.core.Settings;
 import com.reconhub.model.Endpoint;
 
 import javax.swing.JPopupMenu;
+import javax.swing.ListSelectionModel;
 import java.awt.Component;
 import java.awt.Font;
+import java.util.ArrayList;
 import java.util.List;
 
 /** Table of deduplicated endpoints with the request/response viewer and shared row menu. */
@@ -27,6 +30,7 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
     private final MessageViewer viewer;
     private BruteforceEngine bruteforce;
     private Settings settings;
+    private MatchReplaceEngine matchReplace;
 
     // Burp-History-filter-style checklist quick filters (0.40.0+) -- Method/Status/Content-Type are
     // exactly the kind of open-ended-but-repetitive column Burp's own filter dialog offers checkboxes
@@ -51,6 +55,16 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
         addToToolbar(methodFilter.component());
         addToToolbar(statusFilter.component());
         addToToolbar(ctFilter.component());
+
+        // MULTIPLE_INTERVAL_SELECTION (0.42.0): lets Ctrl/Shift pick several endpoints at once for the
+        // "Send N selected with Match & Replace…" menu item below -- AbstractTablePanel's own default
+        // (SINGLE_SELECTION) is left untouched, so Parameters/Findings/JS Assets/Tech are unaffected.
+        // installContextMenu()'s "only move selection when the clicked row is outside it" logic already
+        // preserves a multi-selection across a right-click (unlike Dashboard's separate installPopup,
+        // which needed that fix added in 0.41.1 -- this one already had it), so the existing single-
+        // target menu items (Copy/Repeater/Intruder/etc.) keep working exactly as before, unaffected by
+        // turning this on.
+        table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
     }
 
     @Override protected boolean hasRowFilter() { return true; }
@@ -71,9 +85,30 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
 
     @Override protected String rowKey(Endpoint e) { return e == null ? null : e.key(); }
 
+    /** The currently-selected endpoints, in table (view) order -- used by the Match & Replace bulk-send
+     * menu item, which (unlike the single-target Copy/Repeater/etc. items above) needs the whole
+     * selection, not just the row that was right-clicked. */
+    List<Endpoint> selectedEndpoints() {
+        List<Endpoint> out = new ArrayList<>();
+        for (int view : table.getSelectedRows()) {
+            Endpoint e = rowAt(view);
+            if (e != null) {
+                out.add(e);
+            }
+        }
+        return out;
+    }
+
     /** Wires the (ACTIVE) known-path bruteforce action for this tab's right-click menu; called once. */
     public void setBruteforce(BruteforceEngine engine, Settings settings) {
         this.bruteforce = engine;
+        this.settings = settings;
+    }
+
+    /** Wires the (ACTIVE) Match & Replace bulk-send action for this tab's right-click menu; called
+     * once. */
+    public void setMatchReplace(MatchReplaceEngine engine, Settings settings) {
+        this.matchReplace = engine;
         this.settings = settings;
     }
 
@@ -92,6 +127,17 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
         }
         addBruteforceMenuItem(menu, bruteforce, settings, store, e.getHost());
         addDeleteHostMenuItem(menu, store, e.getHost());
+
+        if (matchReplace != null && settings != null) {
+            List<Endpoint> selected = selectedEndpoints();
+            // Falls back to just the right-clicked row when nothing is multi-selected (e.g. a plain
+            // single click) -- same "clicked row is the default target" rule the single-target items
+            // above already follow.
+            List<Endpoint> targets = selected.isEmpty() ? List.of(e) : selected;
+            menu.addSeparator();
+            addMenuItem(menu, "Send " + targets.size() + " selected with Match & Replace… (active)", true,
+                    () -> MatchReplaceDialog.show(this, matchReplace, settings, targets));
+        }
     }
 
     @Override

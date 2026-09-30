@@ -5,21 +5,23 @@
 **ReconHub**는 Burp의 **Proxy History / Site Map**을 순회해 엔드포인트·파라미터 인벤토리, 민감정보·
 미스컨피그 탐지, JS 수집·분석, 기술 핑거프린팅을 수행하고 **JSON/HTML/Markdown/SARIF 리포트**와
 재적재 가능한 **State 백업**으로 내보내는 확장(Montoya API, Java)입니다. 기본은 캡처된 트래픽만 쓰는
-**수동(passive) 분석**이며, 유일한 예외인 **Bruteforce 탭만 ACTIVE**(대상에 요청 전송, 실행마다 확인
-다이얼로그 필수)입니다.
+**수동(passive) 분석**이며, **Bruteforce**와 **Match & Replace** 두 탭만 ACTIVE(대상에 요청 전송)입니다
+— Bruteforce는 실행마다 확인 다이얼로그가 유일한 게이트, Match & Replace는 **Settings에서 기본 꺼짐
+상태를 먼저 켜야** 하고 그 위에 확인 다이얼로그도 매번 필요합니다.
 
 ## 기능
 
 | 탭 | 한 줄 설명 |
 |----|------|
 | **Dashboard** | 요약 통계 + 호스트 스코어카드, 다른 탭으로 크로스탭 이동, **호스트 데이터 삭제(다중 선택)** |
-| **Endpoints** | 엔드포인트 인벤토리 (dedup, Auth 관찰) |
+| **Endpoints** | 엔드포인트 인벤토리 (dedup, Auth 관찰), **다중 선택 → Match & Replace 전송** |
 | **Parameters** | 파라미터 + 취약점 후보 Class 자동 분류 |
 | **Findings** | 탐지 결과 심각도/카테고리 집계 + 트리아지 |
 | **JS Assets** | JS 파일 수집·분석 (엔드포인트/시크릿 추출) |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 체크 |
 | **Bruteforce** ⚠**ACTIVE** | 알려진 경로(관리자·API·노출 파일 등) 탐색 |
-| **Settings** | 스코프·규칙·Ingest·내보내기(**북마크만** 옵션 포함)·State 백업, **스코프 밖 호스트 일괄 삭제** |
+| **Match & Replace** ⚠**ACTIVE** | 선택한 엔드포인트에 헤더/쿠키 값 또는 원문 전체 치환 규칙 적용해 재전송, 결과+상세 확인 |
+| **Settings** | 스코프·규칙·Ingest·내보내기(**북마크만** 옵션 포함)·State 백업, **스코프 밖 호스트 일괄 삭제**, Match & Replace 켜기/스로틀 |
 
 **탐지 항목**: 시크릿(API 키/JWT/쿠키값 포함)·PII·오픈 리다이렉트·반사 XSS 후보·응답 시그니처(스택
 트레이스/SQL 에러)·CORS/쿠키/CSP/캐시 미스컨피그·노출 파일(`.env`·`.git`)·OpenAPI/Swagger·GraphQL
@@ -95,6 +97,15 @@ browser). 스로틀(지연·동시성·호스트당 상한) 조절, **Activity l
 오탐 없음). 결과는 Endpoints(Source=bruteforce)·Findings 탭에도 반영, Jobs/Hits는 **State
 Export/Import에도 완료 기록으로 보존**.
 
+### Match & Replace ⚠ACTIVE
+Endpoints 탭에서 Ctrl/Shift로 여러 행을 고른 뒤 우클릭 **Send N selected with Match & Replace…**로
+헤더/쿠키 값 치환(예: Cookie 값 통째로 교체) 또는 요청 원문 전체 문자열/정규식 치환(Burp Match and
+Replace와 동일 개념, `$1` 등 정규식 백레퍼런스 지원)을 적용해 일괄 재전송. **Settings에서 먼저
+켜야**(기본 꺼짐) 메뉴가 동작하고, 켜져 있어도 **실행마다 확인 다이얼로그**(첫 번째 선택 요청에 규칙
+적용한 전/후 미리보기 포함)가 필수 — Bruteforce처럼 "다시 묻지 않기" 없음. 스코프 밖 대상은 자동
+제외. 결과는 **Match & Replace 탭**에서 호스트·상태·길이·에러 요약 + 행 선택 시 실제 전송된
+request/response 상세 확인 가능(세션 내 보관, State Export/Import 대상 아님).
+
 ### Settings
 스코프·패시브 토글·커스텀 탐지 규칙·Ingest·내보내기·State 백업. 모든 설정은 **Burp 재시작 후에도
 유지**(extension preferences에 저장). **Remove out-of-scope hosts…**로 현재 스코프(Burp Scope +
@@ -102,7 +113,8 @@ include/exclude 정규식) 밖의 호스트를 한 번에 찾아서 일괄 삭�
 호스트가 섞여 들어왔을 때 유용(Scope Mode가 "All"이면 스코프 밖이 없으므로 항상 "없음"으로 나옴).
 내보내기(HTML/Markdown/JSON/SARIF) 옆 **Confirmed only / Exclude false positives / Bookmarked only**
 체크박스로 리포트 범위를 좁힐 수 있음 — **Bookmarked only는 Findings뿐 아니라 Endpoints/Parameters/
-JS/Tech 전 섹션에 적용**.
+JS/Tech 전 섹션에 적용**. **Match & Replace bulk send** 섹션에서 기능 켜기(기본 꺼짐) + 요청 간
+지연·동시성 스로틀 조절.
 
 ### 탐지 항목 상세
 API 키/토큰·JWT·인증 헤더·스토리지 URL 등 **시크릿**(응답 본문뿐 아니라 **쿠키 값**도 스캔 — 쿠키로

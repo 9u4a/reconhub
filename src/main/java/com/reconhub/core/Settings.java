@@ -50,6 +50,17 @@ public final class Settings {
     private volatile int bruteforceConcurrency = 1;
     private volatile int bruteforceMaxRequestsPerHost = 3000;
 
+    // --- Match & Replace bulk send (ACTIVE -- sends its own traffic). Unlike bruteforce above, this
+    // DOES default to off via a settings flag: the bruteforce "no master toggle" design was a one-time,
+    // explicitly-discussed exception for that one feature (2026-09-17), not a general precedent, so a
+    // brand-new active feature follows the workspace target-load-safety policy's actual default
+    // (settings flag OFF + throttle + ACTIVE labeling) instead of silently reusing that exception. A
+    // per-run confirmation dialog (ui.MatchReplaceDialog) is still required on top of this flag, same
+    // strength as bruteforce's.
+    private volatile boolean matchReplaceEnabled = false;
+    private volatile int matchReplaceDelayMs = 500;
+    private volatile int matchReplaceConcurrency = 1;
+
     public ScopeMode getScopeMode() { return scopeMode; }
     public void setScopeMode(ScopeMode m) { this.scopeMode = m; }
 
@@ -117,6 +128,15 @@ public final class Settings {
         this.bruteforceMaxRequestsPerHost = Math.max(1, Math.min(n, 20_000));
     }
 
+    public boolean isMatchReplaceEnabled() { return matchReplaceEnabled; }
+    public void setMatchReplaceEnabled(boolean b) { this.matchReplaceEnabled = b; }
+
+    public int getMatchReplaceDelayMs() { return matchReplaceDelayMs; }
+    public void setMatchReplaceDelayMs(int ms) { this.matchReplaceDelayMs = Math.max(0, Math.min(ms, 60_000)); }
+
+    public int getMatchReplaceConcurrency() { return matchReplaceConcurrency; }
+    public void setMatchReplaceConcurrency(int n) { this.matchReplaceConcurrency = Math.max(1, Math.min(n, 10)); }
+
     // ---- Persistence (Montoya extension preferences) ---------------------
     // Same "whole object as one Gson JSON blob under one preference key" pattern as
     // analysis.UserRuleStore. jsSaveDirectory (a Path) needs a String round-trip since Gson can't
@@ -142,6 +162,9 @@ public final class Settings {
         int bruteforceDelayMs;
         int bruteforceConcurrency;
         int bruteforceMaxRequestsPerHost;
+        boolean matchReplaceEnabled;
+        int matchReplaceDelayMs;
+        int matchReplaceConcurrency;
     }
 
     private Dto toDto() {
@@ -163,6 +186,9 @@ public final class Settings {
         d.bruteforceDelayMs = bruteforceDelayMs;
         d.bruteforceConcurrency = bruteforceConcurrency;
         d.bruteforceMaxRequestsPerHost = bruteforceMaxRequestsPerHost;
+        d.matchReplaceEnabled = matchReplaceEnabled;
+        d.matchReplaceDelayMs = matchReplaceDelayMs;
+        d.matchReplaceConcurrency = matchReplaceConcurrency;
         return d;
     }
 
@@ -200,6 +226,9 @@ public final class Settings {
         s.bruteforceDelayMs = d.bruteforceDelayMs;   // already clamped when originally set/saved
         s.bruteforceConcurrency = d.bruteforceConcurrency == 0 ? 1 : d.bruteforceConcurrency;
         s.bruteforceMaxRequestsPerHost = d.bruteforceMaxRequestsPerHost == 0 ? 3000 : d.bruteforceMaxRequestsPerHost;
+        s.matchReplaceEnabled = d.matchReplaceEnabled;   // absent/false on old saves -- correct default
+        s.matchReplaceDelayMs = d.matchReplaceDelayMs == 0 ? 500 : d.matchReplaceDelayMs;
+        s.matchReplaceConcurrency = d.matchReplaceConcurrency == 0 ? 1 : d.matchReplaceConcurrency;
         return s;
     }
 

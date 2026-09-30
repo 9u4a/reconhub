@@ -2,6 +2,7 @@ package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
 import com.reconhub.active.BruteforceEngine;
+import com.reconhub.active.MatchReplaceEngine;
 import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
@@ -49,7 +50,8 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
     private boolean lastKnownDark = SwingColors.isDark();
 
     public MainTab(MontoyaApi api, DataStore store, Settings settings, TrafficIngestor ingestor,
-                   PayloadCheatsheet cheatsheet, BruteforceEngine bruteforce, Bookmarks bookmarks) {
+                   PayloadCheatsheet cheatsheet, BruteforceEngine bruteforce,
+                   MatchReplaceEngine matchReplace, Bookmarks bookmarks) {
         setLayout(new BorderLayout());
 
         DashboardPanel dashboard = new DashboardPanel(store, api);
@@ -60,9 +62,11 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         TechPanel tech = new TechPanel(store, api, bookmarks);
         SettingsPanel settingsPanel = new SettingsPanel(api, store, settings, ingestor, bruteforce, bookmarks);
         BruteforcePanel bruteforcePanel = new BruteforcePanel(api, settings, bruteforce);
+        MatchReplacePanel matchReplacePanel = new MatchReplacePanel(api, matchReplace);
         dashboard.setBruteforce(bruteforce, settings);
         tech.setBruteforce(bruteforce, settings);
         endpoints.setBruteforce(bruteforce, settings);
+        endpoints.setMatchReplace(matchReplace, settings);
         parameters.setBruteforce(bruteforce, settings);
         findings.setBruteforce(bruteforce);
 
@@ -73,6 +77,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         addRefreshableTab("JS Assets", jsAssets);
         addRefreshableTab("Tech", tech);
         addRefreshableTab("Bruteforce", bruteforcePanel);
+        addRefreshableTab("Match & Replace", matchReplacePanel);
         // Settings is a tall stack of sections — scroll it so lower sections stay reachable at
         // any window height / half width.
         javax.swing.JScrollPane settingsScroll = new javax.swing.JScrollPane(settingsPanel,

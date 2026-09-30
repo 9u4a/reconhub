@@ -142,6 +142,21 @@ public final class SettingsPanel extends JPanel {
         add(wordlistRow());
         add(gap());
 
+        add(section("Match & Replace bulk send (active)"));
+        add(new JLabel("Replays selected Endpoints rows with a header/cookie value or raw-request "
+                + "match/replace applied. Off by default (unlike known-path bruteforce, this follows "
+                + "the standard policy: a flag here, not just a per-run confirmation)."));
+        JCheckBox matchReplaceEnabled = leftCheck("Enable Match & Replace",
+                settings.isMatchReplaceEnabled());
+        matchReplaceEnabled.addActionListener(
+                e -> settings.setMatchReplaceEnabled(matchReplaceEnabled.isSelected()));
+        add(matchReplaceEnabled);
+        add(spinnerRow("Delay between requests (ms):", settings.getMatchReplaceDelayMs(),
+                0, 60000, 25, settings::setMatchReplaceDelayMs));
+        add(spinnerRow("Concurrency (requests sent in parallel):",
+                settings.getMatchReplaceConcurrency(), 1, 10, 1, settings::setMatchReplaceConcurrency));
+        add(gap());
+
         add(section("Backup / State"));
         includeMessages.setAlignmentX(Component.LEFT_ALIGNMENT);
         add(includeMessages);
@@ -688,6 +703,23 @@ public final class SettingsPanel extends JPanel {
         JCheckBox cb = new JCheckBox(text, selected);
         cb.setAlignmentX(Component.LEFT_ALIGNMENT);
         return cb;
+    }
+
+    private interface IntSetter { void set(int v); }
+
+    /** Same shape as {@code BruteforcePanel}'s own {@code spinnerRow} (that one lives in the Bruteforce
+     * tab itself since it has custom layout to spare; Match & Replace's throttle lives here instead
+     * since {@code MatchReplacePanel} is a plain {@code AbstractTablePanel} with no room for a settings
+     * block above its table) -- small deliberate duplication rather than extracting a shared UI helper
+     * for two call sites. */
+    private static JPanel spinnerRow(String label, int value, int min, int max, int step, IntSetter setter) {
+        JPanel p = leftFlow();
+        p.add(new JLabel(label));
+        javax.swing.JSpinner sp = new javax.swing.JSpinner(
+                new javax.swing.SpinnerNumberModel(value, min, max, step));
+        sp.addChangeListener(e -> setter.set((Integer) sp.getValue()));
+        p.add(sp);
+        return p;
     }
 
     private static JPanel leftFlow() {

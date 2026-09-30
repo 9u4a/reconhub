@@ -4,6 +4,7 @@ import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
 import com.reconhub.active.BruteforceEngine;
 import com.reconhub.active.KnownPaths;
+import com.reconhub.active.MatchReplaceEngine;
 import com.reconhub.analysis.PatternRegistry;
 import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.Bookmarks;
@@ -62,10 +63,16 @@ public final class ReconHubExtension implements BurpExtension {
         BruteforceEngine bruteforce = new BruteforceEngine(
                 api, store, settings, new ScopeFilter(api, settings), wordlist.entries());
 
+        // Match & Replace bulk send (ACTIVE -- off by default via settings.isMatchReplaceEnabled(),
+        // see Settings' field comment for why this doesn't reuse bruteforce's no-toggle exception).
+        // Its own ScopeFilter instance, same as bruteforce's above and SettingsPanel.doRemoveOutOfScope
+        // -- cheap/stateless, no need to share one.
+        MatchReplaceEngine matchReplace = new MatchReplaceEngine(api, settings, new ScopeFilter(api, settings));
+
         api.http().registerHttpHandler(ingestor);
         api.userInterface().registerContextMenuItemsProvider(new SendToReconHubMenu(ingestor));
 
-        JComponent tab = buildUi(api, store, settings, ingestor, cheatsheet, bruteforce, bookmarks);
+        JComponent tab = buildUi(api, store, settings, ingestor, cheatsheet, bruteforce, matchReplace, bookmarks);
         api.userInterface().registerSuiteTab("ReconHub", tab);
 
         api.extension().registerUnloadingHandler(() -> {
@@ -73,6 +80,7 @@ public final class ReconHubExtension implements BurpExtension {
             bookmarks.save(api);
             ingestor.shutdown();
             bruteforce.shutdown();
+            matchReplace.shutdown();
         });
 
         if (settings.isAutoIngestOnLoad()) {
@@ -87,10 +95,12 @@ public final class ReconHubExtension implements BurpExtension {
 
     private static JComponent buildUi(MontoyaApi api, DataStore store, Settings settings,
                                       TrafficIngestor ingestor, PayloadCheatsheet cheatsheet,
-                                      BruteforceEngine bruteforce, Bookmarks bookmarks) {
+                                      BruteforceEngine bruteforce, MatchReplaceEngine matchReplace,
+                                      Bookmarks bookmarks) {
         AtomicReference<JComponent> ref = new AtomicReference<>();
         Runnable build = () -> ref.set(
-                new MainTab(api, store, settings, ingestor, cheatsheet, bruteforce, bookmarks).component());
+                new MainTab(api, store, settings, ingestor, cheatsheet, bruteforce, matchReplace, bookmarks)
+                        .component());
         if (SwingUtilities.isEventDispatchThread()) {
             build.run();
         } else {
