@@ -2,9 +2,9 @@
   "comment": "Signatures for interesting/verbose responses (errors, stack traces, debug, listings). Scanned against response bodies. Same shape as secrets.json.",
   "patterns": [
     { "name": "Java Stack Trace", "severity": "MEDIUM", "regex": "(?<![\\w.$])[\\w.$]{1,100}?(?:Exception|Error)(?::[^\\n]{0,300})?\\n(?:\\s{0,20}at\\s{1,20}[\\w.$]{1,160}\\([^)\\n]{0,200}\\)\\n){2,}" },
-    { "name": "Java Exception", "severity": "LOW", "regex": "\\b(?:java|javax|org\\.springframework|jakarta)\\.[\\w.$]*(?:Exception|Error)\\b" },
+    { "name": "Java Exception", "severity": "LOW", "regex": "\\b(?:java|javax|org\\.springframework|jakarta)\\.[\\w.$]{0,120}(?:Exception|Error)\\b" },
     { "name": "Python Traceback", "severity": "MEDIUM", "regex": "Traceback \\(most recent call last\\):" },
-    { "name": ".NET Stack Trace", "severity": "MEDIUM", "regex": "System\\.[\\w.]+Exception[\\s\\S]{0,80}?\\bat\\s+[\\w.<>]+\\(" },
+    { "name": ".NET Stack Trace", "severity": "MEDIUM", "regex": "System\\.[\\w.]{1,120}Exception[\\s\\S]{0,80}?\\bat\\s+[\\w.<>]+\\(" },
     { "name": "ASP.NET Error Page", "severity": "MEDIUM", "regex": "(?i)Server Error in '/' Application|<b>\\s*Description:\\s*</b>\\s*An unhandled exception" },
     { "name": "PHP Error", "severity": "MEDIUM", "regex": "(?i)\\b(?:Fatal error|Parse error|Warning|Notice)\\s{0,8}:\\s.{1,500}? in\\s{1,8}(?:/|[A-Za-z]:\\\\).{1,500}? on line \\d+" },
     { "name": "PHP var_dump", "severity": "LOW", "regex": "\\barray\\(\\d+\\)\\s*\\{|\\bobject\\([\\w\\\\]+\\)#\\d+" },
