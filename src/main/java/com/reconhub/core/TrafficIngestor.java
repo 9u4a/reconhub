@@ -63,6 +63,17 @@ public final class TrafficIngestor implements HttpHandler {
                 t.setDaemon(true);
                 return t;
             });
+    // A single pathological request/response (a slow disk write, an unforeseen catastrophic-backtracking
+    // regex, a Montoya API edge case -- any of which has bitten this project before, see CLAUDE.md) must
+    // never be able to block `executor`'s one thread forever: that thread is shared by the bulk sweep
+    // AND live capture AND manual ingest, so one stuck item would silently freeze all three, with no
+    // exception and no high CPU to signal it (confirmed as the actual symptom reported: "ingest gets
+    // stuck partway through on a large existing site map, CPU stays low, re-clicking Ingest Site Map
+    // does nothing" -- bulkRunning never resets because the sweep loop never returns from that one
+    // item). Every `process(...)` call now runs through this with a hard timeout; a timeout logs
+    // exactly which URL to investigate and moves on, rather than hanging.
+    private final TimeoutRunner itemRunner = new TimeoutRunner("reconhub-ingest-item");
+    private static final long ITEM_TIMEOUT_SECONDS = 20;
     private final AtomicBoolean bulkRunning = new AtomicBoolean(false);
     private final AtomicBoolean cancelRequested = new AtomicBoolean(false);
 
@@ -120,11 +131,7 @@ public final class TrafficIngestor implements HttpHandler {
                         api.logging().logToOutput("ReconHub: ingest cancelled at " + i + "/" + total);
                         break;
                     }
-                    try {
-                        process(rr, "sitemap");
-                    } catch (RuntimeException e) {
-                        api.logging().logToError("ingest item failed: " + e);
-                    }
+                    runWithTimeout(rr, "sitemap", true);
                     i++;
                     if (progress != null && (i % 25 == 0 || i == total)) {
                         progress.update(i, total);
@@ -172,12 +179,8 @@ public final class TrafficIngestor implements HttpHandler {
             final HttpRequestResponse rr =
                     HttpRequestResponse.httpRequestResponse(request, responseReceived);
             executor.submit(() -> {
-                try {
-                    process(rr, "proxy");
-                    store.fireChanged();
-                } catch (RuntimeException e) {
-                    api.logging().logToError("live ingest failed: " + e);
-                }
+                runWithTimeout(rr, "proxy", true);
+                store.fireChanged();
             });
         }
         return ResponseReceivedAction.continueWith(responseReceived);
@@ -188,12 +191,8 @@ public final class TrafficIngestor implements HttpHandler {
     /** Ingests a user-chosen request/response regardless of scope (source = "manual"). */
     public void ingestExternal(HttpRequestResponse rr) {
         executor.submit(() -> {
-            try {
-                process(rr, "manual", false);
-                store.fireChanged();
-            } catch (RuntimeException e) {
-                api.logging().logToError("manual ingest failed: " + e);
-            }
+            runWithTimeout(rr, "manual", false);
+            store.fireChanged();
         });
     }
 
@@ -224,8 +223,27 @@ public final class TrafficIngestor implements HttpHandler {
 
     // ---- Core processing ------------------------------------------------
 
-    private void process(HttpRequestResponse rr, String source) {
-        process(rr, source, true);
+    /**
+     * Runs {@link #process(HttpRequestResponse, String, boolean)} through {@link #itemRunner} with a
+     * hard {@link #ITEM_TIMEOUT_SECONDS} timeout so one pathological item can never block the caller
+     * forever (see {@link #itemRunner}'s field comment for why this matters).
+     */
+    private void runWithTimeout(HttpRequestResponse rr, String source, boolean respectScope) {
+        TimeoutRunner.Outcome outcome = itemRunner.run(() -> process(rr, source, respectScope),
+                ITEM_TIMEOUT_SECONDS,
+                cause -> api.logging().logToError("ingest item failed (source=" + source + "): " + cause));
+        if (outcome == TimeoutRunner.Outcome.TIMED_OUT) {
+            api.logging().logToError("ReconHub: ingest item exceeded " + ITEM_TIMEOUT_SECONDS
+                    + "s, skipped (source=" + source + "): " + safeUrl(rr));
+        }
+    }
+
+    private static String safeUrl(HttpRequestResponse rr) {
+        try {
+            return rr != null && rr.request() != null ? rr.request().url() : "(no request)";
+        } catch (RuntimeException e) {
+            return "(url unavailable: " + e + ")";
+        }
     }
 
     private void process(HttpRequestResponse rr, String source, boolean respectScope) {
@@ -335,5 +353,6 @@ public final class TrafficIngestor implements HttpHandler {
 
     public void shutdown() {
         executor.shutdownNow();
+        itemRunner.shutdown();
     }
 }
