@@ -15,12 +15,13 @@
 |----|------|
 | **Dashboard** | 요약 통계 + 호스트 스코어카드, 다른 탭으로 크로스탭 이동, **호스트 데이터 삭제(다중 선택)** |
 | **Endpoints** | 엔드포인트 인벤토리 (dedup, Auth 관찰), **다중 선택 → Match & Replace 전송** |
-| **Parameters** | 파라미터 + 취약점 후보 Class 자동 분류 |
-| **Findings** | 탐지 결과 심각도/카테고리 집계 + 트리아지 |
-| **JS Assets** | JS 파일 수집·분석 (엔드포인트/시크릿 추출) |
+| **Parameters** | 파라미터 + 취약점 후보 Class 자동 분류, **다중 선택 → Match & Replace 전송** |
+| **Findings** | 탐지 결과 심각도/카테고리 집계 + 트리아지, **다중 선택 → Match & Replace 전송** |
+| **JS Assets** | JS 파일 수집·분석 (엔드포인트/시크릿 추출), **다중 선택 → Match & Replace 전송** |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 체크 |
 | **Bruteforce** ⚠**ACTIVE** | 알려진 경로(관리자·API·노출 파일 등) 탐색 |
-| **Match & Replace** ⚠**ACTIVE** | 선택한 엔드포인트에 헤더/쿠키 값 또는 원문 전체 치환 규칙 적용해 재전송, 결과+상세 확인 |
+| **Match & Replace** ⚠**ACTIVE** | Endpoints/Parameters/Findings/JS Assets에서 선택한 행에 헤더/쿠키 값 또는 원문 전체 치환 규칙(**여러 개 체이닝 가능**) 적용해 재전송, 결과+상세 확인 |
+| **Snapshot Diff** | 저장해둔 State 파일을 불러와 현재 데이터와 비교, 새로 생긴/사라진 항목 표시 |
 | **Settings** | 스코프·규칙·Ingest·내보내기(**북마크만** 옵션 포함)·State 백업, **스코프 밖 호스트 일괄 삭제**, Match & Replace 켜기/스로틀 |
 
 **탐지 항목**: 시크릿(API 키/JWT/쿠키값 포함)·PII·오픈 리다이렉트·반사 XSS 후보·응답 시그니처(스택
@@ -98,13 +99,22 @@ browser). 스로틀(지연·동시성·호스트당 상한) 조절, **Activity l
 Export/Import에도 완료 기록으로 보존**.
 
 ### Match & Replace ⚠ACTIVE
-Endpoints 탭에서 Ctrl/Shift로 여러 행을 고른 뒤 우클릭 **Send N selected with Match & Replace…**로
-헤더/쿠키 값 치환(예: Cookie 값 통째로 교체) 또는 요청 원문 전체 문자열/정규식 치환(Burp Match and
-Replace와 동일 개념, `$1` 등 정규식 백레퍼런스 지원)을 적용해 일괄 재전송. **Settings에서 먼저
-켜야**(기본 꺼짐) 메뉴가 동작하고, 켜져 있어도 **실행마다 확인 다이얼로그**(첫 번째 선택 요청에 규칙
-적용한 전/후 미리보기 포함)가 필수 — Bruteforce처럼 "다시 묻지 않기" 없음. 스코프 밖 대상은 자동
-제외. 결과는 **Match & Replace 탭**에서 호스트·상태·길이·에러 요약 + 행 선택 시 실제 전송된
-request/response 상세 확인 가능(세션 내 보관, State Export/Import 대상 아님).
+**Endpoints/Parameters/Findings/JS Assets** 탭에서 Ctrl/Shift로 여러 행을 고른 뒤 우클릭 **Send N
+selected with Match & Replace…**로 헤더/쿠키 값 치환(예: Cookie 값 통째로 교체) 또는 요청 원문 전체
+문자열/정규식 치환(Burp Match and Replace와 동일 개념, `$1` 등 정규식 백레퍼런스 지원)을 적용해 일괄
+재전송. **규칙을 여러 개 추가해 순서대로 체이닝 가능**(예: 헤더 교체 후 원문 치환까지 한 번에) —
+미리보기는 항상 전체 체인을 적용한 최종 결과를 보여줌. **Settings에서 먼저 켜야**(기본 꺼짐) 메뉴가
+동작하고, 켜져 있어도 **실행마다 확인 다이얼로그**(첫 번째 선택 요청에 규칙 적용한 전/후 미리보기
+포함)가 필수 — Bruteforce처럼 "다시 묻지 않기" 없음. 스코프 밖 대상은 자동 제외. 결과는 **Match &
+Replace 탭**에서 호스트·상태·길이·에러 요약 + 행 선택 시 실제 전송된 request/response 상세 확인
+가능(세션 내 보관, State Export/Import 대상 아님).
+
+### Snapshot Diff
+**Settings → Backup / State**에서 내보낸 State 파일을 **Load comparison state file…** 버튼으로 불러와
+현재 라이브 데이터와 비교 — Endpoints/Parameters/Findings/JS Assets/Tech 5개 카테고리별로 새로 생긴
+(+)/사라진(−) 항목을 표로 보여줌. 다른 탭과 달리 상시 갱신되지 않고, 파일을 불러올 때만 그 시점
+기준으로 1회 비교(라이브 데이터는 건드리지 않음). 같은 항목의 내용이 바뀐 경우(상태 코드 변경 등)는
+탐지하지 않음 — 추가/삭제만.
 
 ### Settings
 스코프·패시브 토글·커스텀 탐지 규칙·Ingest·내보내기·State 백업. 모든 설정은 **Burp 재시작 후에도
@@ -146,7 +156,9 @@ Host): 검색창 옆 필터 버튼을 누르면 그 컬럼에 현재 존재하�
 (또는 `Ctrl+B`)로 북마크·메모 가능 — Burp 재시작 후에도 유지, `★ only` 체크박스로 북마크된 행만
 필터, State Export/Import에도 보존.
 
-**키보드 단축키**: `Ctrl+1`~`Ctrl+8` 탭 전환, `Ctrl+F` 현재 탭 검색창 포커스, 검색창에서 `Esc`로
+**키보드 단축키**: `Ctrl+1`~`Ctrl+9` 탭 전환(마지막 Settings 탭은 제외), `Ctrl+F` 현재 탭 검색창
+포커스, **`Ctrl+Shift+F` 글로벌 검색**(Endpoints/Parameters/Findings/JS Assets/Tech 5개 탭을 한 번에
+검색해 결과 목록에서 바로 해당 탭·행으로 이동), 검색창에서 `Esc`로
 검색어 지우기.
 
 **다크테마**: Burp의 라이트/다크 테마를 따라감(실시간 전환 반영, 최대 1초 지연).

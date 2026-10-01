@@ -4,6 +4,7 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.active.BruteforceEngine;
 import com.reconhub.active.MatchReplaceEngine;
+import com.reconhub.active.MatchReplaceTarget;
 import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
@@ -99,6 +100,17 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
         return out;
     }
 
+    /** {@link #selectedEndpoints()}, converted to the type-agnostic shape {@code active
+     * .MatchReplaceEngine} actually needs (0.43.0 -- every source panel builds these the same way from
+     * its own row type). */
+    private List<MatchReplaceTarget> selectedMatchReplaceTargets() {
+        List<MatchReplaceTarget> out = new ArrayList<>();
+        for (Endpoint e : selectedEndpoints()) {
+            out.add(new MatchReplaceTarget(e.getHost(), e.getPath(), e.getMethod(), e.getMessages()));
+        }
+        return out;
+    }
+
     /** Wires the (ACTIVE) known-path bruteforce action for this tab's right-click menu; called once. */
     public void setBruteforce(BruteforceEngine engine, Settings settings) {
         this.bruteforce = engine;
@@ -129,11 +141,13 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
         addDeleteHostMenuItem(menu, store, e.getHost());
 
         if (matchReplace != null && settings != null) {
-            List<Endpoint> selected = selectedEndpoints();
+            List<MatchReplaceTarget> selected = selectedMatchReplaceTargets();
             // Falls back to just the right-clicked row when nothing is multi-selected (e.g. a plain
             // single click) -- same "clicked row is the default target" rule the single-target items
             // above already follow.
-            List<Endpoint> targets = selected.isEmpty() ? List.of(e) : selected;
+            List<MatchReplaceTarget> targets = selected.isEmpty()
+                    ? List.of(new MatchReplaceTarget(e.getHost(), e.getPath(), e.getMethod(), e.getMessages()))
+                    : selected;
             menu.addSeparator();
             addMenuItem(menu, "Send " + targets.size() + " selected with Match & Replace… (active)", true,
                     () -> MatchReplaceDialog.show(this, matchReplace, settings, targets));

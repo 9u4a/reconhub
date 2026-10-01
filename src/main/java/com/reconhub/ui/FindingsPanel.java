@@ -3,6 +3,8 @@ package com.reconhub.ui;
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.active.BruteforceEngine;
+import com.reconhub.active.MatchReplaceEngine;
+import com.reconhub.active.MatchReplaceTarget;
 import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.JwtDecoder;
 import com.reconhub.analysis.PayloadCheatsheet;
@@ -20,8 +22,10 @@ import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.JToggleButton;
+import javax.swing.ListSelectionModel;
 import java.awt.Component;
 import java.awt.Font;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
@@ -57,6 +61,7 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     private boolean rebuildingCatBox;
     private DashboardPanel.Navigator navigator;
     private BruteforceEngine bruteforce;
+    private MatchReplaceEngine matchReplace;
 
     public FindingsPanel(DataStore store, Settings settings, MontoyaApi api,
                          PayloadCheatsheet cheatsheet, Bookmarks bookmarks) {
@@ -105,6 +110,9 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
 
         hostFilter.setOnChange(this::reapplyFilter);
         addToToolbar(hostFilter.component());
+
+        // MULTIPLE_INTERVAL_SELECTION (0.43.0) -- same reasoning as EndpointsPanel's (0.42.0).
+        table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
     }
 
     @Override protected String rowKey(Finding f) { return f == null ? null : f.key(); }
@@ -137,6 +145,45 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     /** Wires the (ACTIVE) known-path bruteforce action for this tab's right-click menu; called once. */
     public void setBruteforce(BruteforceEngine engine) {
         this.bruteforce = engine;
+    }
+
+    /** Wires the (ACTIVE) Match & Replace bulk-send action for this tab's right-click menu; called
+     * once. */
+    public void setMatchReplace(MatchReplaceEngine engine) {
+        this.matchReplace = engine;
+    }
+
+    /** The currently-selected findings converted to Match & Replace's type-agnostic target shape --
+     * host/path are derived from {@code locationUrl} (Finding has no host/path fields of its own,
+     * unlike Endpoint), method from the captured request. */
+    private List<MatchReplaceTarget> selectedMatchReplaceTargets() {
+        List<MatchReplaceTarget> out = new ArrayList<>();
+        for (int view : table.getSelectedRows()) {
+            Finding f = rowAt(view);
+            if (f != null) {
+                out.add(toTarget(f));
+            }
+        }
+        return out;
+    }
+
+    private static MatchReplaceTarget toTarget(Finding f) {
+        HttpRequestResponse rr = f.getMessages();
+        String method = rr != null && rr.request() != null ? rr.request().method() : "?";
+        String path = pathOf(f.getLocationUrl());
+        return new MatchReplaceTarget(Hosts.of(f.getLocationUrl()), path, method, rr);
+    }
+
+    private static String pathOf(String url) {
+        if (url == null) {
+            return "";
+        }
+        try {
+            String p = java.net.URI.create(url).getPath();
+            return p == null ? "" : p;
+        } catch (RuntimeException e) {
+            return "";
+        }
     }
 
     @Override
@@ -277,6 +324,14 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
                         f.setTriage(t);
                         store.fireChanged();
                     });
+        }
+
+        if (matchReplace != null && settings != null) {
+            List<MatchReplaceTarget> selected = selectedMatchReplaceTargets();
+            List<MatchReplaceTarget> targets = selected.isEmpty() ? List.of(toTarget(f)) : selected;
+            menu.addSeparator();
+            addMenuItem(menu, "Send " + targets.size() + " selected with Match & Replace… (active)", true,
+                    () -> MatchReplaceDialog.show(this, matchReplace, settings, targets));
         }
     }
 

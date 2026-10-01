@@ -6,7 +6,6 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import com.reconhub.core.ScopeFilter;
 import com.reconhub.core.Settings;
-import com.reconhub.model.Endpoint;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,9 +25,15 @@ import java.util.concurrent.atomic.AtomicInteger;
  * called, naming exactly how many endpoints and what rule. See {@code Settings}'s field comment for why
  * this doesn't reuse bruteforce's "no master toggle" exception.
  *
- * <p>Unlike {@code active.BruteforceEngine}, the target set here is fixed up front (the endpoints the
- * user selected), not an open-ended wordlist against one host -- so there's no per-host request budget,
- * and {@link MatchReplaceJob} is correspondingly simpler than {@link BruteforceJob}.
+ * <p>Unlike {@code active.BruteforceEngine}, the target set here is fixed up front (the rows the user
+ * selected), not an open-ended wordlist against one host -- so there's no per-host request budget, and
+ * {@link MatchReplaceJob} is correspondingly simpler than {@link BruteforceJob}. Targets come from any
+ * of four source tabs (0.43.0) via {@link MatchReplaceTarget}, so this class has no dependency on any
+ * one model type.
+ *
+ * <p>{@code rule} is a <b>list</b> (0.43.0, chaining) -- applied in order, each rule's output feeding
+ * the next. Montoya's {@code HttpRequest} is immutable, so this composes naturally: {@link
+ * #buildRequest} is a plain left-fold over the list.
  */
 public final class MatchReplaceEngine {
 
@@ -73,23 +78,25 @@ public final class MatchReplaceEngine {
     public List<MatchReplaceJob> jobs() { return jobs; }
 
     /**
-     * Starts a run against {@code targets} with {@code rule} applied to each. Refuses (returns {@code
-     * null}) if the feature is disabled in Settings, or there's nothing to send -- callers (only {@code
-     * ui.MatchReplaceDialog}) must have already shown the user a confirmation dialog naming exactly how
-     * many endpoints and what rule before calling this.
+     * Starts a run against {@code targets} with {@code rules} applied to each, in order. Refuses
+     * (returns {@code null}) if the feature is disabled in Settings, or there's nothing to send/apply --
+     * callers (only {@code ui.MatchReplaceDialog}) must have already shown the user a confirmation
+     * dialog naming exactly how many rows and what rule(s) before calling this.
      */
-    public MatchReplaceJob submit(List<Endpoint> targets, MatchReplaceRule rule) {
-        if (!settings.isMatchReplaceEnabled() || targets == null || targets.isEmpty() || rule == null) {
+    public MatchReplaceJob submit(List<MatchReplaceTarget> targets, List<MatchReplaceRule> rules) {
+        if (!settings.isMatchReplaceEnabled() || targets == null || targets.isEmpty()
+                || rules == null || rules.isEmpty()) {
             return null;
         }
-        List<Endpoint> snapshot = new ArrayList<>(targets);
+        List<MatchReplaceTarget> snapshot = new ArrayList<>(targets);
+        List<MatchReplaceRule> ruleSnapshot = new ArrayList<>(rules);
         MatchReplaceJob job = new MatchReplaceJob(snapshot.size());
         jobs.add(job);
-        dispatcher.submit(() -> run(job, snapshot, rule));
+        dispatcher.submit(() -> run(job, snapshot, ruleSnapshot));
         return job;
     }
 
-    private void run(MatchReplaceJob job, List<Endpoint> targets, MatchReplaceRule rule) {
+    private void run(MatchReplaceJob job, List<MatchReplaceTarget> targets, List<MatchReplaceRule> rules) {
         try {
             int par = Math.max(1, settings.getMatchReplaceConcurrency());
             AtomicInteger cursor = new AtomicInteger();
@@ -99,7 +106,7 @@ public final class MatchReplaceEngine {
                     if (job.isCancelled()) {
                         return;
                     }
-                    processOne(job, targets.get(i), rule);
+                    processOne(job, targets.get(i), rules);
                     listener.onProgress(job);
                 }
             };
@@ -137,50 +144,64 @@ public final class MatchReplaceEngine {
         }
     }
 
-    private void processOne(MatchReplaceJob job, Endpoint target, MatchReplaceRule rule) {
-        HttpRequestResponse original = target.getMessages();
+    private void processOne(MatchReplaceJob job, MatchReplaceTarget target, List<MatchReplaceRule> rules) {
+        HttpRequestResponse original = target.messages();
         HttpRequest baseReq = original == null ? null : original.request();
         if (baseReq == null) {
-            job.recordResult(MatchReplaceResult.failed(target.getHost(), target.getPath(),
-                    target.getMethod(), "no captured request to replay"));
+            job.recordResult(MatchReplaceResult.failed(target.host(), target.path(),
+                    target.method(), "no captured request to replay"));
             return;
         }
-        String url = target.getNormalizedUrl();
-        if (url == null || !scopeFilter.inScope(url)) {
-            job.recordResult(MatchReplaceResult.failed(target.getHost(), target.getPath(),
-                    target.getMethod(), "out of scope"));
+        if (!scopeFilter.inScope(baseReq.url())) {
+            job.recordResult(MatchReplaceResult.failed(target.host(), target.path(),
+                    target.method(), "out of scope"));
             return;
         }
-        HttpRequest modified = buildRequest(baseReq, rule);
+        HttpRequest modified = buildRequest(baseReq, rules);
         if (modified == null) {
-            job.recordResult(MatchReplaceResult.failed(target.getHost(), target.getPath(),
-                    target.getMethod(), rule.mode() == MatchReplaceRule.Mode.HEADER
-                            ? "header \"" + rule.headerName() + "\" not present"
-                            : "could not build request"));
+            job.recordResult(MatchReplaceResult.failed(target.host(), target.path(),
+                    target.method(), "a rule in the chain didn't apply (header not present, or "
+                            + "\"add if missing\" off)"));
             return;
         }
         pace();
         try {
             HttpRequestResponse rr = api.http().sendRequest(modified);
-            job.recordResult(MatchReplaceResult.sent(target.getHost(), target.getPath(),
-                    target.getMethod(), rr));
+            job.recordResult(MatchReplaceResult.sent(target.host(), target.path(), target.method(), rr));
         } catch (RuntimeException e) {
-            api.logging().logToError("ReconHub match&replace: send failed for " + url + ": " + e);
-            job.recordResult(MatchReplaceResult.failed(target.getHost(), target.getPath(),
-                    target.getMethod(), "send failed: " + e));
+            api.logging().logToError("ReconHub match&replace: send failed for " + baseReq.url() + ": " + e);
+            job.recordResult(MatchReplaceResult.failed(target.host(), target.path(),
+                    target.method(), "send failed: " + e));
         }
     }
 
     /**
-     * Builds the modified request per {@code rule} -- the one piece of this class that can't be
-     * headlessly exercised: a real captured {@code HttpRequest} normally only exists in a live Burp
-     * runtime, and RAW mode's {@code HttpRequest.httpRequest(HttpService, String)} is a Montoya static
-     * factory, which throws outside one (confirmed for this exact class of call in the 0.36.0 CLAUDE.md
-     * note). {@code null} means the rule doesn't apply to this request (HEADER mode, header absent,
-     * add-if-missing off) -- distinguished from "built fine" so the caller can record why, not just
-     * that it didn't send.
+     * Builds the modified request by applying every rule in {@code rules} in order -- a plain left-fold,
+     * safe because Montoya's {@code HttpRequest} is immutable (each rule's output is the next rule's
+     * input). The one piece of this class that can't be headlessly exercised: a real captured {@code
+     * HttpRequest} normally only exists in a live Burp runtime, and RAW mode's {@code HttpRequest
+     * .httpRequest(HttpService, String)} is a Montoya static factory, which throws outside one
+     * (confirmed for this exact class of call in the 0.36.0 CLAUDE.md note). {@code null} means some
+     * rule in the chain didn't apply (HEADER mode, header absent, add-if-missing off) -- the whole chain
+     * is abandoned at that point rather than skipping just that one rule, so the result is either "every
+     * rule applied" or a clear failure, never a silent partial application.
+     *
+     * <p>{@code public} specifically so {@code ui.MatchReplaceDialog}'s live preview can call the exact
+     * same code path that actually sends -- a hand-duplicated copy in the dialog could silently drift
+     * from real send behavior, which would be a bad kind of surprise for a security tool.
      */
-    private static HttpRequest buildRequest(HttpRequest original, MatchReplaceRule rule) {
+    public static HttpRequest buildRequest(HttpRequest original, List<MatchReplaceRule> rules) {
+        HttpRequest current = original;
+        for (MatchReplaceRule rule : rules) {
+            current = applyOne(current, rule);
+            if (current == null) {
+                return null;
+            }
+        }
+        return current;
+    }
+
+    private static HttpRequest applyOne(HttpRequest original, MatchReplaceRule rule) {
         if (rule.mode() == MatchReplaceRule.Mode.HEADER) {
             String name = rule.headerName();
             boolean has = original.hasHeader(name);

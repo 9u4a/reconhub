@@ -3,6 +3,8 @@ package com.reconhub.ui;
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.active.BruteforceEngine;
+import com.reconhub.active.MatchReplaceEngine;
+import com.reconhub.active.MatchReplaceTarget;
 import com.reconhub.analysis.ParameterClassifier;
 import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.Bookmarks;
@@ -12,6 +14,7 @@ import com.reconhub.model.ParameterInfo;
 
 import javax.swing.JComponent;
 import javax.swing.JPopupMenu;
+import javax.swing.ListSelectionModel;
 import java.awt.Component;
 import java.awt.Font;
 import java.util.ArrayList;
@@ -34,6 +37,7 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
     private final MessageViewer viewer;
     private BruteforceEngine bruteforce;
     private Settings settings;
+    private MatchReplaceEngine matchReplace;
 
     // Burp-History-filter-style checklist quick filters (0.40.0+).
     private final ColumnValueFilter<ParameterInfo> locationFilter =
@@ -52,6 +56,10 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
         classFilter.setOnChange(this::reapplyFilter);
         addToToolbar(locationFilter.component());
         addToToolbar(classFilter.component());
+
+        // MULTIPLE_INTERVAL_SELECTION (0.43.0) -- same reasoning as EndpointsPanel's (0.42.0): only
+        // this tab's table, AbstractTablePanel's SINGLE_SELECTION default is untouched elsewhere.
+        table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
     }
 
     @Override protected boolean hasRowFilter() { return true; }
@@ -75,6 +83,33 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
     public void setBruteforce(BruteforceEngine engine, Settings settings) {
         this.bruteforce = engine;
         this.settings = settings;
+    }
+
+    /** Wires the (ACTIVE) Match & Replace bulk-send action for this tab's right-click menu; called
+     * once. */
+    public void setMatchReplace(MatchReplaceEngine engine, Settings settings) {
+        this.matchReplace = engine;
+        this.settings = settings;
+    }
+
+    /** The currently-selected parameters converted to Match & Replace's type-agnostic target shape --
+     * method is derived from the captured request itself (ParameterInfo has no method field of its
+     * own, unlike Endpoint). */
+    private List<MatchReplaceTarget> selectedMatchReplaceTargets() {
+        List<MatchReplaceTarget> out = new ArrayList<>();
+        for (int view : table.getSelectedRows()) {
+            ParameterInfo p = rowAt(view);
+            if (p != null) {
+                out.add(toTarget(p));
+            }
+        }
+        return out;
+    }
+
+    private static MatchReplaceTarget toTarget(ParameterInfo p) {
+        HttpRequestResponse rr = p.getMessages();
+        String method = rr != null && rr.request() != null ? rr.request().method() : "?";
+        return new MatchReplaceTarget(p.getHost(), p.getEndpointPath(), method, rr);
     }
 
     @Override
@@ -112,6 +147,14 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
         }
         addBruteforceMenuItem(menu, bruteforce, settings, store, p.getHost());
         addDeleteHostMenuItem(menu, store, p.getHost());
+
+        if (matchReplace != null && settings != null) {
+            List<MatchReplaceTarget> selected = selectedMatchReplaceTargets();
+            List<MatchReplaceTarget> targets = selected.isEmpty() ? List.of(toTarget(p)) : selected;
+            menu.addSeparator();
+            addMenuItem(menu, "Send " + targets.size() + " selected with Match & Replace… (active)", true,
+                    () -> MatchReplaceDialog.show(this, matchReplace, settings, targets));
+        }
     }
 
     @Override

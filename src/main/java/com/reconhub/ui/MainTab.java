@@ -63,12 +63,16 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         SettingsPanel settingsPanel = new SettingsPanel(api, store, settings, ingestor, bruteforce, bookmarks);
         BruteforcePanel bruteforcePanel = new BruteforcePanel(api, settings, bruteforce);
         MatchReplacePanel matchReplacePanel = new MatchReplacePanel(api, matchReplace);
+        SnapshotDiffPanel snapshotDiff = new SnapshotDiffPanel(api, store);
         dashboard.setBruteforce(bruteforce, settings);
         tech.setBruteforce(bruteforce, settings);
         endpoints.setBruteforce(bruteforce, settings);
         endpoints.setMatchReplace(matchReplace, settings);
         parameters.setBruteforce(bruteforce, settings);
+        parameters.setMatchReplace(matchReplace, settings);
         findings.setBruteforce(bruteforce);
+        findings.setMatchReplace(matchReplace);
+        jsAssets.setMatchReplace(matchReplace, settings);
 
         addRefreshableTab("Dashboard", dashboard);
         addRefreshableTab("Endpoints", endpoints);
@@ -78,6 +82,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         addRefreshableTab("Tech", tech);
         addRefreshableTab("Bruteforce", bruteforcePanel);
         addRefreshableTab("Match & Replace", matchReplacePanel);
+        addRefreshableTab("Snapshot Diff", snapshotDiff);
         // Settings is a tall stack of sections — scroll it so lower sections stay reachable at
         // any window height / half width.
         javax.swing.JScrollPane settingsScroll = new javax.swing.JScrollPane(settingsPanel,
@@ -116,6 +121,18 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         dashboard.setNavigator(navigator);
         findings.setNavigator(navigator);
         jsAssets.setNavigator(navigator);
+
+        // Global cross-tab search (0.43.0) -- Ctrl+Shift+F, distinct from the existing Ctrl+F ("focus
+        // the current tab's own search field"). Bound here (not in installKeyboardShortcuts(), which
+        // runs before `navigator` exists) since the dialog needs it to jump to a result's tab.
+        getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
+                KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK),
+                "reconhub.globalSearch");
+        getActionMap().put("reconhub.globalSearch", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) {
+                GlobalSearchDialog.show(MainTab.this, store, navigator);
+            }
+        });
 
         // Switching to a tab shows current data immediately -- it hasn't been refreshed while hidden.
         tabs.addChangeListener(e -> refreshSelected());

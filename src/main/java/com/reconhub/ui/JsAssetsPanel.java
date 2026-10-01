@@ -2,8 +2,12 @@ package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
+import com.reconhub.active.MatchReplaceEngine;
+import com.reconhub.active.MatchReplaceTarget;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.Hosts;
+import com.reconhub.core.Settings;
 import com.reconhub.core.TrafficIngestor;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
@@ -18,6 +22,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
+import javax.swing.ListSelectionModel;
 import javax.swing.SwingWorker;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.BorderLayout;
@@ -28,6 +33,7 @@ import java.awt.Font;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -50,6 +56,8 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
     private final JLabel importStatus = new JLabel(" ");
     private volatile String currentSavedPath = "";
     private DashboardPanel.Navigator navigator;
+    private MatchReplaceEngine matchReplace;
+    private Settings settings;
 
     public JsAssetsPanel(DataStore store, MontoyaApi api, TrafficIngestor ingestor, Bookmarks bookmarks) {
         super(api, bookmarks);
@@ -77,11 +85,54 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
         detailTabs.addTab("Info", infoPanel);
         detailTabs.addTab("Response", viewer);
         installDetail(detailTabs, viewer);
+
+        // MULTIPLE_INTERVAL_SELECTION (0.43.0) -- same reasoning as EndpointsPanel's (0.42.0).
+        table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
     }
 
     /** Wires cross-tab navigation (this JS file → endpoints/findings found in it). */
     public void setNavigator(DashboardPanel.Navigator navigator) {
         this.navigator = navigator;
+    }
+
+    /** Wires the (ACTIVE) Match & Replace bulk-send action for this tab's right-click menu; called
+     * once. */
+    public void setMatchReplace(MatchReplaceEngine engine, Settings settings) {
+        this.matchReplace = engine;
+        this.settings = settings;
+    }
+
+    /** The currently-selected JS assets converted to Match & Replace's type-agnostic target shape --
+     * host/path derived from the asset's own URL (JsAsset has no separate host/path fields), method
+     * from the captured request. */
+    private List<MatchReplaceTarget> selectedMatchReplaceTargets() {
+        List<MatchReplaceTarget> out = new ArrayList<>();
+        for (int view : table.getSelectedRows()) {
+            JsAsset a = rowAt(view);
+            if (a != null) {
+                out.add(toTarget(a));
+            }
+        }
+        return out;
+    }
+
+    private static MatchReplaceTarget toTarget(JsAsset a) {
+        HttpRequestResponse rr = a.getMessages();
+        String method = rr != null && rr.request() != null ? rr.request().method() : "?";
+        String path = pathOf(a.getUrl());
+        return new MatchReplaceTarget(Hosts.of(a.getUrl()), path, method, rr);
+    }
+
+    private static String pathOf(String url) {
+        if (url == null) {
+            return "";
+        }
+        try {
+            String p = java.net.URI.create(url).getPath();
+            return p == null ? "" : p;
+        } catch (RuntimeException e) {
+            return "";
+        }
     }
 
     @Override protected String rowKey(JsAsset a) { return a == null ? null : a.key(); }
@@ -103,6 +154,14 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
         if (navigator != null) {
             addMenuItem(menu, "View findings from this JS", true,
                     () -> navigator.filterFindings(a.getUrl()));
+        }
+
+        if (matchReplace != null && settings != null) {
+            List<MatchReplaceTarget> selected = selectedMatchReplaceTargets();
+            List<MatchReplaceTarget> targets = selected.isEmpty() ? List.of(toTarget(a)) : selected;
+            menu.addSeparator();
+            addMenuItem(menu, "Send " + targets.size() + " selected with Match & Replace… (active)", true,
+                    () -> MatchReplaceDialog.show(this, matchReplace, settings, targets));
         }
     }
 

@@ -55,8 +55,6 @@ import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
-import java.util.regex.PatternSyntaxException;
 
 /**
  * Base class for the data tabs: a Search bar on top, a sortable/searchable {@link JTable} below,
@@ -667,20 +665,7 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         int field = fieldBox.getSelectedIndex() - 1;   // -1 = All
         boolean useBody = bodyBox.isSelected() && field < 0;
 
-        List<Pattern> includes = new ArrayList<>();
-        List<Pattern> excludes = new ArrayList<>();
-        int flags = caseBox.isSelected() ? 0 : (Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-        for (String tok : raw.split("\\s+")) {
-            if (tok.isEmpty()) {
-                continue;
-            }
-            boolean exclude = tok.length() > 1 && tok.charAt(0) == '-';
-            String term = exclude ? tok.substring(1) : tok;
-            if (term.isEmpty()) {
-                continue;
-            }
-            (exclude ? excludes : includes).add(compile(term, regexBox.isSelected(), flags));
-        }
+        SearchQuery query = SearchQuery.parse(raw, regexBox.isSelected(), caseBox.isSelected());
 
         // Install a filter only when it can actually exclude something: search terms, or a subclass
         // quick filter (hasRowFilter()). A null RowFilter means fireTableDataChanged() -- which fires
@@ -688,9 +673,8 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         // empty pattern list) was always installed, and with the "Body" checkbox defaulting on, every
         // refresh tick rebuilt every row's full decoded request+response text just to match it against
         // zero patterns and discard it.
-        boolean hasTerms = !includes.isEmpty() || !excludes.isEmpty();
-        sorter.setRowFilter(hasTerms || hasRowFilter() || bookmarkOnlyBox.isSelected()
-                ? new SearchFilter(includes, excludes, field, useBody) : null);
+        sorter.setRowFilter(!query.isEmpty() || hasRowFilter() || bookmarkOnlyBox.isSelected()
+                ? new SearchFilter(query, field, useBody) : null);
         updateCount();
         highlightViewer();
     }
@@ -734,23 +718,13 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         return "";
     }
 
-    private static Pattern compile(String term, boolean regex, int flags) {
-        try {
-            return Pattern.compile(regex ? term : Pattern.quote(term), flags);
-        } catch (PatternSyntaxException e) {
-            return Pattern.compile(Pattern.quote(term), flags);
-        }
-    }
-
     private final class SearchFilter extends RowFilter<Model, Integer> {
-        private final List<Pattern> includes;
-        private final List<Pattern> excludes;
+        private final SearchQuery query;
         private final int field;
         private final boolean useBody;
 
-        SearchFilter(List<Pattern> inc, List<Pattern> exc, int field, boolean useBody) {
-            this.includes = inc;
-            this.excludes = exc;
+        SearchFilter(SearchQuery query, int field, boolean useBody) {
+            this.query = query;
             this.field = field;
             this.useBody = useBody;
         }
@@ -767,21 +741,10 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
                         || !bookmarks.isBookmarked(rowKey(row)))) {
                 return false;
             }
-            if (includes.isEmpty() && excludes.isEmpty()) {
+            if (query.isEmpty()) {
                 return true;   // quick-filter-only pass: no haystack (and no body text) needed
             }
-            String hay = haystack(entry);
-            for (Pattern p : includes) {
-                if (!p.matcher(hay).find()) {
-                    return false;
-                }
-            }
-            for (Pattern p : excludes) {
-                if (p.matcher(hay).find()) {
-                    return false;
-                }
-            }
-            return true;
+            return query.matches(haystack(entry));
         }
 
         private String haystack(Entry<? extends Model, ? extends Integer> entry) {
