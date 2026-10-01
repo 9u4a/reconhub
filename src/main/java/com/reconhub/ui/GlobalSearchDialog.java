@@ -101,6 +101,16 @@ final class GlobalSearchDialog {
         bottom.add(bottomRight, BorderLayout.EAST);
         dialog.add(bottom, BorderLayout.SOUTH);
 
+        // Indexed ONCE per dialog-open, not once per keystroke -- the whole point of keeping a
+        // haystack per row around at all. Before this, every debounced keystroke re-copied all five
+        // DataStore collections (snapshotX() always returns a fresh defensive copy) and rebuilt every
+        // row's concatenated haystack string from scratch, which is exactly the "search gets laggy once
+        // data accumulates" shape (same root cause class as AbstractTablePanel's body-search cache
+        // being far too small -- see its field comment). A concurrent ingest while this (modal) dialog
+        // is open won't be reflected until it's reopened -- an accepted trade-off, same spirit as
+        // SnapshotDiffPanel not being a live view either.
+        List<Result> indexed = index(store);
+
         Runnable[] runSearchRef = new Runnable[1];
         Timer debounce = new Timer(150, e -> runSearchRef[0].run());
         debounce.setRepeats(false);
@@ -108,7 +118,7 @@ final class GlobalSearchDialog {
         Runnable runSearch = () -> {
             SearchQuery query = SearchQuery.parse(searchField.getText(), regexBox.isSelected(),
                     caseBox.isSelected());
-            List<Result> results = query.isEmpty() ? List.of() : search(store, query);
+            List<Result> results = query.isEmpty() ? List.of() : filter(indexed, query);
             model.setResults(results);
             countLabel.setText(results.size() + " result(s)");
             goTo.setEnabled(false);
@@ -160,50 +170,55 @@ final class GlobalSearchDialog {
         }
     }
 
-    private static List<Result> search(DataStore store, SearchQuery query) {
+    /** Builds one {@link Result} (haystack included) per row across all five collections, unfiltered --
+     * called once per dialog-open (see {@link #show}'s comment on why). {@link #filter} does the actual
+     * per-keystroke work against this already-built list. */
+    private static List<Result> index(DataStore store) {
         List<Result> out = new ArrayList<>();
         for (Endpoint e : store.snapshotEndpoints()) {
             String hay = e.getMethod() + " " + e.getHost() + " " + e.getPath() + " "
                     + e.getLastStatusCode() + " " + e.getContentType() + " " + e.authStatus() + " "
                     + String.join(",", e.getSources());
-            if (query.matches(hay)) {
-                out.add(new Result(Kind.ENDPOINT, e.getHost(),
-                        e.getMethod() + " " + e.getPath() + "  [" + e.getLastStatusCode() + "]",
-                        hay, e.getHost() + " " + e.getPath()));
-            }
+            out.add(new Result(Kind.ENDPOINT, e.getHost(),
+                    e.getMethod() + " " + e.getPath() + "  [" + e.getLastStatusCode() + "]",
+                    hay, e.getHost() + " " + e.getPath()));
         }
         for (ParameterInfo p : store.snapshotParameters()) {
             String cls = ParameterClassifier.classifyJoined(p.getName());
             String hay = p.getHost() + " " + p.getEndpointPath() + " " + p.getLocation().name() + " "
                     + p.getName() + " " + p.getExampleValue() + " " + cls;
-            if (query.matches(hay)) {
-                out.add(new Result(Kind.PARAMETER, p.getHost(),
-                        p.getLocation().name() + " " + p.getName() + " on " + p.getEndpointPath(),
-                        hay, p.getEndpointPath() + " " + p.getName()));
-            }
+            out.add(new Result(Kind.PARAMETER, p.getHost(),
+                    p.getLocation().name() + " " + p.getName() + " on " + p.getEndpointPath(),
+                    hay, p.getEndpointPath() + " " + p.getName()));
         }
         for (Finding f : store.snapshotFindings()) {
             String host = Hosts.of(f.getLocationUrl());
             String hay = f.getSeverity().name() + " " + FindingTaxonomy.labelOf(f.getType()) + " "
                     + f.getType() + " " + f.getMasked() + " " + f.getLocationUrl() + " " + f.getEvidence();
-            if (query.matches(hay)) {
-                out.add(new Result(Kind.FINDING, host,
-                        "[" + f.getSeverity().name() + "] " + f.getType(),
-                        hay, host + " " + f.getType()));
-            }
+            out.add(new Result(Kind.FINDING, host,
+                    "[" + f.getSeverity().name() + "] " + f.getType(),
+                    hay, host + " " + f.getType()));
         }
         for (JsAsset a : store.snapshotJsAssets()) {
             String hay = a.getUrl() + " " + a.getPreview() + " " + a.getSavedPath();
-            if (query.matches(hay)) {
-                out.add(new Result(Kind.JS_ASSET, Hosts.of(a.getUrl()), a.getUrl(), hay, a.getUrl()));
-            }
+            out.add(new Result(Kind.JS_ASSET, Hosts.of(a.getUrl()), a.getUrl(), hay, a.getUrl()));
         }
         for (TechInfo t : store.snapshotTech()) {
             String hay = t.getHost() + " " + String.join(",", t.getTechnologies()) + " "
                     + String.join(",", t.getMissingSecurityHeaders());
-            if (query.matches(hay)) {
-                out.add(new Result(Kind.TECH, t.getHost(),
-                        String.join(", ", t.getTechnologies()), hay, t.getHost()));
+            out.add(new Result(Kind.TECH, t.getHost(),
+                    String.join(", ", t.getTechnologies()), hay, t.getHost()));
+        }
+        return out;
+    }
+
+    /** The actual per-keystroke work: just a haystack match against an already-built index, no
+     * DataStore access or string-building. */
+    private static List<Result> filter(List<Result> indexed, SearchQuery query) {
+        List<Result> out = new ArrayList<>();
+        for (Result r : indexed) {
+            if (query.matches(r.haystack())) {
+                out.add(r);
             }
         }
         return out;

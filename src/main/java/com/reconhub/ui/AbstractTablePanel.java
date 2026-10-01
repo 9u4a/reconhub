@@ -6,6 +6,7 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
 import com.reconhub.active.BruteforceEngine;
 import com.reconhub.core.BodyDecoder;
+import com.reconhub.core.BoundedCache;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.Settings;
@@ -102,12 +103,24 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
 
     private final Timer debounce = new Timer(200, e -> applySearch());
     // Bounded by total cached characters, not entry count: one entry is a full decoded request+
-    // response, so a few dozen entries can be tens of MB. On overflow the whole cache is dropped (a
-    // crude generational cache) -- with the RowFilter fix above, bodyText() only runs while a body
-    // search is actually active, so this path is not hot.
-    private static final int BODY_CACHE_MAX_CHARS = 4_000_000;
-    private final Map<T, String> bodyCache = new IdentityHashMap<>();
-    private int bodyCacheChars;
+    // response, so a few dozen entries can be tens of MB. 20M chars (~40MB resident, since Java chars
+    // are 2 bytes) is deliberately generous -- the old 4M-char cap (0.41.0-era, and the old "clear
+    // everything on overflow" policy BoundedCache replaces) was so small that any dataset with more
+    // than ~20-40 captured pages/JS bundles would blow it on nearly every keystroke while "Body" search
+    // was on (its default), evicting EVERYTHING and forcing a full re-decode of every row's request/
+    // response on the very next search -- this synchronous decode runs on the EDT (Swing's RowFilter is
+    // inherently synchronous), so that thrashing is exactly what produced the "gets laggy once data
+    // accumulates" symptom this was fixed for (0.43.2). See core.BoundedCache's own javadoc for the
+    // LRU-eviction mechanics.
+    private static final int BODY_CACHE_MAX_CHARS = 20_000_000;
+    private final BoundedCache<T, String> bodyCache = new BoundedCache<>(BODY_CACHE_MAX_CHARS, String::length);
+    // Caches the non-body haystack (every column's text, concatenated) per row -- cheap to build
+    // individually, but rebuilding it from scratch for every row on every debounced keystroke still adds
+    // up on a large table. Cleared whenever `rows` is reassigned (refreshData()) so a column value that
+    // changed in place (e.g. Endpoint.recordObservation updating its status code) is never shown stale
+    // for longer than one refresh cycle -- the same staleness window the table's own displayed cells
+    // already have, not a new one.
+    private final Map<T, String> fieldHaystackCache = new IdentityHashMap<>();
     private MessageViewer viewer;   // set by installDetail when the detail is a MessageViewer
     private boolean refreshing;     // true while refreshData()
 
@@ -751,15 +764,20 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
             if (field >= 0 && field < entry.getValueCount()) {
                 return entry.getStringValue(field);
             }
+            int idx = entry.getIdentifier();
+            T row = (idx >= 0 && idx < rows.size()) ? rows.get(idx) : null;
+            String base = row == null ? buildFieldHaystack(entry)
+                    : fieldHaystackCache.computeIfAbsent(row, r -> buildFieldHaystack(entry));
+            if (!useBody) {
+                return base;
+            }
+            return base + bodyText(row);
+        }
+
+        private String buildFieldHaystack(Entry<? extends Model, ? extends Integer> entry) {
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < entry.getValueCount(); i++) {
                 sb.append(entry.getStringValue(i)).append('\n');
-            }
-            if (useBody) {
-                int idx = entry.getIdentifier();
-                if (idx >= 0 && idx < rows.size()) {
-                    sb.append(bodyText(rows.get(idx)));
-                }
             }
             return sb.toString();
         }
@@ -769,7 +787,7 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         if (row == null) {
             return "";
         }
-        String cached = bodyCache.get(row);
+        String cached = bodyCache.get(row);   // a hit also marks it most-recently-used
         if (cached != null) {
             return cached;
         }
@@ -777,29 +795,14 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         if (s == null) {
             s = "";
         }
-        if (bodyCacheChars + s.length() > BODY_CACHE_MAX_CHARS) {
-            bodyCache.clear();
-            bodyCacheChars = 0;
-        }
-        bodyCache.put(row, s);
-        bodyCacheChars += s.length();
+        bodyCache.put(row, s);   // evicts least-recently-used entries itself if over budget
         return s;
     }
 
-    /** Drops cached body text for objects no longer in {@link #rows} (identity), e.g. after Clear data. */
+    /** Drops cached body text for objects no longer in {@link #rows} (identity), e.g. after Clear data
+     * -- called when the cache might hold stale entries for rows that shrank. */
     private void pruneBodyCache() {
-        Map<T, String> kept = new IdentityHashMap<>();
-        int chars = 0;
-        for (T r : rows) {
-            String s = bodyCache.get(r);
-            if (s != null) {
-                kept.put(r, s);
-                chars += s.length();
-            }
-        }
-        bodyCache.clear();
-        bodyCache.putAll(kept);
-        bodyCacheChars = chars;
+        bodyCache.retainKeys(rows);
     }
 
     private void updateCount() {
@@ -876,6 +879,12 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
             if (bodyCache.size() > rows.size()) {
                 pruneBodyCache();   // rows were removed (e.g. Clear data) -- drop their cached bodies
             }
+            // Cleared every refresh (not pruned like bodyCache) -- cheap to rebuild (just column text,
+            // no decoding), and a full clear means a column value that changed in place for an existing
+            // row (e.g. Endpoint.recordObservation updating its status code) is never stale for longer
+            // than one refresh cycle. Lazily rebuilt per row on the next search via computeIfAbsent, not
+            // eagerly here -- most refreshes happen with no search active at all.
+            fieldHaystackCache.clear();
             model.fireTableDataChanged();
             applyColumnWidths();
             updateCount();
