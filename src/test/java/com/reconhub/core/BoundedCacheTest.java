@@ -3,6 +3,11 @@ package com.reconhub.core;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -130,5 +135,46 @@ class BoundedCacheTest {
         c.put(new String("key"), "second");
         assertEquals("second", c.get("key"));
         assertEquals(1, c.size());
+    }
+
+    @Test
+    void concurrentGetAndPutFromManyThreadsNeverThrowsOrCorrupts() throws InterruptedException {
+        // 0.43.3: AbstractTablePanel's async body search calls get()/put() from a SwingWorker
+        // background thread -- if the user types fast enough to overlap two searches, two threads can
+        // hit the same BoundedCache at once. This is the regression guard for that: every method is
+        // `synchronized`, so concurrent access must never throw (a plain, unsynchronized LinkedHashMap
+        // would throw ConcurrentModificationException or corrupt its internal structure under this).
+        int threads = 8;
+        int opsPerThread = 2000;
+        BoundedCache<Integer, String> c = new BoundedCache<>(500, String::length);   // small budget,
+                                                                                     // forces real eviction
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        CountDownLatch ready = new CountDownLatch(threads);
+        CountDownLatch go = new CountDownLatch(1);
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+
+        for (int t = 0; t < threads; t++) {
+            final int threadId = t;
+            pool.submit(() -> {
+                ready.countDown();
+                try {
+                    go.await();
+                    for (int i = 0; i < opsPerThread; i++) {
+                        int key = (threadId * opsPerThread + i) % 50;   // keys collide across threads
+                        c.put(key, "v".repeat(10));
+                        c.get(key);
+                    }
+                } catch (Throwable e) {
+                    failure.set(e);
+                }
+            });
+        }
+        ready.await();
+        go.countDown();
+        pool.shutdown();
+        assertTrue(pool.awaitTermination(30, TimeUnit.SECONDS), "threads did not finish in time");
+
+        assertNull(failure.get(), "concurrent access threw: " + failure.get());
+        assertTrue(c.size() >= 1, "cache should still hold at least one entry after all the dust settles");
     }
 }

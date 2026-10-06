@@ -21,6 +21,12 @@ import java.util.function.ToIntFunction;
  * hashCode()} same as any {@code Map} -- for a key type with no override (identity semantics, as every
  * {@code model.*} row class deliberately has, see the 0.32.1 CLAUDE.md note), this behaves exactly like
  * an {@code IdentityHashMap} would, just with recency tracking added.
+ *
+ * <p><b>Thread-safe</b> (every method is {@code synchronized}) -- added 0.43.3, when
+ * {@code AbstractTablePanel}'s body search moved off the EDT (a {@code SwingWorker} background thread):
+ * if the user types fast enough that one search's worker is still running when the next keystroke
+ * starts another, two threads can call into the same instance at once. {@code LinkedHashMap} itself
+ * gives no such guarantee, so this class must provide it instead of leaving callers to.
  */
 public final class BoundedCache<K, V> {
 
@@ -35,11 +41,11 @@ public final class BoundedCache<K, V> {
     }
 
     /** A hit also marks {@code key} as most-recently-used. */
-    public V get(K key) {
+    public synchronized V get(K key) {
         return map.get(key);
     }
 
-    public int size() {
+    public synchronized int size() {
         return map.size();
     }
 
@@ -50,7 +56,7 @@ public final class BoundedCache<K, V> {
      * single oversized value temporarily over budget is fine; evicting everything including itself
      * would defeat the point of inserting it).
      */
-    public void put(K key, V value) {
+    public synchronized void put(K key, V value) {
         map.put(key, value);
         currentWeight += weigher.applyAsInt(value);
         var it = map.entrySet().iterator();
@@ -63,7 +69,7 @@ public final class BoundedCache<K, V> {
 
     /** Drops every entry whose key isn't in {@code keep} (identity-or-equals, matching the backing
      * map's own key semantics) -- e.g. after rows were removed from the table this cache is for. */
-    public void retainKeys(Collection<K> keep) {
+    public synchronized void retainKeys(Collection<K> keep) {
         Map<K, V> kept = new LinkedHashMap<>(16, 0.75f, true);
         int weight = 0;
         for (K k : keep) {

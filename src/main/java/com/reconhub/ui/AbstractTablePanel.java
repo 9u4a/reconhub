@@ -33,6 +33,7 @@ import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.RowFilter;
 import javax.swing.SwingConstants;
+import javax.swing.SwingWorker;
 import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -53,9 +54,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.IdentityHashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Base class for the data tabs: a Search bar on top, a sortable/searchable {@link JTable} below,
@@ -120,9 +122,21 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
     // changed in place (e.g. Endpoint.recordObservation updating its status code) is never shown stale
     // for longer than one refresh cycle -- the same staleness window the table's own displayed cells
     // already have, not a new one.
-    private final Map<T, String> fieldHaystackCache = new IdentityHashMap<>();
+    // ConcurrentHashMap, not IdentityHashMap (0.43.3): the async body-search path in applySearch() reads
+    // and writes this from a SwingWorker's background thread, and if the user types fast enough that one
+    // search's background worker is still running when the next keystroke's applySearch() starts
+    // another, two threads could touch a plain HashMap-family map at once -- real (if narrow) corruption
+    // risk, not hypothetical. For a key type that doesn't override equals()/hashCode() (every model row
+    // class, deliberately -- see the 0.32.1 note), ConcurrentHashMap behaves identically to
+    // IdentityHashMap, just thread-safe.
+    private final Map<T, String> fieldHaystackCache = new java.util.concurrent.ConcurrentHashMap<>();
     private MessageViewer viewer;   // set by installDetail when the detail is a MessageViewer
     private boolean refreshing;     // true while refreshData()
+    // Bumped on every applySearch() call; an in-flight async body search (see applySearch()) compares
+    // its own captured value against the current one in its done() callback, and drops its result if
+    // they no longer match -- a later keystroke already started a newer search, so this one's answer is
+    // stale. Simpler and safer than trying to cancel a SwingWorker that's mid-decode.
+    private int searchGeneration;
 
     protected AbstractTablePanel(MontoyaApi api, Bookmarks bookmarks) {
         this.api = api;
@@ -679,6 +693,7 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         boolean useBody = bodyBox.isSelected() && field < 0;
 
         SearchQuery query = SearchQuery.parse(raw, regexBox.isSelected(), caseBox.isSelected());
+        boolean hasTerms = !query.isEmpty();
 
         // Install a filter only when it can actually exclude something: search terms, or a subclass
         // quick filter (hasRowFilter()). A null RowFilter means fireTableDataChanged() -- which fires
@@ -686,10 +701,65 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         // empty pattern list) was always installed, and with the "Body" checkbox defaulting on, every
         // refresh tick rebuilt every row's full decoded request+response text just to match it against
         // zero patterns and discard it.
-        sorter.setRowFilter(!query.isEmpty() || hasRowFilter() || bookmarkOnlyBox.isSelected()
-                ? new SearchFilter(query, field, useBody) : null);
-        updateCount();
-        highlightViewer();
+        if (!hasTerms && !hasRowFilter() && !bookmarkOnlyBox.isSelected()) {
+            searchGeneration++;   // invalidate any in-flight async body search -- see below
+            sorter.setRowFilter(null);
+            updateCount();
+            highlightViewer();
+            return;
+        }
+
+        if (!useBody || !hasTerms) {
+            // Fast path: no body decoding needed -- benchmarked at well under 50ms even at tens of
+            // thousands of rows (0.43.2 CLAUDE.md note), so running it straight on the EDT is fine.
+            searchGeneration++;
+            sorter.setRowFilter(new SearchFilter(query, field, false));
+            updateCount();
+            highlightViewer();
+            return;
+        }
+
+        // Body search: decoding (on a cache miss) is the expensive, EDT-blocking part. 0.43.2 made the
+        // cache much larger and LRU instead of clear-everything, which fixes *repeated* search against
+        // the same working set -- but it does nothing for a cold cache (right after a refresh) or a
+        // dataset whose total body text simply exceeds the cache budget, and those are exactly the
+        // "search still freezes" cases reported after that fix. So: actually decode off the EDT. Each
+        // row's SearchQuery match (which may call bodyText(), still cached the same way) runs on a
+        // background thread; only installing the final filter happens back on the EDT, and that filter
+        // is just an O(1) set-membership check per row, not a decode.
+        searchGeneration++;
+        int myGeneration = searchGeneration;
+        List<T> snapshot = new ArrayList<>(rows);
+        countLabel.setText("Searching " + snapshot.size() + " rows…");
+        new SwingWorker<Set<T>, Void>() {
+            @Override protected Set<T> doInBackground() {
+                Set<T> matching = new HashSet<>();
+                for (T row : snapshot) {
+                    if (query.matches(haystackFor(row, field, true))) {
+                        matching.add(row);
+                    }
+                }
+                return matching;
+            }
+
+            @Override protected void done() {
+                if (myGeneration != searchGeneration) {
+                    return;   // superseded by a newer search (another keystroke) -- drop this result
+                }
+                Set<T> matching;
+                try {
+                    matching = get();
+                } catch (java.util.concurrent.ExecutionException | InterruptedException e) {
+                    if (api != null) {
+                        api.logging().logToError("ReconHub: body search failed: " + e);
+                    }
+                    matching = Set.of();
+                }
+                sorter.setRowFilter(new PrecomputedMatchFilter(matching));
+                updateCount();
+                highlightViewer();
+            }
+        }.execute();
     }
 
     /**
@@ -731,6 +801,39 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         return "";
     }
 
+    /** Shared by {@link SearchFilter} (synchronous, non-body) and {@link #applySearch}'s async body-
+     * search path -- builds the haystack directly from {@code row} via {@link #valueAt} (not through a
+     * {@code RowFilter.Entry}, since the async path calls this from a background thread, off any
+     * particular {@code JTable} invocation). Safe to call off the EDT: {@code valueAt} implementations
+     * are plain getters, read concurrently with the ingest thread's writes already (same accepted
+     * concurrency model documented for the 0.35.0 {@code AtomicInteger} fix) -- this doesn't add a new
+     * class of risk, just one more reader. */
+    private String haystackFor(T row, int field, boolean useBody) {
+        if (row == null) {
+            return "";
+        }
+        if (field >= 0) {
+            Object v = valueAt(row, field);
+            return v == null ? "" : v.toString();
+        }
+        String base = fieldHaystackCache.computeIfAbsent(row, this::buildFieldHaystack);
+        if (!useBody) {
+            return base;
+        }
+        return base + bodyText(row);
+    }
+
+    private String buildFieldHaystack(T row) {
+        StringBuilder sb = new StringBuilder();
+        String[] cols = columns();
+        int n = cols == null ? 0 : cols.length;
+        for (int i = 0; i < n; i++) {
+            Object v = valueAt(row, i);
+            sb.append(v == null ? "" : v.toString()).append('\n');
+        }
+        return sb.toString();
+    }
+
     private final class SearchFilter extends RowFilter<Model, Integer> {
         private final SearchQuery query;
         private final int field;
@@ -757,29 +860,34 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
             if (query.isEmpty()) {
                 return true;   // quick-filter-only pass: no haystack (and no body text) needed
             }
-            return query.matches(haystack(entry));
+            return query.matches(haystackFor(row, field, useBody));
+        }
+    }
+
+    /** Installed on the EDT once the async body-search path (see {@link #applySearch}) has already
+     * computed, off the EDT, exactly which rows match the query -- {@code include()} here is just the
+     * same cheap {@link #rowIncluded}/bookmark checks {@link SearchFilter} does, plus an O(1) set
+     * lookup, never a decode. */
+    private final class PrecomputedMatchFilter extends RowFilter<Model, Integer> {
+        private final Set<T> matching;
+
+        PrecomputedMatchFilter(Set<T> matching) {
+            this.matching = matching;
         }
 
-        private String haystack(Entry<? extends Model, ? extends Integer> entry) {
-            if (field >= 0 && field < entry.getValueCount()) {
-                return entry.getStringValue(field);
-            }
+        @Override
+        public boolean include(Entry<? extends Model, ? extends Integer> entry) {
             int idx = entry.getIdentifier();
             T row = (idx >= 0 && idx < rows.size()) ? rows.get(idx) : null;
-            String base = row == null ? buildFieldHaystack(entry)
-                    : fieldHaystackCache.computeIfAbsent(row, r -> buildFieldHaystack(entry));
-            if (!useBody) {
-                return base;
+            if (!rowIncluded(row)) {
+                return false;
             }
-            return base + bodyText(row);
-        }
-
-        private String buildFieldHaystack(Entry<? extends Model, ? extends Integer> entry) {
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < entry.getValueCount(); i++) {
-                sb.append(entry.getStringValue(i)).append('\n');
+            if (bookmarkOnlyBox.isSelected()
+                    && (bookmarks == null || row == null
+                        || !bookmarks.isBookmarked(rowKey(row)))) {
+                return false;
             }
-            return sb.toString();
+            return row != null && matching.contains(row);
         }
     }
 
