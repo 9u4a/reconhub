@@ -135,8 +135,18 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
     // Bumped on every applySearch() call; an in-flight async body search (see applySearch()) compares
     // its own captured value against the current one in its done() callback, and drops its result if
     // they no longer match -- a later keystroke already started a newer search, so this one's answer is
-    // stale. Simpler and safer than trying to cancel a SwingWorker that's mid-decode.
+    // stale. Still needed alongside activeSearchWorker below: cancel() only *requests* an early exit
+    // (checked cooperatively, not preemptively), so a worker can still reach done() having run to
+    // completion anyway, and this is the belt-and-suspenders check that drops its result regardless.
     private int searchGeneration;
+    // The in-flight body-search worker, if any (0.43.4). Typing a search term while an older full-table
+    // decode+match pass is still running used to let that older pass run all the way to completion
+    // before its result was discarded in done() -- harmless for one keystroke, but under fast typing (or
+    // a large/slow-decoding dataset where one pass takes longer than the 200ms debounce) several such
+    // passes could be in flight at once, each decompressing/decoding every row's body and burning CPU
+    // for an answer nobody will use. Tracking the active worker lets a new search cancel the old one
+    // instead of just outrunning it.
+    private SwingWorker<Set<T>, Void> activeSearchWorker;
 
     protected AbstractTablePanel(MontoyaApi api, Bookmarks bookmarks) {
         this.api = api;
@@ -703,6 +713,7 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         // zero patterns and discard it.
         if (!hasTerms && !hasRowFilter() && !bookmarkOnlyBox.isSelected()) {
             searchGeneration++;   // invalidate any in-flight async body search -- see below
+            cancelActiveSearchWorker();
             sorter.setRowFilter(null);
             updateCount();
             highlightViewer();
@@ -713,6 +724,7 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
             // Fast path: no body decoding needed -- benchmarked at well under 50ms even at tens of
             // thousands of rows (0.43.2 CLAUDE.md note), so running it straight on the EDT is fine.
             searchGeneration++;
+            cancelActiveSearchWorker();
             sorter.setRowFilter(new SearchFilter(query, field, false));
             updateCount();
             highlightViewer();
@@ -729,12 +741,23 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         // is just an O(1) set-membership check per row, not a decode.
         searchGeneration++;
         int myGeneration = searchGeneration;
+        // Cancel whatever body search is still running, instead of leaving it to grind through a full
+        // decode+match pass whose result is about to be thrown away anyway (0.43.4 -- see
+        // activeSearchWorker's field javadoc). cancel(true) alone wouldn't stop it (decode isn't
+        // interruptible I/O), so the loop below also checks isCancelled() itself every so often.
+        cancelActiveSearchWorker();
         List<T> snapshot = new ArrayList<>(rows);
         countLabel.setText("Searching " + snapshot.size() + " rows…");
-        new SwingWorker<Set<T>, Void>() {
+        SwingWorker<Set<T>, Void> worker = new SwingWorker<Set<T>, Void>() {
             @Override protected Set<T> doInBackground() {
                 Set<T> matching = new HashSet<>();
-                for (T row : snapshot) {
+                for (int i = 0; i < snapshot.size(); i++) {
+                    // Checked every 256 rows rather than every row -- isCancelled()/volatile-read
+                    // overhead is negligible either way, but there's no reason to pay it per-row.
+                    if ((i & 0xFF) == 0 && (isCancelled() || myGeneration != searchGeneration)) {
+                        return matching;   // superseded -- bail out early instead of finishing the scan
+                    }
+                    T row = snapshot.get(i);
                     if (query.matches(haystackFor(row, field, true))) {
                         matching.add(row);
                     }
@@ -743,7 +766,7 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
             }
 
             @Override protected void done() {
-                if (myGeneration != searchGeneration) {
+                if (isCancelled() || myGeneration != searchGeneration) {
                     return;   // superseded by a newer search (another keystroke) -- drop this result
                 }
                 Set<T> matching;
@@ -759,7 +782,17 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
                 updateCount();
                 highlightViewer();
             }
-        }.execute();
+        };
+        activeSearchWorker = worker;
+        worker.execute();
+    }
+
+    /** Requests cancellation of the current body-search worker, if one is still running -- see
+     * {@link #activeSearchWorker}'s field javadoc. A no-op if there isn't one or it already finished. */
+    private void cancelActiveSearchWorker() {
+        if (activeSearchWorker != null && !activeSearchWorker.isDone()) {
+            activeSearchWorker.cancel(true);
+        }
     }
 
     /**
