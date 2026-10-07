@@ -97,6 +97,18 @@ public final class DashboardPanel extends JPanel implements Refreshable {
     private final Map<String, List<String>> hostMissHeaders = new HashMap<>();
     private final JPanel hostDetail = new JPanel(new BorderLayout());
     private String selectedHost;
+    // Last host/stats actually rendered into hostDetail (0.43.8) -- updateHostDetail() runs on every
+    // refreshData() tick whenever exactly one host is selected (the default state, since the top host
+    // is auto-selected), rebuilding ~15 labels/chips/panels even when nothing about that host changed.
+    // hostStats.get(host) can't be compared by reference across ticks (buildHostScorecard rebuilds the
+    // whole map, including a fresh int[] for every host, every tick) so this compares by value instead.
+    private String lastDetailHost;
+    private int[] lastDetailStats;
+    private List<String> lastDetailMissHeaders;
+    // Last per-severity counts actually rendered into severityRow (0.43.8) -- same rationale.
+    private Map<Finding.Severity, Integer> lastSevCounts;
+    // Last per-class counts actually rendered into classChips (0.43.8) -- same rationale.
+    private Map<String, Integer> lastClassCounts;
 
     private final SimpleModel typeModel = new SimpleModel(
             new String[]{"Finding type", "Count"},
@@ -216,35 +228,44 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         List<Endpoint> eps = store.snapshotEndpoints();
         List<ParameterInfo> params = store.snapshotParameters();
         List<Finding> finds = store.snapshotFindings();
+        // Fetched once and reused below for both the "Hosts" stat pill and buildHostScorecard's
+        // missing-headers pass (0.43.8) -- this used to call store.snapshotTech() a second time inside
+        // buildHostScorecard for the exact same data, every tick.
+        List<TechInfo> techs = store.snapshotTech();
 
         requests.setText(String.valueOf(store.getRequestsProcessed()));
         endpoints.setText(String.valueOf(eps.size()));
         parameters.setText(String.valueOf(params.size()));
         findings.setText(String.valueOf(finds.size()));
         jsFiles.setText(String.valueOf(store.snapshotJsAssets().size()));
-        hosts.setText(String.valueOf(store.snapshotTech().size()));
+        hosts.setText(String.valueOf(techs.size()));
 
         Map<Finding.Severity, Integer> sevCounts = new EnumMap<>(Finding.Severity.class);
         for (Finding f : finds) {
             sevCounts.merge(f.getSeverity(), 1, Integer::sum);
         }
-        severityRow.removeAll();
-        for (Finding.Severity sev : Finding.Severity.values()) {
-            severityRow.add(SwingColors.chip(sev.name() + "  " + sevCounts.getOrDefault(sev, 0),
-                    SwingColors.severityFg(sev)));
+        // Skip the chip teardown/rebuild when the counts haven't actually changed since the last tick
+        // (0.43.8) -- the common case on any tick that didn't touch Findings at all.
+        if (!sevCounts.equals(lastSevCounts)) {
+            lastSevCounts = sevCounts;
+            severityRow.removeAll();
+            for (Finding.Severity sev : Finding.Severity.values()) {
+                severityRow.add(SwingColors.chip(sev.name() + "  " + sevCounts.getOrDefault(sev, 0),
+                        SwingColors.severityFg(sev)));
+            }
+            severityRow.revalidate();
+            severityRow.repaint();
         }
-        severityRow.revalidate();
-        severityRow.repaint();
 
         hostChart.setData(store.hostCounts());
-        buildHostScorecard(eps, params, finds);
+        buildHostScorecard(eps, params, finds, techs);
         buildTopFindings(finds);
         buildNotableEndpoints(eps);
         buildClassSummary(params);
     }
 
     private void buildHostScorecard(List<Endpoint> eps, List<ParameterInfo> params,
-                                    List<Finding> finds) {
+                                    List<Finding> finds, List<TechInfo> techs) {
         // Captured BEFORE hostModel.setRows() below replaces the row list (which clears the JTable's
         // selection outright, same as any fireTableDataChanged()) -- must be read against the OLD
         // model/view mapping, not the new one.
@@ -261,7 +282,7 @@ public final class DashboardPanel extends JPanel implements Refreshable {
             row(byHost, Hosts.labelOf(f.getLocationUrl()))[idx]++;
         }
         hostMissHeaders.clear();
-        for (TechInfo t : store.snapshotTech()) {
+        for (TechInfo t : techs) {
             List<String> miss = new ArrayList<>(t.getMissingSecurityHeaders());
             String label = Hosts.label(t.getHost());
             row(byHost, label)[6] = miss.size();
@@ -342,8 +363,22 @@ public final class DashboardPanel extends JPanel implements Refreshable {
     /** Rebuilds the right-hand detail card for one host (severity chips + missing-header names). */
     private void updateHostDetail(String host) {
         selectedHost = host;
-        hostDetail.removeAll();
         int[] c = host == null ? null : hostStats.get(host);
+        List<String> missHeaders = host == null ? null : hostMissHeaders.get(host);
+        // Skip the rebuild when it would produce exactly the same card as last time (0.43.8) -- this
+        // runs every refreshData() tick whenever exactly one host stays selected, which is the default
+        // (auto-selected top host) state. hostStats' int[] is a fresh array every tick (buildHostScorecard
+        // rebuilds the whole map), so this compares by value, not by reference; missHeaders' *names* are
+        // compared too, not just c[6]'s count, since the count alone can't tell "X-Frame-Options" apart
+        // from a same-size swap to a different missing header.
+        if (java.util.Objects.equals(host, lastDetailHost) && java.util.Arrays.equals(c, lastDetailStats)
+                && java.util.Objects.equals(missHeaders, lastDetailMissHeaders)) {
+            return;
+        }
+        lastDetailHost = host;
+        lastDetailStats = c;
+        lastDetailMissHeaders = missHeaders;
+        hostDetail.removeAll();
         if (c == null) {
             JLabel hint = muted("Select a host on the left to see its severity breakdown.");
             hint.setBorder(BorderFactory.createEmptyBorder(6, 2, 0, 0));
@@ -385,7 +420,7 @@ public final class DashboardPanel extends JPanel implements Refreshable {
 
         JPanel mh = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 3));
         mh.setOpaque(false);
-        List<String> names = hostMissHeaders.get(host);
+        List<String> names = missHeaders;
         if (names == null || names.isEmpty()) {
             mh.add(muted("none"));
         } else {
@@ -416,7 +451,9 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         for (Endpoint e : eps) {
             java.util.TreeSet<String> risky = new java.util.TreeSet<>();
             for (String name : e.getParamNames()) {
-                for (String cls : ParameterClassifier.classify(name)) {
+                // Cached (0.43.8) -- classify() re-runs every param-classes.json rule on every call;
+                // this loop used to do that for every param name of every endpoint, every tick.
+                for (String cls : ParameterClassifier.classifyCached(name)) {
                     if (RISKY_CLASSES.contains(cls)) {
                         risky.add(cls);
                     }
@@ -449,10 +486,16 @@ public final class DashboardPanel extends JPanel implements Refreshable {
     private void buildClassSummary(List<ParameterInfo> params) {
         Map<String, Integer> counts = new TreeMap<>();
         for (ParameterInfo p : params) {
-            for (String cls : ParameterClassifier.classify(p.getName())) {
+            // Cached (0.43.8) -- see buildNotableEndpoints' identical note above.
+            for (String cls : ParameterClassifier.classifyCached(p.getName())) {
                 counts.merge(cls, 1, Integer::sum);
             }
         }
+        // Skip the chip teardown/rebuild when the counts haven't changed since last tick (0.43.8).
+        if (counts.equals(lastClassCounts)) {
+            return;
+        }
+        lastClassCounts = counts;
         classChips.removeAll();
         if (counts.isEmpty()) {
             classChips.add(muted("None"));

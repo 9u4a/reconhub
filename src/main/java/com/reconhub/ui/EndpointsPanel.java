@@ -78,7 +78,9 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
     @Override
     public void refreshData() {
         super.refreshData();
-        List<Endpoint> rows = store.snapshotEndpoints();
+        // Reuses the rows super.refreshData() just fetched instead of re-snapshotting the same data a
+        // second (and via ctFilter, third/fourth) time in the same tick (0.43.8).
+        List<Endpoint> rows = rows();
         methodFilter.refreshAvailableValues(rows);
         statusFilter.refreshAvailableValues(rows);
         ctFilter.refreshAvailableValues(rows);
@@ -204,9 +206,15 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
     }
 
     // Status (3) and Params (5) are numeric -- declared so the sorter compares them as numbers
-    // instead of lexicographically (which would put e.g. "10" before "2").
+    // instead of lexicographically (which would put e.g. "10" before "2"). A static constant (0.43.8,
+    // was `new Class<?>[]{...}` built fresh here) -- JTable.getCellRenderer calls columnClasses() once
+    // per cell per repaint via Model.getColumnClass, so every subclass's override was allocating a new
+    // array for the exact same, never-changing content on every cell of every repaint.
+    private static final Class<?>[] COLUMN_CLASSES =
+            {null, null, null, Integer.class, null, Integer.class, null, null};
+
     @Override protected Class<?>[] columnClasses() {
-        return new Class<?>[]{null, null, null, Integer.class, null, Integer.class, null, null};
+        return COLUMN_CLASSES;
     }
 
     @Override protected Object valueAt(Endpoint e, int c) {

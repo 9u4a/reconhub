@@ -22,6 +22,7 @@ import javax.swing.JRadioButton;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
+import javax.swing.Timer;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.Color;
@@ -98,6 +99,15 @@ final class MatchReplaceDialog {
         errorLabel.setForeground(new Color(0xc0392b));
         errorLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
+        // Computed once (0.43.8), not on every updatePreview() call -- the "before" text depends only
+        // on previewTarget, fixed for the dialog's whole lifetime, unlike "after" below (which depends
+        // on the current rules and so does need to be recomputed as the user edits them).
+        HttpRequestResponse previewRr = previewTarget.messages();
+        HttpRequest previewReq = previewRr == null ? null : previewRr.request();
+        before.setText(previewReq == null
+                ? "(no captured request to preview for " + previewTarget.path() + ")"
+                : truncate(previewReq.toString()));
+
         Runnable updatePreview = () -> {
             List<MatchReplaceRule> rules = new ArrayList<>();
             String err = null;
@@ -110,19 +120,15 @@ final class MatchReplaceDialog {
             }
             errorLabel.setText(err == null ? " " : err);
 
-            HttpRequestResponse rr = previewTarget.messages();
-            HttpRequest req = rr == null ? null : rr.request();
-            if (req == null) {
-                before.setText("(no captured request to preview for " + previewTarget.path() + ")");
+            if (previewReq == null) {
                 after.setText("");
                 return;
             }
-            before.setText(truncate(req.toString()));
             if (err != null) {
                 after.setText("(fix the regex above to see a preview)");
                 return;
             }
-            HttpRequest result = MatchReplaceEngine.buildRequest(req, rules);
+            HttpRequest result = MatchReplaceEngine.buildRequest(previewReq, rules);
             after.setText(result == null
                     ? "(a rule in the chain doesn't apply to this request -- header not present, and "
                             + "\"Add header if missing\" is off)"
@@ -305,11 +311,17 @@ final class MatchReplaceDialog {
         return c;
     }
 
+    /** Debounced (0.43.8) -- typing in a match/replace/header-name field used to recompute the whole
+     * preview (recompile+reapply every rule in the chain) synchronously on every keystroke, with no
+     * debounce at all, unlike every other search/filter field in this codebase. 200ms matches {@code
+     * AbstractTablePanel.debounce}'s own interval. */
     private static void addLiveUpdate(JTextField field, Runnable onChange) {
+        Timer debounce = new Timer(200, e -> onChange.run());
+        debounce.setRepeats(false);
         field.getDocument().addDocumentListener(new DocumentListener() {
-            @Override public void insertUpdate(DocumentEvent e) { onChange.run(); }
-            @Override public void removeUpdate(DocumentEvent e) { onChange.run(); }
-            @Override public void changedUpdate(DocumentEvent e) { onChange.run(); }
+            @Override public void insertUpdate(DocumentEvent e) { debounce.restart(); }
+            @Override public void removeUpdate(DocumentEvent e) { debounce.restart(); }
+            @Override public void changedUpdate(DocumentEvent e) { debounce.restart(); }
         });
     }
 }

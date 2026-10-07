@@ -308,9 +308,13 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
 
     // Size (2), Endpoints (3), Secrets (4) are numeric -- declared so the sorter compares them as
     // numbers, not lexicographically (which would put e.g. "10" before "2"). Preview (1) is a plain
-    // String column, so it takes no entry here.
+    // String column, so it takes no entry here. Static constant (0.43.8) -- see EndpointsPanel's
+    // identical note.
+    private static final Class<?>[] COLUMN_CLASSES =
+            {null, null, Integer.class, Integer.class, Integer.class, null};
+
     @Override protected Class<?>[] columnClasses() {
-        return new Class<?>[]{null, null, Integer.class, Integer.class, Integer.class, null};
+        return COLUMN_CLASSES;
     }
 
     @Override protected Object valueAt(JsAsset a, int c) {

@@ -45,6 +45,11 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
     private final Map<Component, Refreshable> refreshableByTab = new IdentityHashMap<>();
     private final JTabbedPane tabs = new JTabbedPane();
     private final Timer refreshTimer;
+    // Kept as a field (0.43.8, was a local) so dispose() can stop it -- see that method's javadoc.
+    private final Timer themeTimer;
+    // Kept so dispose() can detach the DataStore.ChangeListener registration below (addChangeListener
+    // call) -- also new in 0.43.8 (DataStore had no removal path before this round).
+    private final DataStore store;
     // Last polled value, so the 300ms tick only repaints on an actual flip (Burp's Theme API has no
     // change callback -- see SwingColors -- so this is the one place that notices a live theme switch).
     private boolean lastKnownDark = SwingColors.isDark();
@@ -53,6 +58,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
                    PayloadCheatsheet cheatsheet, BruteforceEngine bruteforce,
                    MatchReplaceEngine matchReplace, Bookmarks bookmarks) {
         setLayout(new BorderLayout());
+        this.store = store;
 
         DashboardPanel dashboard = new DashboardPanel(store, api);
         EndpointsPanel endpoints = new EndpointsPanel(store, api, cheatsheet, bookmarks);
@@ -145,11 +151,27 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         // no traffic). Burp's Theme API has no change callback (see SwingColors), so this is the only
         // way to notice a live light/dark flip; 1s is frequent enough to feel immediate without being
         // wasteful, since a no-op poll is just one enum comparison.
-        Timer themeTimer = new Timer(1000, e -> pollTheme());
+        themeTimer = new Timer(1000, e -> pollTheme());
         themeTimer.start();
 
         store.addChangeListener(this);
         refreshAll();
+    }
+
+    /**
+     * Releases everything this instance holds onto that would otherwise outlive it (0.43.8). Before
+     * this existed, {@code themeTimer} (started above, never stopped) registered itself in Swing's
+     * JVM-wide {@code TimerQueue} and its lambda kept a strong reference to this whole {@code MainTab}
+     * -- every sub-tab, every {@code AbstractTablePanel.bodyCache} (tens of MB each) -- reachable for
+     * the rest of the Burp process's life, still polling the theme every second on a now-detached
+     * component tree. {@code DataStore.addChangeListener(this)} above had no matching removal either.
+     * Call once, from {@code ReconHubExtension}'s unload handler (which already correctly shuts down
+     * the ingest/bruteforce/match-replace executors -- this was the missing piece alongside those).
+     */
+    public void dispose() {
+        themeTimer.stop();
+        refreshTimer.stop();
+        store.removeChangeListener(this);
     }
 
     /** Ctrl+1..8 switch tabs, Ctrl+F focuses the current tab's search field (a no-op on tabs without

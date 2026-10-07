@@ -33,6 +33,13 @@ public final class Bookmarks {
         return key != null && byKey.getOrDefault(key, EMPTY).bookmarked();
     }
 
+    /** True when there are no bookmarks/notes at all (0.43.8) -- {@code put} already removes an entry
+     * the moment it has neither (see below), so this is exact, not approximate. Lets a per-cell-paint
+     * caller skip computing a row key entirely when there's nothing to look up. */
+    public boolean isEmpty() {
+        return byKey.isEmpty();
+    }
+
     public String noteFor(String key) {
         return key == null ? "" : byKey.getOrDefault(key, EMPTY).note();
     }

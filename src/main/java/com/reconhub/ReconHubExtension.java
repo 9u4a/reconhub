@@ -16,7 +16,6 @@ import com.reconhub.integration.IntruderPayloads;
 import com.reconhub.ui.MainTab;
 import com.reconhub.ui.SendToReconHubMenu;
 
-import javax.swing.JComponent;
 import javax.swing.SwingUtilities;
 import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.atomic.AtomicReference;
@@ -72,8 +71,8 @@ public final class ReconHubExtension implements BurpExtension {
         api.http().registerHttpHandler(ingestor);
         api.userInterface().registerContextMenuItemsProvider(new SendToReconHubMenu(ingestor));
 
-        JComponent tab = buildUi(api, store, settings, ingestor, cheatsheet, bruteforce, matchReplace, bookmarks);
-        api.userInterface().registerSuiteTab("ReconHub", tab);
+        MainTab mainTab = buildUi(api, store, settings, ingestor, cheatsheet, bruteforce, matchReplace, bookmarks);
+        api.userInterface().registerSuiteTab("ReconHub", mainTab.component());
 
         api.extension().registerUnloadingHandler(() -> {
             settings.save(api);
@@ -81,6 +80,9 @@ public final class ReconHubExtension implements BurpExtension {
             ingestor.shutdown();
             bruteforce.shutdown();
             matchReplace.shutdown();
+            // 0.43.8: stops MainTab's theme-poll Timer and detaches its DataStore listener -- without
+            // this, both outlived the unload indefinitely (see MainTab.dispose()'s javadoc).
+            mainTab.dispose();
         });
 
         if (settings.isAutoIngestOnLoad()) {
@@ -93,14 +95,13 @@ public final class ReconHubExtension implements BurpExtension {
         }
     }
 
-    private static JComponent buildUi(MontoyaApi api, DataStore store, Settings settings,
-                                      TrafficIngestor ingestor, PayloadCheatsheet cheatsheet,
-                                      BruteforceEngine bruteforce, MatchReplaceEngine matchReplace,
-                                      Bookmarks bookmarks) {
-        AtomicReference<JComponent> ref = new AtomicReference<>();
+    private static MainTab buildUi(MontoyaApi api, DataStore store, Settings settings,
+                                   TrafficIngestor ingestor, PayloadCheatsheet cheatsheet,
+                                   BruteforceEngine bruteforce, MatchReplaceEngine matchReplace,
+                                   Bookmarks bookmarks) {
+        AtomicReference<MainTab> ref = new AtomicReference<>();
         Runnable build = () -> ref.set(
-                new MainTab(api, store, settings, ingestor, cheatsheet, bruteforce, matchReplace, bookmarks)
-                        .component());
+                new MainTab(api, store, settings, ingestor, cheatsheet, bruteforce, matchReplace, bookmarks));
         if (SwingUtilities.isEventDispatchThread()) {
             build.run();
         } else {

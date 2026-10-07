@@ -186,17 +186,27 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         }
     }
 
+    // Last counts rebuildCategoryItems actually rendered (0.43.8) -- lets refreshData() skip the combo
+    // teardown/rebuild on a tick where the category breakdown hasn't changed (the common case -- most
+    // 300ms ticks during live capture touch a different tab's data, or add findings whose categories
+    // already had at least one member).
+    private Map<FindingTaxonomy.Category, Integer> lastCategoryCounts;
+
     @Override
     public void refreshData() {
         super.refreshData();
-        List<Finding> rows = store.snapshotFindings();
+        // Reuses the rows super.refreshData() just fetched instead of re-snapshotting (0.43.8).
+        List<Finding> rows = rows();
         // Live per-category counts in the filter combo.
         Map<FindingTaxonomy.Category, Integer> counts =
                 new EnumMap<>(FindingTaxonomy.Category.class);
         for (Finding f : rows) {
             counts.merge(FindingTaxonomy.categoryOf(f.getType()), 1, Integer::sum);
         }
-        rebuildCategoryItems(counts);
+        if (!counts.equals(lastCategoryCounts)) {
+            rebuildCategoryItems(counts);
+            lastCategoryCounts = counts;
+        }
         hostFilter.refreshAvailableValues(rows);
     }
 
@@ -374,8 +384,12 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     }
 
     // Seen (6) is numeric -- declared so the sorter compares it as a number, not lexicographically.
+    // Static constant (0.43.8) -- see EndpointsPanel's identical note.
+    private static final Class<?>[] COLUMN_CLASSES =
+            {null, null, null, null, null, null, Integer.class, null};
+
     @Override protected Class<?>[] columnClasses() {
-        return new Class<?>[]{null, null, null, null, null, null, Integer.class, null};
+        return COLUMN_CLASSES;
     }
 
     @Override protected Object valueAt(Finding f, int c) {

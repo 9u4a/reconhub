@@ -92,9 +92,13 @@ public final class MatchReplacePanel extends AbstractTablePanel<MatchReplaceResu
     }
 
     // Status/Length are numeric -- see AbstractTablePanel.java's CLAUDE.md note on why this is required
-    // for the sorter to compare them as numbers instead of lexicographically.
+    // for the sorter to compare them as numbers instead of lexicographically. Static constant (0.43.8)
+    // -- see EndpointsPanel's identical note.
+    private static final Class<?>[] COLUMN_CLASSES =
+            {null, null, null, Integer.class, Integer.class, null, null};
+
     @Override protected Class<?>[] columnClasses() {
-        return new Class<?>[]{null, null, null, Integer.class, Integer.class, null, null};
+        return COLUMN_CLASSES;
     }
 
     @Override

@@ -72,7 +72,8 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
     @Override
     public void refreshData() {
         super.refreshData();
-        List<ParameterInfo> rows = store.snapshotParameters();
+        // Reuses the rows super.refreshData() just fetched instead of re-snapshotting (0.43.8).
+        List<ParameterInfo> rows = rows();
         locationFilter.refreshAvailableValues(rows);
         classFilter.refreshAvailableValues(rows);
     }
@@ -226,8 +227,12 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
     }
 
     // Seen (7) is numeric -- declared so the sorter compares it as a number, not lexicographically.
+    // Static constant (0.43.8) -- see EndpointsPanel's identical note.
+    private static final Class<?>[] COLUMN_CLASSES =
+            {null, null, null, null, null, null, null, Integer.class};
+
     @Override protected Class<?>[] columnClasses() {
-        return new Class<?>[]{null, null, null, null, null, null, null, Integer.class};
+        return COLUMN_CLASSES;
     }
 
     @Override protected Object valueAt(ParameterInfo p, int c) {

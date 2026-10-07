@@ -44,6 +44,12 @@ public final class BarChartPanel extends JPanel {
             list.add(new Bar(String.valueOf(e.getKey()), e.getValue()));
             m = Math.max(m, e.getValue());
         }
+        // No-op when the top-N bars are unchanged (0.43.8) -- DashboardPanel calls this every ~300ms
+        // refresh tick regardless of whether the underlying counts actually moved; Bar is a record, so
+        // List.equals here is a plain field-by-field comparison, not identity.
+        if (list.equals(this.bars)) {
+            return;
+        }
         this.bars = list;
         this.max = m;
         int rows = Math.max(1, list.size());

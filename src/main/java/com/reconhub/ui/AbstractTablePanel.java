@@ -40,6 +40,7 @@ import javax.swing.event.DocumentListener;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.Dimension;
@@ -438,6 +439,21 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
      * {@code Object.class} and {@code Integer.class} (see the ctor) so numeric columns (Status, Seen,
      * Size, ...) get the exact same striping/bookmark/styleCell treatment as text columns instead of
      * silently falling back to Swing's own built-in Number renderer, which used to skip all of it. */
+    // Cache of the last-derived stripe color, keyed on the table background it was derived from
+    // (0.43.8) -- SwingColors.stripe() allocates a new Color every call, and getTableCellRendererComponent
+    // calls it for every odd-row cell on every repaint; the background it derives from only actually
+    // changes on a theme flip.
+    private Color stripeCacheBg;
+    private Color stripeCacheColor;
+
+    private Color stripeColor(Color tableBg) {
+        if (!tableBg.equals(stripeCacheBg)) {
+            stripeCacheBg = tableBg;
+            stripeCacheColor = SwingColors.stripe(tableBg);
+        }
+        return stripeCacheColor;
+    }
+
     private final class StyledRenderer extends DefaultTableCellRenderer {
         @Override
         public Component getTableCellRendererComponent(JTable t, Object value, boolean sel,
@@ -449,7 +465,7 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
             } else {
                 // Zebra stripe every other (view) row, purely to make a wide multi-column table easier
                 // to track by eye -- view row index, not model index, so it stays stable across sorts.
-                c.setBackground(row % 2 == 1 ? SwingColors.stripe(t.getBackground()) : t.getBackground());
+                c.setBackground(row % 2 == 1 ? stripeColor(t.getBackground()) : t.getBackground());
                 c.setForeground(t.getForeground());
             }
             // Swing's replaced built-in Number renderer right-aligns; replicate that so registering
@@ -469,7 +485,12 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
      * plus a gold left-edge marker on column 0 -- neither depends on text color to be visible, so
      * neither fights whatever severity/category foreground color {@link #styleCell} already set. */
     private void applyBookmarkStyle(Component c, T row, int col, boolean sel) {
-        String key = row == null || bookmarks == null ? null : rowKey(row);
+        // Bail before computing a row key at all when there's nothing to look up (0.43.8) -- this runs
+        // on every cell of every repaint, and most tables/sessions have zero bookmarks.
+        if (row == null || bookmarks == null || bookmarks.isEmpty()) {
+            return;
+        }
+        String key = rowKey(row);
         if (key == null || !bookmarks.isBookmarked(key)) {
             return;
         }
@@ -523,11 +544,17 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
      * resets to an "All"-field, non-regex, plain-substring search for {@code query}.
      */
     public void searchFor(String query) {
-        if (fieldBox.getItemCount() > 0) {
-            fieldBox.setSelectedIndex(0);   // "All"
+        suppressSearch = true;
+        try {
+            if (fieldBox.getItemCount() > 0) {
+                fieldBox.setSelectedIndex(0);   // "All"
+            }
+            regexBox.setSelected(false);
+            searchField.setText(query == null ? "" : query);
+            debounce.stop();   // the explicit applySearch() below already covers this final state
+        } finally {
+            suppressSearch = false;
         }
-        regexBox.setSelected(false);
-        searchField.setText(query == null ? "" : query);
         applySearch();
     }
 
@@ -718,7 +745,19 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
 
     // ---- Search ---------------------------------------------------------
 
+    // Set around searchFor()'s programmatic widget updates (0.43.8) -- same reentrancy-guard shape as
+    // FindingsPanel's rebuildingCatBox. Without it, fieldBox.setSelectedIndex/regexBox.setSelected could
+    // each fire their own ActionListener (-> applySearch(), against whatever searchField still held at
+    // that instant, i.e. the stale previous query) before searchField.setText() even ran, and the
+    // debounced Timer those listeners/the text change arm would fire a further redundant pass 200ms
+    // later on top of searchFor()'s own explicit call -- up to 2-3 wasted full search passes per
+    // cross-tab jump (Dashboard menu items, "View endpoints for…", Global Search's "Go to").
+    private boolean suppressSearch;
+
     private void applySearch() {
+        if (suppressSearch) {
+            return;
+        }
         String raw = searchField.getText().trim();
         int field = fieldBox.getSelectedIndex() - 1;   // -1 = All
         boolean useBody = bodyBox.isSelected() && field < 0;
@@ -1017,6 +1056,15 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         return needsQuote ? "\"" + v + "\"" : v;
     }
 
+    /** The current row list, exactly as {@link #refreshData} last fetched it via {@link #supplyRows}
+     * (0.43.8) -- lets a subclass's own {@code refreshData()} override (e.g. to refresh a
+     * {@link ColumnValueFilter}) reuse this instead of re-snapshotting the same data a second time in
+     * the same tick. Do not mutate the returned list (it may be the same unmodifiable list {@code
+     * DataStore.snapshotX()} hands back). */
+    protected List<T> rows() {
+        return rows;
+    }
+
     /** @return the model row index for a view row (accounts for sorting/filtering). */
     protected T rowAt(int viewRow) {
         if (viewRow < 0) {
@@ -1041,7 +1089,12 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         refreshing = true;
         boolean restored;
         try {
-            this.rows = new ArrayList<>(supplyRows());
+            // No defensive copy (0.43.8) -- supplyRows() (almost always store.snapshotX(), itself now
+            // unmodifiable as of this same round) already returns a list this class never mutates in
+            // place (confirmed: nothing here ever calls rows.add/remove/sort/set -- sorting is the
+            // separate TableRowSorter's job). This used to allocate a second full-row-reference copy on
+            // top of snapshotX()'s own, every ~300ms tick.
+            this.rows = supplyRows();
             if (bodyCache.size() > rows.size()) {
                 pruneBodyCache();   // rows were removed (e.g. Clear data) -- drop their cached bodies
             }

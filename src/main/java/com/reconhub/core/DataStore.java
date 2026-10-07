@@ -8,6 +8,7 @@ import com.reconhub.model.ParameterInfo;
 import com.reconhub.model.TechInfo;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -74,6 +75,14 @@ public final class DataStore {
 
     public void addChangeListener(ChangeListener l) {
         listeners.add(l);
+    }
+
+    /** Detaches a listener previously added via {@link #addChangeListener} (0.43.8) -- added so
+     * {@code MainTab} can unregister itself on extension unload; there was previously no way to, so
+     * every reload accumulated one more permanently-registered listener on a {@code DataStore} that
+     * also has no removal path of its own otherwise. */
+    public void removeChangeListener(ChangeListener l) {
+        listeners.remove(l);
     }
 
     public void fireChanged() {
@@ -191,6 +200,14 @@ public final class DataStore {
 
     // ---- Snapshots (for UI / export) ------------------------------------
 
+    // 0.43.8: every snapshotX() used to `return new ArrayList<>(snap.list)` -- a fresh, independently-
+    // mutable copy per call, on top of the cache rebuild this already avoids when nothing changed.
+    // Traced all ~30 call sites across ui/export/active: none mutate the returned list (all either
+    // iterate it, stream it, or copy it again themselves). Collections.unmodifiableList is free (no
+    // copy) and keeps the original intent -- a caller can't corrupt the shared cached list -- while
+    // actually strengthening it: a future caller that DID try to mutate it would now get an immediate
+    // UnsupportedOperationException instead of silently corrupting the cache other callers share.
+
     public List<Endpoint> snapshotEndpoints() {
         // mod read BEFORE building: a concurrent insert during the build just means the NEXT call sees
         // snap.mod != mod and rebuilds -- this can never serve a snapshot older than what was live when
@@ -203,7 +220,7 @@ public final class DataStore {
             snap = new Snap<>(mod, l);
             endpointsSnap = snap;
         }
-        return new ArrayList<>(snap.list);   // still a fresh, independently-mutable copy per caller
+        return Collections.unmodifiableList(snap.list);
     }
 
     public List<ParameterInfo> snapshotParameters() {
@@ -217,7 +234,7 @@ public final class DataStore {
             snap = new Snap<>(mod, l);
             parametersSnap = snap;
         }
-        return new ArrayList<>(snap.list);
+        return Collections.unmodifiableList(snap.list);
     }
 
     public List<Finding> snapshotFindings() {
@@ -230,7 +247,7 @@ public final class DataStore {
             snap = new Snap<>(mod, l);
             findingsSnap = snap;
         }
-        return new ArrayList<>(snap.list);
+        return Collections.unmodifiableList(snap.list);
     }
 
     public List<JsAsset> snapshotJsAssets() {
@@ -242,7 +259,7 @@ public final class DataStore {
             snap = new Snap<>(mod, l);
             jsAssetsSnap = snap;
         }
-        return new ArrayList<>(snap.list);
+        return Collections.unmodifiableList(snap.list);
     }
 
     public List<TechInfo> snapshotTech() {
@@ -254,7 +271,7 @@ public final class DataStore {
             snap = new Snap<>(mod, l);
             techSnap = snap;
         }
-        return new ArrayList<>(snap.list);
+        return Collections.unmodifiableList(snap.list);
     }
 
     public int getRequestsProcessed() { return requestsProcessed.get(); }

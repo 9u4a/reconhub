@@ -331,12 +331,31 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
         });
     }
 
+    // 0.43.8: logArea grew without any bound for the life of the session -- a long bruteforce run logs
+    // one line per probe (thousands per job), so this JTextArea's backing Document (and the memory it
+    // holds) only ever grew. Caps it at MAX_LOG_LINES, dropping the oldest lines once over budget.
+    private static final int MAX_LOG_LINES = 5000;
+
     @Override
     public void onLog(String message) {
         SwingUtilities.invokeLater(() -> {
             logArea.append("[" + LocalTime.now().format(TS) + "] " + message + "\n");
+            trimLog();
             logArea.setCaretPosition(logArea.getDocument().getLength());
         });
+    }
+
+    private void trimLog() {
+        int over = logArea.getLineCount() - MAX_LOG_LINES;
+        if (over <= 0) {
+            return;
+        }
+        try {
+            logArea.replaceRange("", 0, logArea.getLineEndOffset(over - 1));
+        } catch (javax.swing.text.BadLocationException ignored) {
+            // getLineCount()/getLineEndOffset() are internally consistent with each other; this
+            // shouldn't happen, but leaving the log untrimmed this one time is harmless either way.
+        }
     }
 
     @Override
@@ -411,10 +430,30 @@ public final class BruteforcePanel extends JPanel implements Refreshable, Brutef
         // field) so it's initialized during `new HitModel()`, before `hitTable = new JTable(hitModel)`
         // (the next field) ever calls getRowCount().
         private List<Map.Entry<BruteforceJob, BruteforceJob.Hit>> cache = List.of();
+        // 0.43.8: fireChanged() used to call buildHits() -- which walks every job's entire hit list,
+        // allocating one Map.Entry per hit -- unconditionally, on every onProgress() (i.e. every single
+        // probe sent, hit or not) and every 300ms refreshData() tick. A cheap signature (job count +
+        // total hit count, no allocation beyond the loop itself) lets most of those calls skip the
+        // rebuild entirely when nothing actually changed since the last one.
+        private Long lastSignature;
 
         void fireChanged() {
+            long sig = signature();
+            if (lastSignature != null && lastSignature == sig) {
+                return;
+            }
+            lastSignature = sig;
             cache = buildHits();
             fireTableDataChanged();
+        }
+
+        private long signature() {
+            List<BruteforceJob> jobs = engine.jobs();
+            long totalHits = 0;
+            for (BruteforceJob job : jobs) {
+                totalHits += job.getHitList().size();
+            }
+            return ((long) jobs.size() << 32) ^ totalHits;
         }
 
         List<Map.Entry<BruteforceJob, BruteforceJob.Hit>> hits() { return cache; }

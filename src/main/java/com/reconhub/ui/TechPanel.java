@@ -55,7 +55,8 @@ public final class TechPanel extends AbstractTablePanel<TechInfo> {
     @Override
     public void refreshData() {
         super.refreshData();
-        hostFilter.refreshAvailableValues(store.snapshotTech());
+        // Reuses the rows super.refreshData() just fetched instead of re-snapshotting (0.43.8).
+        hostFilter.refreshAvailableValues(rows());
     }
 
     /** Wires the (ACTIVE) known-path bruteforce action for this tab's right-click menu; called once. */
