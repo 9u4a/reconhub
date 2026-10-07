@@ -849,11 +849,15 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
             Object v = valueAt(row, field);
             return v == null ? "" : v.toString();
         }
-        String base = fieldHaystackCache.computeIfAbsent(row, this::buildFieldHaystack);
-        if (!useBody) {
-            return base;
+        if (useBody) {
+            // Body search matches only inside the actual request/response (0.43.5) -- it used to be
+            // base-columns-text + body concatenated, so a term that happened to match e.g. the Host or
+            // Path column made the row "match" even when it wasn't anywhere in the request/response
+            // itself, which read as "search is catching things somewhere else" (user report). "Body" is
+            // meant to search the resource's own content, not everything-plus-the-resource's-content.
+            return bodyText(row);
         }
-        return base + bodyText(row);
+        return fieldHaystackCache.computeIfAbsent(row, this::buildFieldHaystack);
     }
 
     private String buildFieldHaystack(T row) {
