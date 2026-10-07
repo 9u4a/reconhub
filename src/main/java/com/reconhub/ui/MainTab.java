@@ -170,7 +170,13 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F, mask), "reconhub.focusSearch");
         actionMap.put("reconhub.focusSearch", new AbstractAction() {
             @Override public void actionPerformed(ActionEvent e) {
-                if (tabs.getSelectedComponent() instanceof AbstractTablePanel<?> p) {
+                // Skip when focus is already inside the detail viewer (0.43.6) -- this binding is
+                // WHEN_IN_FOCUSED_WINDOW, so it fires no matter which component has focus, including
+                // Burp's own Request/Response editor embedded in the viewer. Without this check, Ctrl+F
+                // there silently stole focus to the table's search field instead of whatever (if
+                // anything) that editor does with Ctrl+F itself -- see isFocusInsideViewer()'s javadoc.
+                if (tabs.getSelectedComponent() instanceof AbstractTablePanel<?> p
+                        && !p.isFocusInsideViewer()) {
                     p.focusSearch();
                 }
             }

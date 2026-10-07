@@ -333,6 +333,27 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         searchField.selectAll();
     }
 
+    /**
+     * True when keyboard focus is currently inside this panel's detail viewer (0.43.6) -- checked by
+     * {@code MainTab}'s global Ctrl+F shortcut before stealing focus to {@link #searchField}. Without
+     * this, Ctrl+F is caught by our {@code WHEN_IN_FOCUSED_WINDOW} binding no matter where focus is,
+     * including inside the embedded Request/Response editor (Burp's own {@code HttpRequestEditor}/
+     * {@code HttpResponseEditor}, a Montoya component we don't control) -- a user pressing Ctrl+F there,
+     * expecting to search just that one request/response, instead got yanked into the table's own
+     * search field without any visual cue that focus moved, and kept typing into it. Each keystroke
+     * then ran a full-table body search (the default), which reads exactly like "the viewer's own
+     * search is searching my whole dataset" -- it was, just not on purpose, and not the viewer's search
+     * at all. See CLAUDE.md "Ctrl+F inside the viewer typed into the table search instead" (0.43.6).
+     */
+    public boolean isFocusInsideViewer() {
+        if (viewer == null) {
+            return false;
+        }
+        Component focusOwner =
+                java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+        return focusOwner != null && javax.swing.SwingUtilities.isDescendingFrom(focusOwner, viewer);
+    }
+
     /** Row identity key for bookmarking/notes (every model class already has one via {@code key()}).
      * Default null: the bookmark menu items / highlight / quick filter simply don't appear. */
     protected String rowKey(T row) {
