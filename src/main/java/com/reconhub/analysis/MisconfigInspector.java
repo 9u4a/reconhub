@@ -23,22 +23,25 @@ public final class MisconfigInspector {
         this.secretScanner = secretScanner;
     }
 
-    private HttpRequestResponse currentMessages;   // set per inspect() (single ingest thread)
-
-    public void inspect(String host, HttpRequest request, HttpResponse response, String url) {
+    /** @param rr the request/response pair, supplied by the caller (0.43.7) -- {@code TrafficIngestor}
+     * already holds the original pair; this used to fabricate a fresh one via the Montoya factory on
+     * every call (wasted, since the caller's is byte-identical) and stash it in a mutable field, which
+     * is also a latent cross-thread hazard if this inspector were ever shared across threads. Now
+     * threaded through as a plain parameter instead. */
+    public void inspect(String host, HttpRequest request, HttpResponse response, String url,
+                        HttpRequestResponse rr) {
         if (response == null) {
             return;
         }
-        this.currentMessages = request != null
-                ? HttpRequestResponse.httpRequestResponse(request, response) : null;
-        checkCors(request, response, url);
-        checkCookies(host, response, url);
-        checkCsp(host, response, url);
-        checkCacheable(host, request, response, url);
+        checkCors(request, response, url, rr);
+        checkCookies(host, response, url, rr);
+        checkCsp(host, response, url, rr);
+        checkCacheable(host, request, response, url, rr);
     }
 
     /** Authenticated JSON responses without a private/no-store cache directive may be cached. */
-    private void checkCacheable(String host, HttpRequest request, HttpResponse response, String url) {
+    private void checkCacheable(String host, HttpRequest request, HttpResponse response, String url,
+                                HttpRequestResponse rr) {
         if (request == null || response.statusCode() != 200) {
             return;
         }
@@ -56,11 +59,11 @@ public final class MisconfigInspector {
         if (!safe) {
             add(Finding.Severity.LOW, "Sensitive response cacheable",
                     host + "|cache|" + url, url,
-                    cc == null ? "no Cache-Control" : "Cache-Control: " + cc);
+                    cc == null ? "no Cache-Control" : "Cache-Control: " + cc, rr);
         }
     }
 
-    private void checkCsp(String host, HttpResponse response, String url) {
+    private void checkCsp(String host, HttpResponse response, String url, HttpRequestResponse rr) {
         String csp = response.headerValue("Content-Security-Policy");
         if (csp == null || csp.isBlank()) {
             return;   // absence is already surfaced as a missing security header in the Tech tab
@@ -70,23 +73,23 @@ public final class MisconfigInspector {
 
         if (scriptCritical && lower.contains("'unsafe-inline'")) {
             add(Finding.Severity.MEDIUM, "CSP unsafe-inline",
-                    host + "|csp|unsafe-inline", url, "unsafe-inline");
+                    host + "|csp|unsafe-inline", url, "unsafe-inline", rr);
         }
         if (scriptCritical && lower.contains("'unsafe-eval'")) {
             add(Finding.Severity.MEDIUM, "CSP unsafe-eval",
-                    host + "|csp|unsafe-eval", url, "unsafe-eval");
+                    host + "|csp|unsafe-eval", url, "unsafe-eval", rr);
         }
         if (hasWildcardSource(lower)) {
             add(Finding.Severity.MEDIUM, "CSP wildcard src",
-                    host + "|csp|wildcard", url, "wildcard src");
+                    host + "|csp|wildcard", url, "wildcard src", rr);
         }
         if (!lower.contains("frame-ancestors")) {
             add(Finding.Severity.LOW, "CSP no frame-ancestors",
-                    host + "|csp|frame-ancestors", url, "no frame-ancestors");
+                    host + "|csp|frame-ancestors", url, "no frame-ancestors", rr);
         }
         if (!lower.contains("object-src") && !lower.contains("default-src")) {
             add(Finding.Severity.LOW, "CSP no object-src",
-                    host + "|csp|object-src", url, "no object-src");
+                    host + "|csp|object-src", url, "no object-src", rr);
         }
     }
 
@@ -105,7 +108,7 @@ public final class MisconfigInspector {
         return false;
     }
 
-    private void checkCors(HttpRequest request, HttpResponse response, String url) {
+    private void checkCors(HttpRequest request, HttpResponse response, String url, HttpRequestResponse rr) {
         String acao = response.headerValue("Access-Control-Allow-Origin");
         if (acao == null) {
             return;
@@ -117,21 +120,22 @@ public final class MisconfigInspector {
         String acaoTrim = acao.trim();
         if ("*".equals(acaoTrim) && credentials) {
             add(Finding.Severity.HIGH, "CORS wildcard +creds",
-                    "acao=*|cred", url, "ACAO=* +creds");
+                    "acao=*|cred", url, "ACAO=* +creds", rr);
         } else if (origin != null && origin.equalsIgnoreCase(acaoTrim) && credentials) {
             add(Finding.Severity.HIGH, "CORS reflected +creds",
-                    "acao=reflected|" + acao, url, "ACAO reflects Origin +creds");
+                    "acao=reflected|" + acao, url, "ACAO reflects Origin +creds", rr);
         } else if ("*".equals(acaoTrim)) {
             add(Finding.Severity.LOW, "CORS wildcard",
-                    "acao=*", url, "ACAO=*");
+                    "acao=*", url, "ACAO=*", rr);
         } else if (origin != null && origin.equalsIgnoreCase(acaoTrim)) {
             add(Finding.Severity.LOW, "CORS reflected",
-                    "acao=reflected|" + acao, url, "ACAO reflects Origin");
+                    "acao=reflected|" + acao, url, "ACAO reflects Origin", rr);
         } else if (origin == null) {
             // ACAO present but the request that triggered it had no Origin header at all -- the server
             // is granting cross-origin access unconditionally, not just reflecting a browser-sent value.
             add(Finding.Severity.LOW, "CORS ACAO without Origin request",
-                    "acao=no-origin|" + acao, url, "ACAO=" + acao + " but request had no Origin header");
+                    "acao=no-origin|" + acao, url,
+                    "ACAO=" + acao + " but request had no Origin header", rr);
         }
 
         // Wildcard on the allow-list headers is a separate (and separately dangerous) misconfiguration
@@ -139,12 +143,12 @@ public final class MisconfigInspector {
         String acam = response.headerValue("Access-Control-Allow-Methods");
         if (acam != null && acam.contains("*")) {
             add(Finding.Severity.LOW, "CORS wildcard Allow-Methods",
-                    "acam=*", url, "Access-Control-Allow-Methods: " + acam);
+                    "acam=*", url, "Access-Control-Allow-Methods: " + acam, rr);
         }
         String acah = response.headerValue("Access-Control-Allow-Headers");
         if (acah != null && acah.contains("*")) {
             add(Finding.Severity.LOW, "CORS wildcard Allow-Headers",
-                    "acah=*", url, "Access-Control-Allow-Headers: " + acah);
+                    "acah=*", url, "Access-Control-Allow-Headers: " + acah, rr);
         }
 
         // A non-wildcard ACAO that reflects Origin without "Vary: Origin" risks a shared cache serving
@@ -156,12 +160,12 @@ public final class MisconfigInspector {
                     && vary.toLowerCase(Locale.ROOT).contains("origin");
             if (!variesOnOrigin) {
                 add(Finding.Severity.LOW, "CORS reflected without Vary: Origin",
-                        "acao=novary|" + acao, url, "ACAO reflects Origin, no Vary: Origin");
+                        "acao=novary|" + acao, url, "ACAO reflects Origin, no Vary: Origin", rr);
             }
         }
     }
 
-    private void checkCookies(String host, HttpResponse response, String url) {
+    private void checkCookies(String host, HttpResponse response, String url, HttpRequestResponse rr) {
         for (HttpHeader h : response.headers()) {
             if (!"Set-Cookie".equalsIgnoreCase(h.name())) {
                 continue;
@@ -175,19 +179,19 @@ public final class MisconfigInspector {
             // response bodies; a JWT match is picked up automatically by the existing JwtDecoder/
             // FindingsPanel JWT tab, no further wiring needed there.
             if (secretScanner != null) {
-                secretScanner.scan(cookieValue(sc), url, currentMessages);
+                secretScanner.scan(cookieValue(sc), url, rr);
             }
             if (!lower.contains("httponly")) {
                 add(Finding.Severity.LOW, "Cookie no HttpOnly",
-                        host + "|" + name + "|httponly", url, name + ": no HttpOnly");
+                        host + "|" + name + "|httponly", url, name + ": no HttpOnly", rr);
             }
             if (!lower.contains("secure")) {
                 add(Finding.Severity.LOW, "Cookie no Secure",
-                        host + "|" + name + "|secure", url, name + ": no Secure");
+                        host + "|" + name + "|secure", url, name + ": no Secure", rr);
             }
             if (!lower.contains("samesite")) {
                 add(Finding.Severity.INFO, "Cookie no SameSite",
-                        host + "|" + name + "|samesite", url, name + ": no SameSite");
+                        host + "|" + name + "|samesite", url, name + ": no SameSite", rr);
             }
         }
     }
@@ -209,9 +213,10 @@ public final class MisconfigInspector {
         return (semi >= 0 ? rest.substring(0, semi) : rest).trim();
     }
 
-    private void add(Finding.Severity sev, String type, String key, String url, String evidence) {
+    private void add(Finding.Severity sev, String type, String key, String url, String evidence,
+                     HttpRequestResponse rr) {
         Finding f = new Finding(type, sev, key, url, evidence, false);
-        f.setMessages(currentMessages);
+        f.setMessages(rr);
         store.recordFinding(f);
     }
 }

@@ -23,8 +23,11 @@ import com.reconhub.analysis.SourceMapDetector;
 import com.reconhub.analysis.TechFingerprinter;
 import com.reconhub.analysis.UserRuleStore;
 
+import burp.api.montoya.http.message.params.ParsedHttpParameter;
+
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -257,33 +260,40 @@ public final class TrafficIngestor implements HttpHandler {
             return;
         }
 
-        EndpointExtractor.EndpointInfo ep = EndpointExtractor.extract(request);
-
         int status = 0;
         String contentType = "";
-        String responseBody = "";
         if (response != null) {
             status = response.statusCode();
             String ct = response.headerValue("Content-Type");
             contentType = ct == null ? "" : ct;
-            responseBody = BodyDecoder.decode(response);
         }
 
-        // Skip static assets (never JS) to cut noise, unless the user disabled it.
+        // Skip static assets (never JS) before doing any real work -- this check only needs the URL and
+        // Content-Type, both already in hand, so bail out here, before extracting endpoint info or
+        // decoding the body (0.43.7: these used to run unconditionally, so every image/font/video/etc.
+        // in a swept site map was fully decoded into a String -- and had EndpointExtractor parse its
+        // request -- just to be thrown away by this same check, a few lines later than it needed to be).
         if (settings.isIgnoreStaticAssets() && isStaticAsset(url, contentType)) {
             return;
         }
 
+        // Parsed once and shared with EndpointExtractor/ParameterExtractor/RequestInspector (0.43.7) --
+        // Montoya re-parses query+body+cookie(+JSON) params from scratch on every request.parameters()
+        // call, and all three used to call it independently for the same immutable request.
+        List<ParsedHttpParameter> params = request.parameters();
+        EndpointExtractor.EndpointInfo ep = EndpointExtractor.extract(request, params);
+        String responseBody = response != null ? BodyDecoder.decode(response) : "";
+
         String endpointKey = ep.normalizedUrl();
         com.reconhub.model.Endpoint endpoint = store.recordEndpoint(ep.method(), ep.host(), ep.path(),
-                ep.normalizedUrl(), status, contentType, source, ep.paramNames(), rr, java.util.Set.of());
+                ep.normalizedUrl(), status, contentType, source, ep.paramNames(), rr, Set.of());
         // Track whether this observation carried credentials (Authorization or any Cookie).
         boolean authed = request.headerValue("Authorization") != null
                 || request.headerValue("Cookie") != null;
         endpoint.recordAuth(authed);
         store.countRequest(ep.host(), status, contentType);
 
-        parameterExtractor.extract(request, endpointKey, ep.path(), responseBody, rr);
+        parameterExtractor.extract(request, params, endpointKey, ep.path(), responseBody, rr);
 
         if (response != null) {
             // Computed once and reused below: a JS body is secret-scanned inside jsAnalyzer.analyze()
@@ -298,7 +308,7 @@ public final class TrafficIngestor implements HttpHandler {
                 }
                 userScanner.scan(responseBody, url, rr);
             }
-            techFingerprinter.fingerprint(ep.host(), response, contentType);
+            techFingerprinter.fingerprint(ep.host(), response, contentType, responseBody);
             // Passive API-surface discovery (OpenAPI/Swagger/GraphQL) from the captured body.
             apiSpecAnalyzer.analyze(url, contentType, responseBody, rr);
             // Passive source-map exposure (a captured .map is a confirmed original-source leak).
@@ -310,8 +320,8 @@ public final class TrafficIngestor implements HttpHandler {
                 signatureScanner.scan(responseBody, url, rr);
                 authzScanner.scan(responseBody, url, rr);
                 piiScanner.scan(responseBody, url, rr);
-                requestInspector.inspect(request, response, url, contentType, responseBody, rr);
-                misconfigInspector.inspect(ep.host(), request, response, url);
+                requestInspector.inspect(request, response, params, url, contentType, responseBody, rr);
+                misconfigInspector.inspect(ep.host(), request, response, url, rr);
                 if (isHtml(contentType)) {
                     commentExtractor.extractHtml(responseBody, url, rr);
                 }
@@ -323,6 +333,15 @@ public final class TrafficIngestor implements HttpHandler {
         return contentType.toLowerCase(Locale.ROOT).contains("html");
     }
 
+    // 0.43.7: was a String.matches(".*\\.(?:png|jpe?g|...)$") -- String.matches compiles a fresh
+    // Pattern on every call (every ingested message), and the leading ".*" forces a full backtracking
+    // scan of the path for every attempt. A plain extension lookup is both allocation-free (no Matcher)
+    // and doesn't backtrack.
+    private static final Set<String> STATIC_EXTENSIONS = Set.of(
+            "png", "jpg", "jpeg", "gif", "bmp", "ico", "svg", "webp", "css",
+            "woff", "woff2", "ttf", "eot", "otf",
+            "mp4", "webm", "mp3", "wav", "avi", "mov", "pdf");
+
     /** True for images/fonts/stylesheets/media — deliberately excludes JS. */
     private static boolean isStaticAsset(String url, String contentType) {
         String ct = contentType.toLowerCase(Locale.ROOT);
@@ -333,8 +352,8 @@ public final class TrafficIngestor implements HttpHandler {
         String u = url.toLowerCase(Locale.ROOT);
         int q = u.indexOf('?');
         String path = q >= 0 ? u.substring(0, q) : u;
-        return path.matches(".*\\.(?:png|jpe?g|gif|bmp|ico|svg|webp|css|woff2?|ttf|eot|otf|"
-                + "mp4|webm|mp3|wav|avi|mov|pdf)$");
+        int dot = path.lastIndexOf('.');
+        return dot >= 0 && STATIC_EXTENSIONS.contains(path.substring(dot + 1));
     }
 
     /** True when a URL/Content-Type pair looks like JavaScript. Public so the UI (e.g.

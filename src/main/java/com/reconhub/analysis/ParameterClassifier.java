@@ -22,11 +22,21 @@ public final class ParameterClassifier {
     private record Rule(String label, Pattern pattern) {}
 
     private static final List<Rule> RULES = load();
+    // classifyJoined's own cache (joined string, not the list) -- kept separate from LIST_CACHE below
+    // rather than deriving one from the other, so neither method pays for building a value shape it
+    // doesn't need.
     private static final Map<String, String> CACHE = new ConcurrentHashMap<>();
+    // Cached list form (0.43.7): classify(name) is the uncached primitive -- every rule's regex re-run
+    // per call -- and several hot paths (Dashboard's per-row tagging, RequestInspector's per-parameter
+    // Secret/Redirect checks, the HTML/JSON exporters) called it directly instead of the already-cached
+    // classifyJoined below, redoing all ~8 rules for the same handful of recurring parameter names on
+    // every tick/row/export. Distinct parameter names are few, so this is a small, bounded cache.
+    private static final Map<String, List<String>> LIST_CACHE = new ConcurrentHashMap<>();
 
     private ParameterClassifier() {}
 
-    /** @return matching class labels for a parameter name (empty if none). */
+    /** @return matching class labels for a parameter name (empty if none). Uncached primitive -- see
+     * {@link #classifyCached} for the memoized version hot paths should prefer. */
     public static List<String> classify(String name) {
         List<String> out = new ArrayList<>();
         if (name == null || name.isBlank()) {
@@ -38,6 +48,17 @@ public final class ParameterClassifier {
             }
         }
         return out;
+    }
+
+    /** Cached form of {@link #classify} (0.43.7) -- the list a caller gets back is shared/immutable-by-
+     * convention (callers must not mutate it; none of the current ones do). Prefer this over
+     * {@code classify} on any path that runs more than once per parameter name (cell rendering, per-tick
+     * filtering, export). */
+    public static List<String> classifyCached(String name) {
+        if (name == null || name.isBlank()) {
+            return List.of();
+        }
+        return LIST_CACHE.computeIfAbsent(name, ParameterClassifier::classify);
     }
 
     /** @return matching class labels joined with ", " (empty string if none). Cached by name. */

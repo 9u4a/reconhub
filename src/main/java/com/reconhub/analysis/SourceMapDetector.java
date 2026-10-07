@@ -92,7 +92,12 @@ public final class SourceMapDetector {
         if (body == null || body.isEmpty() || body.length() > MAX_SNIFF) {
             return;
         }
-        if (!isMapUrl(url) && !looksLikeMapJson(body)) {
+        boolean mapUrl = isMapUrl(url);
+        // Computed at most once (0.43.7) and reused below -- looksLikeMapJson() is 3 contains() scans
+        // over the whole body, and this used to call it a second time at the MAX_PARSE check below
+        // whenever mapUrl was false (the only path that reaches here having already called it once).
+        Boolean mapJson = mapUrl ? null : looksLikeMapJson(body);
+        if (!mapUrl && !mapJson) {
             return;
         }
         // Confirm by parsing -- a .map URL alone is not enough (see class javadoc: the 404 trap).
@@ -100,7 +105,7 @@ public final class SourceMapDetector {
             // Too large to safely enumerate sources, but the suffix/sniff pre-check already makes
             // this a strong signal on its own -- record it rather than silently drop the biggest,
             // most valuable leaks.
-            if (looksLikeMapJson(body)) {
+            if (mapJson != null ? mapJson : looksLikeMapJson(body)) {
                 record(new Finding("Source map exposed", Finding.Severity.MEDIUM,
                         "sourcemap|" + url, url,
                         trunc("valid source map, " + body.length()

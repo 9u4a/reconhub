@@ -5,6 +5,7 @@ import burp.api.montoya.http.message.params.ParsedHttpParameter;
 import burp.api.montoya.http.message.requests.HttpRequest;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
@@ -23,7 +24,11 @@ public final class EndpointExtractor {
 
     private EndpointExtractor() {}
 
-    public static EndpointInfo extract(HttpRequest request) {
+    /** @param params {@code request.parameters()}, parsed once by the caller and shared with
+     * {@code ParameterExtractor}/{@code RequestInspector} (0.43.7) -- Montoya re-parses query+body+
+     * cookie(+JSON) params from scratch on every call, and all three analyzers used to each call it
+     * independently for the same immutable request. */
+    public static EndpointInfo extract(HttpRequest request, List<ParsedHttpParameter> params) {
         String method = safe(request.method());
         String host = request.httpService() != null ? request.httpService().host() : "";
         String fullUrl = safe(request.url());
@@ -46,7 +51,7 @@ public final class EndpointExtractor {
 
         Set<String> queryNames = new TreeSet<>();
         Set<String> allParamNames = new TreeSet<>();
-        for (ParsedHttpParameter p : request.parameters()) {
+        for (ParsedHttpParameter p : params) {
             allParamNames.add(p.name());
             if (p.type() == HttpParameterType.URL) {
                 queryNames.add(p.name());

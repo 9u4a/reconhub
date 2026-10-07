@@ -10,6 +10,7 @@ import com.reconhub.core.BodyDecoder;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.ParameterInfo;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -24,11 +25,14 @@ public final class ParameterExtractor {
         this.store = store;
     }
 
-    public void extract(HttpRequest request, String endpointKey, String endpointPath,
-                        String responseBody, HttpRequestResponse messages) {
+    /** @param params {@code request.parameters()}, parsed once by the caller and shared with
+     * {@code EndpointExtractor}/{@code RequestInspector} (0.43.7) -- see
+     * {@code EndpointExtractor.extract}'s javadoc. */
+    public void extract(HttpRequest request, List<ParsedHttpParameter> params, String endpointKey,
+                        String endpointPath, String responseBody, HttpRequestResponse messages) {
         String respBody = responseBody == null ? "" : responseBody;
 
-        for (ParsedHttpParameter p : request.parameters()) {
+        for (ParsedHttpParameter p : params) {
             ParameterInfo.Location loc = mapLocation(p.type());
             if (loc == null) {
                 continue;

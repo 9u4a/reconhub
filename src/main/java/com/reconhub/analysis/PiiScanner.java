@@ -15,6 +15,10 @@ import java.util.regex.Pattern;
 public final class PiiScanner {
 
     private static final int MAX_PER_RULE = 25;
+    // 0.43.7: no ceiling existed on body size here (unlike ApiSpecAnalyzer/SourceMapDetector) -- 3
+    // regexes run unconditionally against the full body on every response.
+    private static final int MAX_SCAN_CHARS = 10_000_000;
+    private static final Pattern CARD_SEPARATORS = Pattern.compile("[ -]");
 
     // Korean Resident Registration Number: YYMMDD-Gxxxxxx
     private static final Pattern RRN =
@@ -35,7 +39,7 @@ public final class PiiScanner {
 
     /** @return number of newly discovered PII findings in this body. */
     public int scan(String body, String url, HttpRequestResponse rr) {
-        if (body == null || body.isEmpty()) {
+        if (body == null || body.isEmpty() || body.length() > MAX_SCAN_CHARS) {
             return 0;
         }
         int newCount = 0;
@@ -49,7 +53,7 @@ public final class PiiScanner {
         Matcher m = RRN.matcher(body);
         int hits = 0;
         int found = 0;
-        while (m.find() && hits < MAX_PER_RULE) {
+        while (hits < MAX_PER_RULE && m.find()) {
             hits++;
             String digits = (m.group(1) + m.group(2));
             if (validRrn(digits)) {
@@ -65,9 +69,9 @@ public final class PiiScanner {
         Matcher m = CARD.matcher(body);
         int hits = 0;
         int found = 0;
-        while (m.find() && hits < MAX_PER_RULE) {
+        while (hits < MAX_PER_RULE && m.find()) {
             hits++;
-            String digits = m.group().replaceAll("[ -]", "");
+            String digits = CARD_SEPARATORS.matcher(m.group()).replaceAll("");
             if (isPlausibleCard(digits)) {
                 if (record("Payment card number", Finding.Severity.HIGH, m.group().trim(),
                         url, rr)) {
@@ -82,7 +86,7 @@ public final class PiiScanner {
         Matcher m = PHONE_KR.matcher(body);
         int hits = 0;
         int found = 0;
-        while (m.find() && hits < MAX_PER_RULE) {
+        while (hits < MAX_PER_RULE && m.find()) {
             hits++;
             if (record("Korean phone number", Finding.Severity.LOW, m.group(), url, rr)) {
                 found++;

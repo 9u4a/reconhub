@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Collects a JavaScript body: dedups by SHA-256, optionally writes it to disk, and mines it for
@@ -26,6 +27,12 @@ public final class JsAnalyzer {
     private static final int MAX_LINKS_PER_RULE = 500;
     private static final int PREVIEW_MAX = 160;
     private static final int PREVIEW_SAMPLES = 3;
+    // 0.43.7: isInterestingLink used to call link.toLowerCase() (an allocation) + Pattern.compile(...)
+    // (a fresh compile) on every candidate link -- up to MAX_LINKS_PER_RULE x jsLinkRules().size()
+    // (2000 at current rule counts) per JS bundle. Hoisted to a static final, case-insensitive Pattern
+    // so it's compiled once and needs no lowercased copy of the input.
+    private static final Pattern MIME_LIKE =
+            Pattern.compile("[a-z]+/[a-z0-9.+-]+", Pattern.CASE_INSENSITIVE);
 
     private final MontoyaApi api;   // nullable (headless tests); used only to log a save failure
     private final DataStore store;
@@ -157,12 +164,13 @@ public final class JsAnalyzer {
         if (link.length() < 3 || link.length() > 300) {
             return false;
         }
-        // Drop obvious noise: mime types, pure file extensions, template placeholders.
-        String lower = link.toLowerCase();
-        if (lower.matches("[a-z]+/[a-z0-9.+-]+")) {   // e.g. "text/html", "image/png"
+        // Cheap checks first (0.43.7) -- template placeholders are plain contains() scans, tried before
+        // the regex below so most non-interesting candidates never reach it.
+        if (link.contains("${") || link.contains("{{") || link.contains("<%")) {
             return false;
         }
-        if (link.contains("${") || link.contains("{{") || link.contains("<%")) {
+        // Drop obvious noise: mime types, pure file extensions ("text/html", "image/png").
+        if (MIME_LIKE.matcher(link).matches()) {
             return false;
         }
         return link.startsWith("/") || link.startsWith("http") || link.contains("/");

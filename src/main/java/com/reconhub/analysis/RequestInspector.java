@@ -10,6 +10,7 @@ import com.reconhub.core.Hosts;
 import com.reconhub.model.Finding;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
@@ -43,8 +44,11 @@ public final class RequestInspector {
         this.store = store;
     }
 
-    public void inspect(HttpRequest request, HttpResponse response, String url,
-                        String contentType, String body, HttpRequestResponse rr) {
+    /** @param params {@code request.parameters()}, parsed once by the caller and shared with
+     * {@code EndpointExtractor}/{@code ParameterExtractor} (0.43.7) -- see
+     * {@code EndpointExtractor.extract}'s javadoc. */
+    public void inspect(HttpRequest request, HttpResponse response, List<ParsedHttpParameter> params,
+                        String url, String contentType, String body, HttpRequestResponse rr) {
         if (request == null) {
             return;
         }
@@ -61,7 +65,7 @@ public final class RequestInspector {
         String location = response != null ? response.headerValue("Location") : null;
         int emitted = 0;
 
-        for (ParsedHttpParameter p : request.parameters()) {
+        for (ParsedHttpParameter p : params) {
             if (emitted >= MAX_PER_RESPONSE) {
                 break;
             }
@@ -123,11 +127,11 @@ public final class RequestInspector {
     // ---- classification helpers -----------------------------------------
 
     private static boolean isSensitiveName(String name) {
-        return ParameterClassifier.classify(name).contains("Secret/Token");
+        return ParameterClassifier.classifyCached(name).contains("Secret/Token");
     }
 
     private static boolean isRedirectName(String name) {
-        return ParameterClassifier.classify(name).contains("Redirect/SSRF");
+        return ParameterClassifier.classifyCached(name).contains("Redirect/SSRF");
     }
 
     /**

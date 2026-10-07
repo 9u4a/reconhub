@@ -2,7 +2,6 @@ package com.reconhub.analysis;
 
 import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.responses.HttpResponse;
-import com.reconhub.core.BodyDecoder;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Finding;
 import com.reconhub.model.TechInfo;
@@ -25,14 +24,17 @@ public final class TechFingerprinter {
         this.patterns = patterns;
     }
 
-    public void fingerprint(String host, HttpResponse response, String contentType) {
+    /** @param body the response body already decoded by the caller (0.43.7) -- {@code TrafficIngestor}
+     * decodes every response once for its own scanners, so this no longer re-decodes the same bytes
+     * just for the "body" tech rules. Pass {@code null} if truly unavailable; body rules are simply
+     * skipped then, same as before when decoding failed. */
+    public void fingerprint(String host, HttpResponse response, String contentType, String body) {
         if (host == null || host.isBlank() || response == null) {
             return;
         }
         TechInfo ti = store.techForHost(host);
 
         String cookieJar = collectSetCookies(response);
-        String body = null;   // lazily materialized only if a body rule needs it
 
         for (PatternRegistry.TechRule rule : patterns.techRules()) {
             switch (rule.source) {
@@ -44,10 +46,7 @@ public final class TechFingerprinter {
                 }
                 case "cookie" -> addIfMatch(ti, rule, cookieJar);
                 case "body" -> {
-                    if (isHtml(contentType)) {
-                        if (body == null) {
-                            body = BodyDecoder.decode(response);
-                        }
+                    if (isHtml(contentType) && body != null) {
                         addIfMatch(ti, rule, body);
                     }
                 }
