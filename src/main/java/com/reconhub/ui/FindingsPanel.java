@@ -57,7 +57,10 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     // Method/Status/Type filters -- lets several hosts be picked at once, which the search box alone
     // can't express. ANDed alongside severity/category below, not a replacement for them.
     private final ColumnValueFilter<Finding> hostFilter =
-            new ColumnValueFilter<>("Host", f -> Hosts.labelOf(f.getLocationUrl()));
+            // Hosts.label(f.getHost()), not Hosts.labelOf(f.getLocationUrl()) (0.43.9) -- f.getHost()
+            // is cached on the Finding itself; this runs once per finding per tick (refreshAvailableValues)
+            // plus once per row filtered.
+            new ColumnValueFilter<>("Host", f -> Hosts.label(f.getHost()));
     private boolean rebuildingCatBox;
     private DashboardPanel.Navigator navigator;
     private BruteforceEngine bruteforce;
@@ -171,7 +174,7 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         HttpRequestResponse rr = f.getMessages();
         String method = rr != null && rr.request() != null ? rr.request().method() : "?";
         String path = pathOf(f.getLocationUrl());
-        return new MatchReplaceTarget(Hosts.of(f.getLocationUrl()), path, method, rr);
+        return new MatchReplaceTarget(f.getHost(), path, method, rr);
     }
 
     private static String pathOf(String url) {
@@ -309,7 +312,7 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         if (f == null) {
             return;
         }
-        String host = Hosts.of(f.getLocationUrl());
+        String host = f.getHost();
         if (navigator != null && !host.isEmpty()) {
             menu.addSeparator();
             addMenuItem(menu, "View endpoints for " + host, true,

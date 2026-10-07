@@ -13,7 +13,9 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Results tab for the Match & Replace bulk-send feature (0.42.0) -- one row per endpoint the feature
@@ -40,6 +42,12 @@ public final class MatchReplacePanel extends AbstractTablePanel<MatchReplaceResu
     // Accumulated across every job this session -- MatchReplaceJob itself only holds one run's results,
     // same relationship BruteforceJob has to BruteforcePanel's HitModel cache.
     private final List<MatchReplaceResult> results = new ArrayList<>();
+    // Per-job "already absorbed up to this index" cursor (0.43.9) -- replaces an O(results^2) dedup
+    // scan (results.contains(r), a linear identity scan, run for every result of every job on every
+    // tick and every onProgress callback -- the list only grows, so the cost grew with the square of
+    // the session's total result count). MatchReplaceJob has no equals()/hashCode() override, so a
+    // plain HashMap already keys by identity here, same as the model row classes (see the 0.32.1 note).
+    private final Map<MatchReplaceJob, Integer> consumed = new HashMap<>();
 
     public MatchReplacePanel(MontoyaApi api, MatchReplaceEngine engine) {
         super(api, null);   // no Bookmarks -- a send result isn't user-authored data worth bookmarking
@@ -55,6 +63,12 @@ public final class MatchReplacePanel extends AbstractTablePanel<MatchReplaceResu
             if (choice == JOptionPane.OK_OPTION) {
                 synchronized (results) {
                     results.clear();
+                    // Cursors reset too (0.43.9) -- preserves the pre-existing behavior of the old
+                    // results.contains(r) dedup scan this replaced: clearing `results` alone made
+                    // every already-recorded result look "new" again on the very next refreshData(),
+                    // so everything reappeared on the next tick. Resetting `consumed` reproduces that
+                    // same "full repopulate on next tick" behavior with the cursor approach.
+                    consumed.clear();
                 }
                 refreshData();
             }
@@ -64,15 +78,18 @@ public final class MatchReplacePanel extends AbstractTablePanel<MatchReplaceResu
 
     @Override
     public void refreshData() {
-        // Pull in every result from every job that's landed since the last refresh -- cheap (jobs are
-        // few, results per job bounded by what the user selected) and avoids needing a separate "new
-        // results since last poll" cursor.
+        // Pull in every result from every job that's landed since the last refresh, via each job's own
+        // cursor (0.43.9) -- see `consumed`'s field comment for why this replaced an O(n^2) dedup scan.
+        // The new cursor value is the actual size of what resultsFrom() returned, not a freshly-reread
+        // job.resultCount() -- a concurrent recordResult() between the two calls could otherwise skip a
+        // result forever instead of just picking it up one tick later.
         synchronized (results) {
             for (MatchReplaceJob job : engine.jobs()) {
-                for (MatchReplaceResult r : job.getResults()) {
-                    if (!results.contains(r)) {
-                        results.add(r);
-                    }
+                int from = consumed.getOrDefault(job, 0);
+                List<MatchReplaceResult> newOnes = job.resultsFrom(from);
+                if (!newOnes.isEmpty()) {
+                    results.addAll(newOnes);
+                    consumed.put(job, from + newOnes.size());
                 }
             }
         }

@@ -2,6 +2,7 @@ package com.reconhub.model;
 
 import burp.api.montoya.http.message.HttpRequestResponse;
 
+import java.net.URI;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -29,6 +30,7 @@ public final class Finding {
     private final AtomicInteger timesSeen = new AtomicInteger(1);
     private volatile Triage triage = Triage.NEW;      // analyst triage state
     private volatile HttpRequestResponse messages;   // request/response the finding came from
+    private volatile String host;      // derived lazily from locationUrl -- see getHost()
 
     /** Sensitive finding (e.g. a secret): the value is masked for display. */
     public Finding(String type, Severity severity, String rawMatch,
@@ -83,6 +85,33 @@ public final class Finding {
     public void setMessages(HttpRequestResponse m) { this.messages = m; }
     public void setTriage(Triage t) { this.triage = t == null ? Triage.NEW : t; }
     public Triage getTriage() { return triage; }
+
+    /** Host of {@link #locationUrl}, lazily derived and cached (0.43.9) -- same pattern as
+     * {@code ParameterInfo.getHost()}: {@code locationUrl} is immutable, so this only ever needs
+     * computing once per instance rather than re-parsing the URL (via {@code core.Hosts.of}, previously
+     * called directly by every caller) on every call. Deliberately duplicates {@code ParameterInfo}'s
+     * own inline URI parsing rather than depending on {@code core.Hosts} from this package. Empty
+     * string, never null, when the URL is null/blank/unparseable. */
+    public String getHost() {
+        String h = host;
+        if (h == null) {
+            h = deriveHost(locationUrl);
+            host = h;
+        }
+        return h;
+    }
+
+    private static String deriveHost(String url) {
+        if (url == null || url.isBlank()) {
+            return "";
+        }
+        try {
+            String h = URI.create(url).getHost();
+            return h == null ? "" : h;
+        } catch (RuntimeException ignored) {
+            return "";
+        }
+    }
 
     public String getType() { return type; }
     public Severity getSeverity() { return severity; }

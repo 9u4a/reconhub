@@ -127,8 +127,10 @@ public final class TechPanel extends AbstractTablePanel<TechInfo> {
         if (t == null || selected) {
             return;
         }
-        // Warn-color the "Missing security headers" column when there are any.
-        if (viewColumn == 2 && !t.getMissingSecurityHeaders().isEmpty()) {
+        // Warn-color the "Missing security headers" column when there are any. hasMissingSecurityHeaders
+        // (0.43.9), not getMissingSecurityHeaders().isEmpty() -- this runs per cell per repaint, and the
+        // boolean form is an O(1) check against the raw set instead of materializing a sorted copy.
+        if (viewColumn == 2 && t.hasMissingSecurityHeaders()) {
             comp.setForeground(SwingColors.WARN);
         }
     }

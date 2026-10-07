@@ -120,7 +120,7 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
         HttpRequestResponse rr = a.getMessages();
         String method = rr != null && rr.request() != null ? rr.request().method() : "?";
         String path = pathOf(a.getUrl());
-        return new MatchReplaceTarget(Hosts.of(a.getUrl()), path, method, rr);
+        return new MatchReplaceTarget(a.getHost(), path, method, rr);   // cached on JsAsset (0.43.9)
     }
 
     private static String pathOf(String url) {
@@ -248,8 +248,11 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
         sb.append("Saved     : ").append(a.getSavedPath().isEmpty() ? "(not saved)" : a.getSavedPath())
                 .append("\n\n");
 
+        // hasOrigin (0.43.9), not getOrigins().contains(...) -- this runs over every endpoint in the
+        // store on every row selection/arrow-key move, and hasOrigin is an O(1) lookup against the raw
+        // set instead of materializing each endpoint's sorted TreeSet snapshot just to test membership.
         List<Endpoint> eps = store.snapshotEndpoints().stream()
-                .filter(e -> e.getOrigins().contains(a.getUrl())).toList();
+                .filter(e -> e.hasOrigin(a.getUrl())).toList();
         sb.append("Endpoints found in this JS (").append(eps.size()).append("):\n");
         for (Endpoint e : eps) {
             sb.append("  ").append(e.getNormalizedUrl()).append('\n');

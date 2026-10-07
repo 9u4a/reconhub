@@ -113,7 +113,7 @@ public final class HtmlReporter {
             hostRow(byHost, Hosts.label(e.getHost()))[0]++;
         }
         for (Finding f : data.findings()) {
-            hostRow(byHost, Hosts.labelOf(f.getLocationUrl()))[1 + f.getSeverity().ordinal()]++;
+            hostRow(byHost, Hosts.label(f.getHost()))[1 + f.getSeverity().ordinal()]++;   // cached (0.43.9)
         }
         b.append("<section id=\"hostrisk\"><h2>Host risk</h2>");
         if (byHost.isEmpty()) {
@@ -217,7 +217,7 @@ public final class HtmlReporter {
                     .append(esc(p.getEndpointPath())).append("</code></td><td><code>")
                     .append(p.getLocation().name()).append("</code></td><td>")
                     .append(esc(p.getName())).append("</td><td>");
-            for (String cls : ParameterClassifier.classify(p.getName())) {
+            for (String cls : ParameterClassifier.classifyCached(p.getName())) {   // cached (0.43.7)
                 b.append("<span class=\"tag\" style=\"color:var(--low)\">").append(esc(cls))
                         .append("</span>");
             }

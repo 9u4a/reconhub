@@ -1,5 +1,7 @@
 package com.reconhub.active;
 
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -30,6 +32,14 @@ public record MatchReplaceRule(Mode mode, String headerName, String matchText, b
                                String replacement, boolean addHeaderIfMissing) {
 
     public enum Mode { HEADER, RAW }
+
+    // Shared across every rule instance, keyed by the regex text itself (0.43.9) -- a record has no
+    // room for a per-instance lazy-compiled field (no extra instance fields allowed), and
+    // Pattern.compile is a pure function of matchText, so a small process-wide cache is both safe and
+    // simple. Without it, MatchReplaceEngine.buildRequest (which applies every rule to every target)
+    // recompiled the same handful of patterns target x rule times per bulk send, and the live dialog
+    // preview recompiled on every keystroke.
+    private static final Map<String, Pattern> PATTERN_CACHE = new ConcurrentHashMap<>();
 
     /** Null (never blank) if {@code useRegex} and {@code matchText} doesn't compile -- callers (the
      * dialog) must check this before offering to send, same as {@code SettingsPanel.validateRegex}. */
@@ -79,7 +89,8 @@ public record MatchReplaceRule(Mode mode, String headerName, String matchText, b
             return repl;
         }
         if (useRegex) {
-            return Pattern.compile(matchText).matcher(text).replaceAll(repl);
+            Pattern p = PATTERN_CACHE.computeIfAbsent(matchText, Pattern::compile);
+            return p.matcher(text).replaceAll(repl);
         }
         return text.replace(matchText, repl);
     }

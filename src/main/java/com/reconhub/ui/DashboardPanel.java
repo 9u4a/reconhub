@@ -279,7 +279,7 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         }
         for (Finding f : finds) {
             int idx = 2 + f.getSeverity().ordinal();   // HIGH..INFO -> 2..5
-            row(byHost, Hosts.labelOf(f.getLocationUrl()))[idx]++;
+            row(byHost, Hosts.label(f.getHost()))[idx]++;   // f.getHost() is cached (0.43.9)
         }
         hostMissHeaders.clear();
         for (TechInfo t : techs) {

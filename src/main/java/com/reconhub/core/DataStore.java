@@ -336,8 +336,8 @@ public final class DataStore {
         }
         int ep = removeIf(endpoints, e -> hosts.contains(e.getHost()));
         int pm = removeIf(parameters, p -> hosts.contains(p.getHost()));
-        int fd = removeIf(findings, f -> hosts.contains(Hosts.of(f.getLocationUrl())));
-        int js = removeIf(jsAssets, a -> hosts.contains(Hosts.of(a.getUrl())));
+        int fd = removeIf(findings, f -> hosts.contains(f.getHost()));   // cached on Finding (0.43.9)
+        int js = removeIf(jsAssets, a -> hosts.contains(a.getHost()));   // cached on JsAsset (0.43.9)
         boolean tech = false;
         for (String host : hosts) {
             if (techByHost.remove(host) != null) {

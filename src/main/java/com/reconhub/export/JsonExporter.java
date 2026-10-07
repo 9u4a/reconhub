@@ -92,7 +92,7 @@ public final class JsonExporter {
             m.put("endpoint", p.getEndpointPath());
             m.put("type", p.getLocation().name());
             m.put("name", p.getName());
-            m.put("classes", ParameterClassifier.classify(p.getName()));
+            m.put("classes", ParameterClassifier.classifyCached(p.getName()));   // cached (0.43.7)
             m.put("exampleValue", p.getExampleValue());
             m.put("reflected", p.isReflected());
             m.put("seen", p.getSeen());

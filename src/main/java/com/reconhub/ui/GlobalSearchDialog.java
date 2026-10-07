@@ -192,7 +192,7 @@ final class GlobalSearchDialog {
                     hay, p.getEndpointPath() + " " + p.getName()));
         }
         for (Finding f : store.snapshotFindings()) {
-            String host = Hosts.of(f.getLocationUrl());
+            String host = f.getHost();   // cached on Finding itself (0.43.9), not reparsed here
             String hay = f.getSeverity().name() + " " + FindingTaxonomy.labelOf(f.getType()) + " "
                     + f.getType() + " " + f.getMasked() + " " + f.getLocationUrl() + " " + f.getEvidence();
             out.add(new Result(Kind.FINDING, host,
@@ -201,7 +201,7 @@ final class GlobalSearchDialog {
         }
         for (JsAsset a : store.snapshotJsAssets()) {
             String hay = a.getUrl() + " " + a.getPreview() + " " + a.getSavedPath();
-            out.add(new Result(Kind.JS_ASSET, Hosts.of(a.getUrl()), a.getUrl(), hay, a.getUrl()));
+            out.add(new Result(Kind.JS_ASSET, a.getHost(), a.getUrl(), hay, a.getUrl()));   // cached (0.43.9)
         }
         for (TechInfo t : store.snapshotTech()) {
             String hay = t.getHost() + " " + String.join(",", t.getTechnologies()) + " "

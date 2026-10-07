@@ -84,7 +84,7 @@ public final class MarkdownReporter {
             byHost.computeIfAbsent(Hosts.label(e.getHost()), k -> new int[5])[0]++;
         }
         for (Finding f : data.findings()) {
-            byHost.computeIfAbsent(Hosts.labelOf(f.getLocationUrl()), k -> new int[5])
+            byHost.computeIfAbsent(Hosts.label(f.getHost()), k -> new int[5])   // cached (0.43.9)
                     [1 + f.getSeverity().ordinal()]++;
         }
         b.append("## Host risk\n\n");

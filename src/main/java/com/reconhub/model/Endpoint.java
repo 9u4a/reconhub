@@ -27,6 +27,13 @@ public final class Endpoint {
     private final Set<String> paramNames = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final Set<String> sources = Collections.newSetFromMap(new ConcurrentHashMap<>()); // "proxy","sitemap","js"
     private final Set<String> origins = Collections.newSetFromMap(new ConcurrentHashMap<>()); // JS files a JS-link was found in
+    // Sorted, immutable snapshots kept in sync by the addX() mutators below, not rebuilt on every read
+    // (0.43.9) -- getParamNames()/getSources()/getOrigins() used to allocate a fresh TreeSet on every
+    // call, and they're hit from cell rendering and search-haystack building (AbstractTablePanel), both
+    // far hotter paths than the rare addX() call that actually changes the underlying set.
+    private volatile Set<String> paramNamesSorted = Set.of();
+    private volatile Set<String> sourcesSorted = Set.of();
+    private volatile Set<String> originsSorted = Set.of();
     private final long firstSeenEpochMs;
     // AtomicInteger, not `volatile int`: incremented from the ingest thread AND from bruteforce worker
     // threads (BruteforceEngine.runWordlist with concurrency > 1). `volatile` gives visibility but not
@@ -68,8 +75,8 @@ public final class Endpoint {
         if (contentType != null && !contentType.isBlank()) {
             this.contentType = contentType;
         }
-        if (source != null) {
-            this.sources.add(source);
+        if (source != null && this.sources.add(source)) {
+            this.sourcesSorted = Collections.unmodifiableSet(new TreeSet<>(sources));
         }
         if (messages != null) {
             this.messages = messages;
@@ -86,22 +93,22 @@ public final class Endpoint {
     }
 
     public void addParamNames(Set<String> names) {
-        if (names != null) {
-            paramNames.addAll(names);
+        if (names != null && paramNames.addAll(names)) {
+            paramNamesSorted = Collections.unmodifiableSet(new TreeSet<>(paramNames));
         }
     }
 
     public void addOrigins(Set<String> jsUrls) {
-        if (jsUrls != null) {
-            origins.addAll(jsUrls);
+        if (jsUrls != null && origins.addAll(jsUrls)) {
+            originsSorted = Collections.unmodifiableSet(new TreeSet<>(origins));
         }
     }
 
     // ---- Restore setters (used by state import) -------------------------
 
     public void addSources(Set<String> s) {
-        if (s != null) {
-            sources.addAll(s);
+        if (s != null && sources.addAll(s)) {
+            sourcesSorted = Collections.unmodifiableSet(new TreeSet<>(sources));
         }
     }
 
@@ -119,9 +126,17 @@ public final class Endpoint {
     public int getLastStatusCode() { return lastStatusCode; }
     public String getContentType() { return contentType; }
     public int getParamCount() { return paramNames.size(); }
-    public Set<String> getParamNames() { return new TreeSet<>(paramNames); }
-    public Set<String> getSources() { return new TreeSet<>(sources); }
-    public Set<String> getOrigins() { return new TreeSet<>(origins); }
+    public Set<String> getParamNames() { return paramNamesSorted; }
+    public Set<String> getSources() { return sourcesSorted; }
+    public Set<String> getOrigins() { return originsSorted; }
+
+    /** @return true when {@code jsUrl} is one of this endpoint's recorded origins (0.43.9) -- an O(1)
+     * lookup against the raw (unsorted) backing set, for a caller that only needs a boolean and would
+     * otherwise materialize {@link #getOrigins()}'s sorted snapshot just to call {@code .contains()}
+     * on it once. */
+    public boolean hasOrigin(String jsUrl) {
+        return jsUrl != null && origins.contains(jsUrl);
+    }
     public long getFirstSeenEpochMs() { return firstSeenEpochMs; }
     public int getObservations() { return observations.get(); }
     public boolean isAuthObserved() { return authObserved; }

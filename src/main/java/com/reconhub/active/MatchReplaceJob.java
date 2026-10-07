@@ -29,6 +29,26 @@ public final class MatchReplaceJob {
     public int getSent() { return sent.get(); }
     public List<MatchReplaceResult> getResults() { return results; }
 
+    /** @return how many results this job has recorded so far (0.43.9) -- lets a caller that keeps its
+     * own per-job cursor (see {@code ui.MatchReplacePanel}) tell "nothing new" from "N more to absorb"
+     * in O(1), without re-scanning {@link #getResults()}. */
+    public int resultCount() {
+        return results.size();
+    }
+
+    /** @return the results recorded at or after {@code index} (0.43.9) -- pairs with {@link
+     * #resultCount()} so a caller can absorb only what's new since it last looked, instead of
+     * re-comparing its own accumulated view against the whole list every time. {@code index} beyond
+     * the current size (a result list that can only grow, so this shouldn't normally happen) yields an
+     * empty list rather than throwing. */
+    public List<MatchReplaceResult> resultsFrom(int index) {
+        int n = results.size();
+        if (index >= n) {
+            return List.of();
+        }
+        return results.subList(Math.max(0, index), n);
+    }
+
     public void cancel() { cancelled.set(true); }
     public boolean isCancelled() { return cancelled.get(); }
 

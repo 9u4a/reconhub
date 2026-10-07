@@ -142,7 +142,11 @@ public final class BruteforceEngine {
             HttpRequestResponse base2 = send(baseUrl + randomNonce(), job);
             int baseStatus = status(base1);
             String baseBody = body(base1);
-            double selfSim = PageComparator.similarity(baseBody, body(base2));
+            // Computed once (0.43.9) and reused for the rest of the job -- see
+            // PageComparator.similarity(Set, String)'s javadoc for why this matters: baseBody never
+            // changes for the life of the job, but used to be renormalized+reshingled on every probe.
+            Set<String> baseShingles = PageComparator.shinglesOf(baseBody);
+            double selfSim = PageComparator.similarity(baseShingles, body(base2));
             double threshold = PageComparator.stableThreshold(selfSim);
             log("  baseline (2 random nonexistent paths) → " + baseStatus + " " + baseBody.length()
                     + "B, page self-similarity " + fmt(selfSim) + " (match threshold " + fmt(threshold) + ")");
@@ -152,7 +156,7 @@ public final class BruteforceEngine {
                         + "edit the target and re-run.");
             }
 
-            runWordlist(job, baseUrl, host, baseStatus, baseBody, threshold);
+            runWordlist(job, baseUrl, host, baseStatus, baseShingles, threshold);
             log("── Bruteforce done: " + baseUrl + " (requests sent: " + job.getSent()
                     + ", hits: " + job.getHits() + ")");
         } catch (RuntimeException e) {
@@ -175,7 +179,7 @@ public final class BruteforceEngine {
      * faster than {@code delayMs} apart.
      */
     private void runWordlist(BruteforceJob job, String baseUrl, String host, int baseStatus,
-                             String baseBody, double threshold) {
+                             Set<String> baseShingles, double threshold) {
         int par = Math.max(1, settings.getBruteforceConcurrency());
         AtomicInteger cursor = new AtomicInteger();
         Runnable worker = () -> {
@@ -200,7 +204,7 @@ public final class BruteforceEngine {
                 }
                 int st = status(rr);
                 String bodyText = body(rr);
-                double sim = PageComparator.similarity(baseBody, bodyText);
+                double sim = PageComparator.similarity(baseShingles, bodyText);
                 boolean softNotFound = st == baseStatus && sim >= threshold;
                 boolean hit = !softNotFound && INTERESTING_STATUS.contains(st);
                 log("  ⇐ " + entry.path() + "  → " + st + " " + bodyText.length() + "B (sim "
@@ -209,7 +213,15 @@ public final class BruteforceEngine {
                     job.recordHit(new BruteforceJob.Hit(entry.path(), st, bodyText.length(), entry.tag()));
                     record(host, entry, st, rr);
                 }
-                listener.onProgress(job);
+                // Throttled (0.43.9): a hit always updates the UI immediately; otherwise only every
+                // 20th probe. onProgress used to fire on every single probe regardless of outcome,
+                // each one dispatched to the EDT (BruteforcePanel.onProgress -> jobModel.fireChanged() +
+                // hitModel.fireChanged()) -- real work for what's usually a miss. Final state is still
+                // guaranteed correct regardless of this job's total not being a multiple of 20: onDone()
+                // (called once, in run()'s finally) triggers the same refresh unconditionally.
+                if (hit || job.getSent() % 20 == 0) {
+                    listener.onProgress(job);
+                }
             }
         };
 
