@@ -172,6 +172,10 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         themeTimer.stop();
         refreshTimer.stop();
         store.removeChangeListener(this);
+        // 0.43.10: the body-search cache is now shared (static) across every AbstractTablePanel tab --
+        // without this, it would keep every cached row reachable across a reload the same way the
+        // timer/listener above used to before 0.43.8.
+        AbstractTablePanel.clearSharedBodyCache();
     }
 
     /** Ctrl+1..8 switch tabs, Ctrl+F focuses the current tab's search field (a no-op on tabs without

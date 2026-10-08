@@ -64,6 +64,10 @@ final class GlobalSearchDialog {
     static void show(Component owner, DataStore store, DashboardPanel.Navigator navigator) {
         Window ownerWindow = SwingUtilities.getWindowAncestor(owner);
         JDialog dialog = new JDialog(ownerWindow, "ReconHub — Global search", Dialog.ModalityType.APPLICATION_MODAL);
+        // DISPOSE_ON_CLOSE, not the default HIDE_ON_CLOSE (0.43.10) -- this dialog's index is a full
+        // copy of all 5 DataStore collections plus a built haystack string per row; disposing on close
+        // lets it (and the window peer) become GC-eligible immediately instead of lingering hidden.
+        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dialog.setLayout(new BorderLayout(0, 8));
         ((JPanel) dialog.getContentPane()).setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
 

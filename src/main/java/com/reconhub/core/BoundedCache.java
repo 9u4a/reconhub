@@ -83,4 +83,14 @@ public final class BoundedCache<K, V> {
         map.putAll(kept);
         currentWeight = weight;
     }
+
+    /** Drops every entry (0.43.10) -- for a cache shared across more than one logical owner (e.g.
+     * {@code ui.AbstractTablePanel}'s body-search cache, shared across every tab as of this version),
+     * where none of those owners alone could safely call {@link #retainKeys} (it would drop every
+     * other owner's still-valid entries too). Used on extension unload so a {@code static} shared
+     * cache doesn't keep old rows reachable across a reload. */
+    public synchronized void clear() {
+        map.clear();
+        currentWeight = 0;
+    }
 }

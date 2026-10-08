@@ -116,7 +116,27 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
     // accumulates" symptom this was fixed for (0.43.2). See core.BoundedCache's own javadoc for the
     // LRU-eviction mechanics.
     private static final int BODY_CACHE_MAX_CHARS = 20_000_000;
-    private final BoundedCache<T, String> bodyCache = new BoundedCache<>(BODY_CACHE_MAX_CHARS, String::length);
+    // Shared across every AbstractTablePanel instance/subclass, not one per tab (0.43.10) -- the four
+    // body-search tabs (Endpoints/Parameters/Findings/JS Assets) each used to carry their own 20M-char
+    // (~40MB) cache, so worst case (all four active with enough accumulated data) was ~160MB just for
+    // this. One shared budget bounds the worst case at ~40MB total instead of ~40MB *per tab*. Typed
+    // Object, not T: every model row class deliberately has no equals()/hashCode() override (0.32.1),
+    // so identity-based keying is safe to share across the different concrete row types the four tabs
+    // use -- bodyText(T row) below still just calls get(row)/put(row, ...), unaffected by the wider key
+    // type. The trade-off this accepts: heavy body search in one tab can now evict another tab's
+    // entries sooner than before (no more per-tab isolation) -- but since 0.43.3/0.43.4 moved the
+    // decode-on-miss off the EDT with worker cancellation, a miss here costs a bit more background CPU,
+    // never a frozen UI, so this is a safe trade for a much lower memory ceiling.
+    private static final BoundedCache<Object, String> bodyCache =
+            new BoundedCache<>(BODY_CACHE_MAX_CHARS, String::length);
+
+    /** Drops every entry from the shared body-search cache above (0.43.10) -- call on extension
+     * unload. Being {@code static}, this cache would otherwise keep every row object it ever cached a
+     * body for reachable across a reload (same class of risk {@code MainTab}'s {@code themeTimer}/
+     * {@code DataStore} listener had before 0.43.8 fixed those). */
+    static void clearSharedBodyCache() {
+        bodyCache.clear();
+    }
     // Caches the non-body haystack (every column's text, concatenated) per row -- cheap to build
     // individually, but rebuilding it from scratch for every row on every debounced keystroke still adds
     // up on a large table. Cleared whenever `rows` is reassigned (refreshData()) so a column value that
@@ -1004,12 +1024,6 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
         return s;
     }
 
-    /** Drops cached body text for objects no longer in {@link #rows} (identity), e.g. after Clear data
-     * -- called when the cache might hold stale entries for rows that shrank. */
-    private void pruneBodyCache() {
-        bodyCache.retainKeys(rows);
-    }
-
     private void updateCount() {
         countLabel.setText(table.getRowCount() + " / " + rows.size() + " rows");
     }
@@ -1095,9 +1109,13 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
             // separate TableRowSorter's job). This used to allocate a second full-row-reference copy on
             // top of snapshotX()'s own, every ~300ms tick.
             this.rows = supplyRows();
-            if (bodyCache.size() > rows.size()) {
-                pruneBodyCache();   // rows were removed (e.g. Clear data) -- drop their cached bodies
-            }
+            // No per-tab pruning of bodyCache here any more (0.43.10): now that it's shared across
+            // every tab (see its field comment), this panel's own row count says nothing about which
+            // of the *other* tabs' entries are still valid -- calling retainKeys(rows) here would wipe
+            // out their perfectly-good cached bodies too. Stale entries for rows removed elsewhere
+            // (e.g. Clear data) just age out via the cache's own LRU budget instead of being proactively
+            // dropped -- the hard 40MB ceiling that actually bounds memory doesn't depend on pruning,
+            // only on that budget.
             // Cleared every refresh (not pruned like bodyCache) -- cheap to rebuild (just column text,
             // no decoding), and a full clear means a column value that changed in place for an existing
             // row (e.g. Endpoint.recordObservation updating its status code) is never stale for longer

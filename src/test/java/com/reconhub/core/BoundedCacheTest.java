@@ -125,6 +125,24 @@ class BoundedCacheTest {
     }
 
     @Test
+    void clearDropsEveryEntryAndResetsWeightSoFurtherPutsDontWronglyEvict() {
+        // 0.43.10: clear() is used to reset a cache shared across more than one logical owner on
+        // extension unload -- the weight reset matters just as much as dropping the entries, since a
+        // stale (too-high) weight would make the very next put() wrongly evict (same regression shape
+        // retainKeysThenPutStillEvictsCorrectlyAfterward guards for retainKeys()).
+        BoundedCache<String, String> c = cache(15);
+        c.put("a", "aaaaaaaaaa");   // 10
+        c.clear();
+        assertNull(c.get("a"));
+        assertEquals(0, c.size());
+
+        c.put("b", "bb");   // 2 -- would wrongly evict under a stale weight of 10+2=12 > 15? no, but...
+        c.put("c", "cccccccccccc");   // 12, total would be 14 if weight reset correctly (still under 15)
+        assertEquals("bb", c.get("b"), "a stale (too-high) weight after clear() would have evicted this");
+        assertEquals("cccccccccccc", c.get("c"));
+    }
+
+    @Test
     void identityKeyedCacheTreatsEqualButDistinctObjectsAsDifferentEntries() {
         // Mirrors how model row classes (deliberately no equals()/hashCode() override -- see the 0.32.1
         // CLAUDE.md note) are keyed: BoundedCache itself is equals()-based (plain LinkedHashMap), so
