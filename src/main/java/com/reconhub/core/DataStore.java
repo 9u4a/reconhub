@@ -12,10 +12,14 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -73,6 +77,38 @@ public final class DataStore {
 
     private final List<ChangeListener> listeners = new CopyOnWriteArrayList<>();
 
+    // ---- Optional retention cap (0.44.0) ---------------------------------
+    // Opt-in bound on how many rows each of the four message-bearing collections keeps; when a new row
+    // pushes a collection past the cap, the OLDEST rows are evicted (which also releases the temp-file
+    // handles they held). Default 0 = unlimited (unchanged behavior, zero data-loss risk). techByHost is
+    // not capped -- it's one aggregate per host, already bounded by host count.
+    //
+    // Insertion order is tracked here, inside DataStore, by a per-collection key queue -- deliberately
+    // NOT a field on the model classes and NOT persisted in the State file (so model/State formats are
+    // untouched; after a State import the order is simply import order). A key is appended only on the
+    // genuine "new key" branch of each record*/restore* method (the same place the mod counter bumps).
+    // A key removed later by deleteHost/clear is left in the queue as a harmless stale entry and skipped
+    // when evicting; clear() resets the queues outright.
+    private final Queue<String> endpointOrder = new ConcurrentLinkedQueue<>();
+    private final Queue<String> parameterOrder = new ConcurrentLinkedQueue<>();
+    private final Queue<String> findingOrder = new ConcurrentLinkedQueue<>();
+    private final Queue<String> jsAssetOrder = new ConcurrentLinkedQueue<>();
+
+    private volatile int maxRetained = 0;                       // 0 = unlimited
+    private final AtomicBoolean evictionWarned = new AtomicBoolean(false);
+    private volatile Consumer<String> logger = msg -> { };      // injected by ReconHubExtension; no-op headless
+
+    /** Sets the per-collection retention cap (0 = unlimited). Applied to subsequently-recorded rows. */
+    public void setMaxRetained(int max) {
+        this.maxRetained = Math.max(0, max);
+    }
+
+    /** Wires a logger (e.g. {@code api.logging()::logToOutput}) for the one-time eviction notice; stays
+     * a no-op in headless tests where no logger is injected. */
+    public void setLogger(Consumer<String> logger) {
+        this.logger = logger == null ? msg -> { } : logger;
+    }
+
     public void addChangeListener(ChangeListener l) {
         listeners.add(l);
     }
@@ -103,10 +139,12 @@ public final class DataStore {
                                    HttpRequestResponse messages, java.util.Set<String> origins) {
         Endpoint ep = endpoints.computeIfAbsent(
                 Endpoint.key(method, normalizedUrl),
-                k -> { endpointsMod.incrementAndGet(); return new Endpoint(method, host, path, normalizedUrl); });
+                k -> { endpointsMod.incrementAndGet(); endpointOrder.add(k);
+                       return new Endpoint(method, host, path, normalizedUrl); });
         ep.recordObservation(status, contentType, source, messages);
         ep.addParamNames(paramNames);
         ep.addOrigins(origins);
+        enforceCap(endpoints, endpointOrder, endpointsMod);
         return ep;
     }
 
@@ -117,9 +155,10 @@ public final class DataStore {
                                 HttpRequestResponse messages) {
         parameters.computeIfAbsent(
                         ParameterInfo.key(loc, name, endpointKey),
-                        k -> { parametersMod.incrementAndGet();
+                        k -> { parametersMod.incrementAndGet(); parameterOrder.add(k);
                                return new ParameterInfo(loc, name, endpointKey, endpointPath); })
                 .record(value, reflected, messages);
+        enforceCap(parameters, parameterOrder, parametersMod);
     }
 
     // ---- Findings --------------------------------------------------------
@@ -132,6 +171,8 @@ public final class DataStore {
             return false;
         }
         findingsMod.incrementAndGet();
+        findingOrder.add(f.key());
+        enforceCap(findings, findingOrder, findingsMod);
         return true;
     }
 
@@ -144,6 +185,8 @@ public final class DataStore {
             return existing;
         }
         jsAssetsMod.incrementAndGet();
+        jsAssetOrder.add(asset.key());
+        enforceCap(jsAssets, jsAssetOrder, jsAssetsMod);
         return asset;
     }
 
@@ -175,10 +218,13 @@ public final class DataStore {
 
     // ---- Restore (state import) -----------------------------------------
 
-    public void restoreEndpoint(Endpoint e) { endpoints.put(e.key(), e); endpointsMod.incrementAndGet(); }
-    public void restoreParameter(ParameterInfo p) { parameters.put(p.key(), p); parametersMod.incrementAndGet(); }
-    public void restoreFinding(Finding f) { findings.put(f.key(), f); findingsMod.incrementAndGet(); }
-    public void restoreJsAsset(JsAsset a) { jsAssets.put(a.key(), a); jsAssetsMod.incrementAndGet(); }
+    // restore* append to the order queues (so a later cap evicts in import order) but deliberately do
+    // NOT enforce the cap mid-import -- a State load is a bulk, user-initiated operation, like clear();
+    // the cap applies to rows captured afterward.
+    public void restoreEndpoint(Endpoint e) { endpoints.put(e.key(), e); endpointsMod.incrementAndGet(); endpointOrder.add(e.key()); }
+    public void restoreParameter(ParameterInfo p) { parameters.put(p.key(), p); parametersMod.incrementAndGet(); parameterOrder.add(p.key()); }
+    public void restoreFinding(Finding f) { findings.put(f.key(), f); findingsMod.incrementAndGet(); findingOrder.add(f.key()); }
+    public void restoreJsAsset(JsAsset a) { jsAssets.put(a.key(), a); jsAssetsMod.incrementAndGet(); jsAssetOrder.add(a.key()); }
     public void restoreTech(TechInfo t) { techByHost.put(t.key(), t); techMod.incrementAndGet(); }
 
     public void restoreCounters(int requests, Map<Integer, Integer> status,
@@ -366,6 +412,41 @@ public final class DataStore {
         return new HostDeleteResult(ep, pm, fd, js, tech);
     }
 
+    // ---- Retention cap enforcement (0.44.0) ------------------------------
+
+    /**
+     * Evicts the oldest rows of {@code map} while it exceeds {@link #maxRetained}, using {@code order}
+     * (insertion-order keys) to decide "oldest". No-op when the cap is unlimited (0). A key polled from
+     * {@code order} that is no longer in {@code map} (removed meanwhile by {@link #deleteHosts}/{@link
+     * #clear()}) is simply skipped -- which also drains it from the queue. Bumps {@code mod} once if
+     * anything was actually removed, so the next {@code snapshot*()} rebuilds (same key-set-change-only
+     * invariant every other mutator here honors).
+     */
+    private void enforceCap(Map<String, ?> map, Queue<String> order, AtomicInteger mod) {
+        int cap = maxRetained;
+        if (cap <= 0) {
+            return;
+        }
+        int removed = 0;
+        while (map.size() > cap) {
+            String oldest = order.poll();
+            if (oldest == null) {
+                break;   // order history exhausted (shouldn't normally happen while still over cap)
+            }
+            if (map.remove(oldest) != null) {
+                removed++;
+            }
+            // else: stale key already gone -- skip, keep draining toward a live one
+        }
+        if (removed > 0) {
+            mod.incrementAndGet();
+            if (evictionWarned.compareAndSet(false, true)) {
+                logger.accept("ReconHub: retention cap (" + cap + " items/table) reached -- evicting "
+                        + "oldest rows. Raise or clear the cap in Settings if you want to keep more.");
+            }
+        }
+    }
+
     private static <T> int removeIf(Map<String, T> map, Predicate<T> pred) {
         int[] n = {0};
         // ConcurrentHashMap's values() view supports removeIf as a weakly-consistent bulk operation --
@@ -387,6 +468,10 @@ public final class DataStore {
         findings.clear();
         jsAssets.clear();
         techByHost.clear();
+        endpointOrder.clear();
+        parameterOrder.clear();
+        findingOrder.clear();
+        jsAssetOrder.clear();
         endpointsMod.incrementAndGet();
         parametersMod.incrementAndGet();
         findingsMod.incrementAndGet();

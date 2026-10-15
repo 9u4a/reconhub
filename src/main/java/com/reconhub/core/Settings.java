@@ -61,6 +61,13 @@ public final class Settings {
     private volatile int matchReplaceDelayMs = 500;
     private volatile int matchReplaceConcurrency = 1;
 
+    // --- Memory: optional per-table retention cap (0.44.0). 0 = unlimited (default, unchanged behavior).
+    // When > 0, each of DataStore's four message-bearing collections keeps at most this many rows,
+    // evicting the oldest past the cap. Off-heap message storage (DataStore via TrafficIngestor's
+    // copyToTempFile) is always on and independent of this; the cap additionally bounds the row COUNT
+    // for very long engagements.
+    private volatile int maxRetainedItems = 0;
+
     public ScopeMode getScopeMode() { return scopeMode; }
     public void setScopeMode(ScopeMode m) { this.scopeMode = m; }
 
@@ -137,6 +144,13 @@ public final class Settings {
     public int getMatchReplaceConcurrency() { return matchReplaceConcurrency; }
     public void setMatchReplaceConcurrency(int n) { this.matchReplaceConcurrency = Math.max(1, Math.min(n, 10)); }
 
+    public int getMaxRetainedItems() { return maxRetainedItems; }
+    // 0 = unlimited; any positive value is floored to a sane minimum so a tiny cap can't thrash the
+    // model, and ceilinged generously (a cap is a memory guard, not a hard product limit).
+    public void setMaxRetainedItems(int n) {
+        this.maxRetainedItems = n <= 0 ? 0 : Math.max(1000, Math.min(n, 1_000_000));
+    }
+
     // ---- Persistence (Montoya extension preferences) ---------------------
     // Same "whole object as one Gson JSON blob under one preference key" pattern as
     // analysis.UserRuleStore. jsSaveDirectory (a Path) needs a String round-trip since Gson can't
@@ -165,6 +179,7 @@ public final class Settings {
         boolean matchReplaceEnabled;
         int matchReplaceDelayMs;
         int matchReplaceConcurrency;
+        int maxRetainedItems;
     }
 
     private Dto toDto() {
@@ -189,6 +204,7 @@ public final class Settings {
         d.matchReplaceEnabled = matchReplaceEnabled;
         d.matchReplaceDelayMs = matchReplaceDelayMs;
         d.matchReplaceConcurrency = matchReplaceConcurrency;
+        d.maxRetainedItems = maxRetainedItems;
         return d;
     }
 
@@ -229,6 +245,7 @@ public final class Settings {
         s.matchReplaceEnabled = d.matchReplaceEnabled;   // absent/false on old saves -- correct default
         s.matchReplaceDelayMs = d.matchReplaceDelayMs == 0 ? 500 : d.matchReplaceDelayMs;
         s.matchReplaceConcurrency = d.matchReplaceConcurrency == 0 ? 1 : d.matchReplaceConcurrency;
+        s.maxRetainedItems = d.maxRetainedItems;   // 0 (unlimited) on old saves -- correct default
         return s;
     }
 

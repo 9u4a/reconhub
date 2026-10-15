@@ -31,6 +31,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 /**
@@ -44,6 +45,8 @@ public final class TrafficIngestor implements HttpHandler {
     private final DataStore store;
     private final Settings settings;
     private final ScopeFilter scopeFilter;
+    /** Counts temp-file persistence failures for rate-limited logging in {@link #persist}. */
+    private final AtomicLong tempFileFailures = new AtomicLong();
 
     private final ParameterExtractor parameterExtractor;
     private final SecretScanner secretScanner;
@@ -249,6 +252,27 @@ public final class TrafficIngestor implements HttpHandler {
         }
     }
 
+    /**
+     * Returns a Burp temp-file-backed copy of {@code rr} (bytes read lazily from disk, off the JVM
+     * heap) -- see the call site in {@link #process}. Falls back to the original in-heap {@code rr} if
+     * the copy fails for any reason, so a failure only loses the memory saving for that one item, never
+     * the item itself. The failure log is rate-limited (1st, then every 100th) the same way the other
+     * hot-path failure points in this codebase are, since a persistent cause (e.g. a full temp dir)
+     * would otherwise fire on every single ingested item.
+     */
+    private HttpRequestResponse persist(HttpRequestResponse rr) {
+        try {
+            return rr.copyToTempFile();
+        } catch (RuntimeException e) {
+            long n = tempFileFailures.getAndIncrement();
+            if (n == 0 || n % 100 == 0) {
+                api.logging().logToError("ReconHub: could not persist message to temp file "
+                        + "(keeping it in memory instead): " + e);
+            }
+            return rr;
+        }
+    }
+
     private void process(HttpRequestResponse rr, String source, boolean respectScope) {
         if (rr == null || rr.request() == null) {
             return;
@@ -259,6 +283,16 @@ public final class TrafficIngestor implements HttpHandler {
         if (respectScope && !scopeFilter.inScope(url)) {
             return;
         }
+
+        // Persist the captured request/response to Burp's own temp-file store and keep THAT handle
+        // (`stored`) for everything we record below, instead of the live in-heap `rr`. Burp's
+        // copyToTempFile() reads the bytes lazily from disk, so the (often large -- JS bundles, HTML)
+        // request+response bodies no longer sit pinned on the JVM heap for the life of the session.
+        // This is the single biggest lever on the "memory grows over a multi-day engagement" problem:
+        // every retained Endpoint/ParameterInfo/Finding/JsAsset used to hold a full in-heap message.
+        // One copy per ingested item, shared by every row derived from it. Runs on the ingest executor
+        // (background, already bounded by runWithTimeout), never the EDT.
+        HttpRequestResponse stored = persist(rr);
 
         int status = 0;
         String contentType = "";
@@ -286,14 +320,14 @@ public final class TrafficIngestor implements HttpHandler {
 
         String endpointKey = ep.normalizedUrl();
         com.reconhub.model.Endpoint endpoint = store.recordEndpoint(ep.method(), ep.host(), ep.path(),
-                ep.normalizedUrl(), status, contentType, source, ep.paramNames(), rr, Set.of());
+                ep.normalizedUrl(), status, contentType, source, ep.paramNames(), stored, Set.of());
         // Track whether this observation carried credentials (Authorization or any Cookie).
         boolean authed = request.headerValue("Authorization") != null
                 || request.headerValue("Cookie") != null;
         endpoint.recordAuth(authed);
         store.countRequest(ep.host(), status, contentType);
 
-        parameterExtractor.extract(request, params, endpointKey, ep.path(), responseBody, rr);
+        parameterExtractor.extract(request, params, endpointKey, ep.path(), responseBody, stored);
 
         if (response != null) {
             // Computed once and reused below: a JS body is secret-scanned inside jsAnalyzer.analyze()
@@ -304,26 +338,26 @@ public final class TrafficIngestor implements HttpHandler {
             boolean isJs = isJavaScript(url, contentType);
             if (settings.isScanResponsesForSecrets()) {
                 if (!isJs) {
-                    secretScanner.scan(responseBody, url, rr);
+                    secretScanner.scan(responseBody, url, stored);
                 }
-                userScanner.scan(responseBody, url, rr);
+                userScanner.scan(responseBody, url, stored);
             }
             techFingerprinter.fingerprint(ep.host(), response, contentType, responseBody);
             // Passive API-surface discovery (OpenAPI/Swagger/GraphQL) from the captured body.
-            apiSpecAnalyzer.analyze(url, contentType, responseBody, rr);
+            apiSpecAnalyzer.analyze(url, contentType, responseBody, stored);
             // Passive source-map exposure (a captured .map is a confirmed original-source leak).
-            sourceMapDetector.analyze(url, contentType, responseBody, rr);
+            sourceMapDetector.analyze(url, contentType, responseBody, stored);
             if (isJs) {
-                jsAnalyzer.analyze(url, responseBody, rr);
+                jsAnalyzer.analyze(url, responseBody, stored);
             }
             if (settings.isRunPassiveChecks()) {
-                signatureScanner.scan(responseBody, url, rr);
-                authzScanner.scan(responseBody, url, rr);
-                piiScanner.scan(responseBody, url, rr);
-                requestInspector.inspect(request, response, params, url, contentType, responseBody, rr);
-                misconfigInspector.inspect(ep.host(), request, response, url, rr);
+                signatureScanner.scan(responseBody, url, stored);
+                authzScanner.scan(responseBody, url, stored);
+                piiScanner.scan(responseBody, url, stored);
+                requestInspector.inspect(request, response, params, url, contentType, responseBody, stored);
+                misconfigInspector.inspect(ep.host(), request, response, url, stored);
                 if (isHtml(contentType)) {
-                    commentExtractor.extractHtml(responseBody, url, rr);
+                    commentExtractor.extractHtml(responseBody, url, stored);
                 }
             }
         }

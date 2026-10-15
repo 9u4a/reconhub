@@ -157,6 +157,18 @@ public final class SettingsPanel extends JPanel {
                 settings.getMatchReplaceConcurrency(), 1, 10, 1, settings::setMatchReplaceConcurrency));
         add(gap());
 
+        add(section("Memory"));
+        add(new JLabel("Captured request/response bodies are kept off the JVM heap (in Burp's own "
+                + "temp store) automatically — this keeps memory low over long engagements with no setup."));
+        add(new JLabel("Optional cap on how many rows each table keeps; 0 = unlimited. Above the cap the "
+                + "oldest rows are dropped from ReconHub's model (Burp's own history is untouched)."));
+        add(spinnerRow("Max retained items per table (0 = unlimited):", settings.getMaxRetainedItems(),
+                0, 1_000_000, 1000, n -> {
+                    settings.setMaxRetainedItems(n);
+                    store.setMaxRetained(settings.getMaxRetainedItems());   // read back the clamped value
+                }));
+        add(gap());
+
         add(section("Backup / State"));
         includeMessages.setAlignmentX(Component.LEFT_ALIGNMENT);
         add(includeMessages);

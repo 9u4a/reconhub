@@ -45,6 +45,9 @@ public final class ReconHubExtension implements BurpExtension {
         // fixes autoIngestOnLoad's previous "no chance to turn it off before it fires" ordering issue,
         // since a saved false now loads before the auto-ingest check further down.
         Settings settings = Settings.load(api);
+        // Apply the (optional, default-off) retention cap and wire the eviction notice logger (0.44.0).
+        store.setMaxRetained(settings.getMaxRetainedItems());
+        store.setLogger(api.logging()::logToOutput);
         Bookmarks bookmarks = Bookmarks.load(api);
         TrafficIngestor ingestor = new TrafficIngestor(api, store, settings, patterns);
 

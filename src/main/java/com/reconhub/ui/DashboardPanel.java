@@ -601,16 +601,28 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         }
         String who = hosts.size() == 1 ? hosts.get(0) : hosts.size() + " selected hosts";
         JPanel message = new JPanel(new java.awt.BorderLayout(0, 8));
-        message.add(new JLabel("<html>Delete ALL ReconHub data for " + who + "?<br><br>"
+        // Plain wrapping JTextArea, not an <html> JLabel -- Burp's look-and-feel shows the tags as
+        // literal text (same caveat as BruteforcePanel/CheatsheetDialog's wrappedText).
+        javax.swing.JTextArea text = new javax.swing.JTextArea("Delete ALL ReconHub data for " + who + "?\n\n"
                 + ep + " endpoints, " + pm + " parameters, " + fd + " findings, and Tech entries"
-                + " (JS assets aren't tracked per-host here, but will be included if any match).<br><br>"
+                + " (JS assets aren't tracked per-host here, but will be included if any match).\n\n"
                 + "This only removes it from ReconHub's own model -- it does not touch Burp's own Proxy "
                 + "History/Site Map. Bookmarks/notes on now-removed rows are left in place (orphaned, "
-                + "harmless).<br><br>This cannot be undone.</html>"), java.awt.BorderLayout.NORTH);
+                + "harmless).\n\nThis cannot be undone.");
+        text.setEditable(false);
+        text.setFocusable(false);
+        text.setLineWrap(true);
+        text.setWrapStyleWord(true);
+        text.setOpaque(false);
+        text.setBorder(null);
+        text.setFont(new JLabel().getFont());
+        text.setSize(new Dimension(420, Short.MAX_VALUE));   // fixes the wrap width so preferred height is right
+        text.setPreferredSize(new Dimension(420, text.getPreferredSize().height));
+        message.add(text, java.awt.BorderLayout.NORTH);
         if (hosts.size() > 1) {
             JList<String> list = new JList<>(hosts.toArray(new String[0]));
             JScrollPane listScroll = new JScrollPane(list);
-            listScroll.setPreferredSize(new Dimension(320, Math.min(hosts.size(), 12) * 18 + 10));
+            listScroll.setPreferredSize(new Dimension(420,Math.min(hosts.size(), 12) * 18 + 10));
             message.add(listScroll, java.awt.BorderLayout.CENTER);
         }
         int choice = JOptionPane.showConfirmDialog(this, message,
