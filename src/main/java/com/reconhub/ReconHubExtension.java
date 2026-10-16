@@ -48,6 +48,10 @@ public final class ReconHubExtension implements BurpExtension {
         // Apply the (optional, default-off) retention cap and wire the eviction notice logger (0.44.0).
         store.setMaxRetained(settings.getMaxRetainedItems());
         store.setLogger(api.logging()::logToOutput);
+        // Let BodyDecoder transparently inflate gzip/deflate/brotli response bodies before analysis and
+        // search (0.45.0) -- Burp's own codec, so brotli works too.
+        com.reconhub.core.BodyDecoder.setCompressionUtils(api.utilities().compressionUtils());
+        com.reconhub.core.BodyDecoder.setLogger(api.logging()::logToError);
         Bookmarks bookmarks = Bookmarks.load(api);
         TrafficIngestor ingestor = new TrafficIngestor(api, store, settings, patterns);
 

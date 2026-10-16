@@ -112,7 +112,14 @@ public final class MessageViewer extends JPanel {
                 String contentType = resp.headerValue("Content-Type");
                 String pretty = JsBeautifier.beautify(BodyDecoder.decode(resp));
                 byte[] bytes = BodyDecoder.encode(pretty, contentType);
-                responseEditor.setResponse(resp.withBody(ByteArray.byteArray(bytes)));
+                HttpResponse prettyResp = resp.withBody(ByteArray.byteArray(bytes));
+                // BodyDecoder inflates a Content-Encoding body, so the beautified bytes are plain text;
+                // drop the now-stale Content-Encoding header or Burp's editor would try to gunzip plain
+                // text and render garbage (gzip-served JS is the common case here).
+                if (resp.headerValue("Content-Encoding") != null) {
+                    prettyResp = prettyResp.withRemovedHeader("Content-Encoding");
+                }
+                responseEditor.setResponse(prettyResp);
                 repaintEditors();
                 return;
             } catch (RuntimeException ignored) {

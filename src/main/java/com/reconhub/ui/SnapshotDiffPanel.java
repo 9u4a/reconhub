@@ -37,10 +37,12 @@ import java.util.function.Function;
  * touching the live one), then {@link KeyedDiff#compute} per collection, keyed by each model's own
  * {@code key()}.
  *
- * <p>v1 scope is Added/Removed only -- "Changed" (same key, different content) needs a different,
- * per-type comparison and is deferred; there's also no request/response detail viewer here (the
- * comparison file's rows only have one if it was exported with "include messages" on, which would make
- * the viewer inconsistently available row to row) -- just the summary tables below.
+ * <p>Added/Removed/Changed (0.45.0): "Changed" = same key present in both, but a per-type signature
+ * (status/params for an Endpoint, technologies for a Tech host, ...) differs. JS Assets are keyed by
+ * sha256 (a content hash), so a changed bundle is inherently a new key -> JS only ever shows +/-, never
+ * ~. There's no request/response detail viewer here (the comparison file's rows only carry one if it
+ * was exported with "include messages" on, which would make the viewer inconsistently available row to
+ * row) -- just the summary tables below.
  */
 public final class SnapshotDiffPanel extends JPanel implements Refreshable {
 
@@ -92,6 +94,25 @@ public final class SnapshotDiffPanel extends JPanel implements Refreshable {
      * never on the usual 300ms DataStore-change tick. */
     @Override public void refreshData() {}
 
+    private static String fmt(KeyedDiff.Diff3<?> d) {
+        return "+" + d.added().size() + "/-" + d.removed().size() + "/~" + d.changed().size();
+    }
+
+    // Per-type "meaningful content" signatures for the Changed classification. Only fields a retest
+    // actually cares about -- not volatile counters (timesSeen) or user state (triage).
+    private static String endpointSig(Endpoint e) {
+        return e.getLastStatusCode() + "|" + e.getContentType() + "|" + e.getParamNames();
+    }
+    private static String parameterSig(ParameterInfo p) {
+        return p.isReflected() + "|" + p.getExampleValue();
+    }
+    private static String findingSig(Finding f) {
+        return f.getSeverity().name() + "|" + f.getMasked();
+    }
+    private static String techSig(TechInfo t) {
+        return t.getTechnologies() + "|" + t.getMissingSecurityHeaders();
+    }
+
     private static JScrollPane tableIn(DiffTableModel<?> model) {
         JTable t = new JTable(model);
         t.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
@@ -110,32 +131,34 @@ public final class SnapshotDiffPanel extends JPanel implements Refreshable {
 
         new SwingWorker<String, Void>() {
             private Exception error;
-            private KeyedDiff.Diff<Endpoint> eDiff;
-            private KeyedDiff.Diff<ParameterInfo> pDiff;
-            private KeyedDiff.Diff<Finding> fDiff;
-            private KeyedDiff.Diff<JsAsset> jDiff;
-            private KeyedDiff.Diff<TechInfo> tDiff;
+            private KeyedDiff.Diff3<Endpoint> eDiff;
+            private KeyedDiff.Diff3<ParameterInfo> pDiff;
+            private KeyedDiff.Diff3<Finding> fDiff;
+            private KeyedDiff.Diff3<JsAsset> jDiff;
+            private KeyedDiff.Diff3<TechInfo> tDiff;
 
             @Override protected String doInBackground() {
                 try {
                     DataStore compareStore = new DataStore();
                     StateSerializer.importInto(compareStore, file.toPath(), true);
                     eDiff = KeyedDiff.compute(compareStore.snapshotEndpoints(),
-                            liveStore.snapshotEndpoints(), Endpoint::key);
+                            liveStore.snapshotEndpoints(), Endpoint::key, SnapshotDiffPanel::endpointSig);
                     pDiff = KeyedDiff.compute(compareStore.snapshotParameters(),
-                            liveStore.snapshotParameters(), ParameterInfo::key);
+                            liveStore.snapshotParameters(), ParameterInfo::key, SnapshotDiffPanel::parameterSig);
                     fDiff = KeyedDiff.compute(compareStore.snapshotFindings(),
-                            liveStore.snapshotFindings(), Finding::key);
+                            liveStore.snapshotFindings(), Finding::key, SnapshotDiffPanel::findingSig);
+                    // JS keyed by sha256 (content hash) -> signature == key means "changed" is never
+                    // possible; a modified bundle is a new key, surfacing as +/- instead.
                     jDiff = KeyedDiff.compute(compareStore.snapshotJsAssets(),
-                            liveStore.snapshotJsAssets(), JsAsset::key);
+                            liveStore.snapshotJsAssets(), JsAsset::key, JsAsset::key);
                     tDiff = KeyedDiff.compute(compareStore.snapshotTech(),
-                            liveStore.snapshotTech(), TechInfo::key);
+                            liveStore.snapshotTech(), TechInfo::key, SnapshotDiffPanel::techSig);
                     return "vs " + file.getName() + ":  "
-                            + "endpoints +" + eDiff.added().size() + "/-" + eDiff.removed().size() + "   "
-                            + "parameters +" + pDiff.added().size() + "/-" + pDiff.removed().size() + "   "
-                            + "findings +" + fDiff.added().size() + "/-" + fDiff.removed().size() + "   "
-                            + "JS +" + jDiff.added().size() + "/-" + jDiff.removed().size() + "   "
-                            + "tech +" + tDiff.added().size() + "/-" + tDiff.removed().size();
+                            + "endpoints " + fmt(eDiff) + "   "
+                            + "parameters " + fmt(pDiff) + "   "
+                            + "findings " + fmt(fDiff) + "   "
+                            + "JS " + fmt(jDiff) + "   "
+                            + "tech " + fmt(tDiff);
                 } catch (Exception e) {
                     error = e;
                     return null;
@@ -164,8 +187,8 @@ public final class SnapshotDiffPanel extends JPanel implements Refreshable {
         }.execute();
     }
 
-    /** Flattens a {@link KeyedDiff.Diff} into one table: every added row first (marked "+"), then every
-     * removed row ("-") -- {@code columns} is the type-specific display columns, {@code extract} pulls
+    /** Flattens a {@link KeyedDiff.Diff3} into one table: added rows first ("+"), then changed ("~"),
+     * then removed ("−") -- {@code columns} is the type-specific display columns, {@code extract} pulls
      * them out of one row (the leading "Change" column is handled here, not by {@code extract}). */
     private static final class DiffTableModel<T> extends AbstractTableModel {
         private final String[] columns;
@@ -177,10 +200,13 @@ public final class SnapshotDiffPanel extends JPanel implements Refreshable {
             this.extract = extract;
         }
 
-        void setDiff(KeyedDiff.Diff<T> diff) {
+        void setDiff(KeyedDiff.Diff3<T> diff) {
             List<Object[]> next = new java.util.ArrayList<>();
             for (T row : diff.added()) {
                 next.add(prepend("+", extract.apply(row)));
+            }
+            for (T row : diff.changed()) {
+                next.add(prepend("~", extract.apply(row)));
             }
             for (T row : diff.removed()) {
                 next.add(prepend("−", extract.apply(row)));

@@ -13,10 +13,10 @@ import java.util.function.Function;
  * (just operates on two {@code List<T>}s + a key function) so it's trivially headless-testable without
  * needing a real {@code DataStore} at all.
  *
- * <p>"Changed" (same key, different content) is out of scope -- what counts as a meaningful change
- * differs per model type (a status code changing matters for an Endpoint, a triage change doesn't mean
- * anything for a freshly-loaded comparison file), so v1 only answers "is this key present now that
- * wasn't before" / "was this key present before that isn't now".
+ * <p>v1 ({@link #compute(List, List, Function)}) answered Added/Removed only. {@link #compute(List,
+ * List, Function, Function)} (0.45.0) adds "Changed" via a caller-supplied {@code signatureOf} -- the
+ * caller decides what counts as a meaningful change per model type (an Endpoint's status/params, a
+ * Tech host's technologies), keeping this class type-agnostic.
  */
 public final class KeyedDiff {
 
@@ -46,6 +46,46 @@ public final class KeyedDiff {
             }
         }
         return new Diff<>(added, removed);
+    }
+
+    /** Added/removed (as {@link Diff}) plus {@code changed}: keys present in both lists whose {@code
+     *  signatureOf} differs. {@code changed} holds the NEW-side rows (current content). */
+    public record Diff3<T>(List<T> added, List<T> removed, List<T> changed) {}
+
+    /**
+     * Like {@link #compute(List, List, Function)} but also classifies "changed" rows -- a key present in
+     * both lists whose {@code signatureOf} (caller's notion of meaningful content) differs between the
+     * old and new row. A changed key is reported only in {@code changed} (not also added/removed), and
+     * the returned row is the NEW one so the UI shows the current value. Pass {@code signatureOf =
+     * keyOf} to make "changed" impossible (e.g. a content-hash key like {@code JsAsset}'s sha256).
+     */
+    public static <T> Diff3<T> compute(List<T> oldRows, List<T> newRows,
+                                       Function<T, String> keyOf, Function<T, String> signatureOf) {
+        Map<String, T> oldByKey = index(oldRows, keyOf);
+        Map<String, T> newByKey = index(newRows, keyOf);
+
+        List<T> added = new ArrayList<>();
+        List<T> changed = new ArrayList<>();
+        for (Map.Entry<String, T> e : newByKey.entrySet()) {
+            T oldRow = oldByKey.get(e.getKey());
+            if (oldRow == null) {
+                added.add(e.getValue());
+            } else if (!sig(signatureOf, oldRow).equals(sig(signatureOf, e.getValue()))) {
+                changed.add(e.getValue());   // NEW-side row = current content
+            }
+        }
+        List<T> removed = new ArrayList<>();
+        for (Map.Entry<String, T> e : oldByKey.entrySet()) {
+            if (!newByKey.containsKey(e.getKey())) {
+                removed.add(e.getValue());
+            }
+        }
+        return new Diff3<>(added, removed, changed);
+    }
+
+    private static <T> String sig(Function<T, String> signatureOf, T row) {
+        String s = signatureOf.apply(row);
+        return s == null ? "" : s;
     }
 
     private static <T> Map<String, T> index(List<T> rows, Function<T, String> keyOf) {
