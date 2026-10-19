@@ -13,8 +13,11 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JToggleButton;
+import javax.swing.RowSorter;
+import javax.swing.SortOrder;
 import java.awt.Component;
 import java.awt.Font;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.EnumSet;
@@ -39,6 +42,7 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
 
     private static final String[] COLS = {"Severity", "Category", "Type", "JS File", "Evidence"};
     private static final int COL_CATEGORY = 1;
+    private static final int COL_JS_FILE = 3;
 
     private final DataStore store;
     private final MessageViewer viewer;
@@ -49,6 +53,9 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
     private boolean rebuildingCatBox;
     private final ColumnValueFilter<Finding> hostFilter =
             new ColumnValueFilter<>("Host", f -> Hosts.label(f.getHost()));
+    private final ColumnValueFilter<Finding> fileFilter =
+            new ColumnValueFilter<>("JS file", JsAnalysisPanel::jsFileLabel);
+    private final JLabel summary = new JLabel(" ");
 
     public JsAnalysisPanel(DataStore store, MontoyaApi api, Bookmarks bookmarks) {
         super(api, bookmarks);
@@ -65,7 +72,7 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
             }
             int i = catBox.getSelectedIndex();
             activeCategory = i <= 0 ? null : FindingTaxonomy.Category.values()[i - 1];
-            reapplyFilter();
+            onFilterChanged();
         });
         addToToolbar(catBox);
 
@@ -79,13 +86,27 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
                 } else {
                     activeSeverities.remove(sev);
                 }
-                reapplyFilter();
+                onFilterChanged();
             });
             addToToolbar(b);
         }
 
-        hostFilter.setOnChange(this::reapplyFilter);
+        hostFilter.setOnChange(this::onFilterChanged);
         addToToolbar(hostFilter.component());
+        fileFilter.setOnChange(this::onFilterChanged);
+        addToToolbar(fileFilter.component());
+        addToToolbar(summary);
+
+        // Cluster rows by JS file by default so one bundle's findings sit together (header click /
+        // Shift-multi-sort still work as usual -- TriStateRowSorter honors an explicit sort key).
+        table.getRowSorter().setSortKeys(List.of(
+                new RowSorter.SortKey(COL_JS_FILE, SortOrder.ASCENDING)));
+    }
+
+    /** Re-filter and refresh the summary line together (filter changes don't go through refreshData). */
+    private void onFilterChanged() {
+        reapplyFilter();
+        updateSummary();
     }
 
     @Override protected String rowKey(Finding f) { return f == null ? null : f.key(); }
@@ -100,7 +121,7 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
         boolean sevOk = activeSeverities.isEmpty() || activeSeverities.contains(f.getSeverity());
         boolean catOk = activeCategory == null
                 || FindingTaxonomy.categoryOf(f.getType()) == activeCategory;
-        return sevOk && catOk && hostFilter.test(f);
+        return sevOk && catOk && hostFilter.test(f) && fileFilter.test(f);
     }
 
     private Map<FindingTaxonomy.Category, Integer> lastCategoryCounts;
@@ -118,6 +139,61 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
             lastCategoryCounts = counts;
         }
         hostFilter.refreshAvailableValues(rows);
+        fileFilter.refreshAvailableValues(rows);
+        updateSummary();
+    }
+
+    /** Updates the toolbar rollup line from the rows that currently pass every filter -- so narrowing to
+     * one JS file turns the line into that bundle's category breakdown. */
+    private void updateSummary() {
+        List<Finding> visible = new ArrayList<>();
+        for (Finding f : rows()) {
+            if (rowIncluded(f)) {
+                visible.add(f);
+            }
+        }
+        summary.setText(summarize(visible));
+    }
+
+    /** "N files · Crypto a · Authz b · …" over {@code visible} (zero-count categories omitted). Pure/
+     * static for headless testing. */
+    static String summarize(List<Finding> visible) {
+        Set<String> files = new HashSet<>();
+        Map<FindingTaxonomy.Category, Integer> byCat =
+                new EnumMap<>(FindingTaxonomy.Category.class);
+        for (Finding f : visible) {
+            files.add(jsFileLabel(f));
+            byCat.merge(FindingTaxonomy.categoryOf(f.getType()), 1, Integer::sum);
+        }
+        StringBuilder sb = new StringBuilder("  ")
+                .append(files.size()).append(files.size() == 1 ? " file" : " files");
+        for (FindingTaxonomy.Category c : FindingTaxonomy.Category.values()) {
+            int n = byCat.getOrDefault(c, 0);
+            if (n > 0) {
+                sb.append("  ·  ").append(c.label()).append(' ').append(n);
+            }
+        }
+        return sb.toString();
+    }
+
+    /** Short label for a finding's JS file: the URL's filename (last path segment), or the full URL
+     * when there's no usable path/filename. Pure/static for headless testing. */
+    static String jsFileLabel(Finding f) {
+        String url = f == null ? null : f.getLocationUrl();
+        if (url == null || url.isBlank()) {
+            return "(unknown)";
+        }
+        String path;
+        try {
+            path = URI.create(url).getPath();
+        } catch (RuntimeException e) {
+            path = null;
+        }
+        if (path == null || path.isBlank() || path.endsWith("/")) {
+            return url;   // no filename to shorten to -- keep the full URL
+        }
+        String name = path.substring(path.lastIndexOf('/') + 1);
+        return name.isBlank() ? url : name;
     }
 
     private void rebuildCategoryItems(Map<FindingTaxonomy.Category, Integer> counts) {
@@ -143,10 +219,13 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
     protected void onRowSelected(Finding f) {
         if (f == null) {
             viewer.show(null);
+            viewer.setSearchExpression("");
             viewer.setInfo(" ");
             return;
         }
         viewer.show(f.getMessages());
+        // Jump the Response editor to where this finding actually matched in the JS body.
+        viewer.setSearchExpression(f.getRawMatch() == null ? "" : f.getRawMatch());
         StringBuilder sb = new StringBuilder();
         sb.append('[').append(f.getSeverity().name()).append("] ").append(f.getType())
                 .append("   |   ").append(f.getLocationUrl());
