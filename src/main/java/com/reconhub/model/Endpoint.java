@@ -35,9 +35,10 @@ public final class Endpoint {
     private volatile Set<String> sourcesSorted = Set.of();
     private volatile Set<String> originsSorted = Set.of();
     private final long firstSeenEpochMs;
-    // AtomicInteger, not `volatile int`: incremented from the ingest thread AND from bruteforce worker
-    // threads (BruteforceEngine.runWordlist with concurrency > 1). `volatile` gives visibility but not
-    // read-modify-write atomicity, so concurrent `++` would silently lose updates.
+    // AtomicInteger, not `volatile int`: `volatile` gives visibility but not read-modify-write
+    // atomicity, so a concurrent `++` would silently lose updates. Kept atomic defensively -- even
+    // though the ingest executor is single-threaded today (0.46.0 removed the concurrent bruteforce
+    // worker pool that originally forced this), a future concurrent writer must not reintroduce the bug.
     private final AtomicInteger observations = new AtomicInteger();
     private volatile boolean authObserved;    // seen at least once with Authorization/Cookie
     private volatile boolean anonObserved;    // seen at least once with no credentials

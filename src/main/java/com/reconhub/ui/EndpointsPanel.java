@@ -2,7 +2,6 @@ package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
-import com.reconhub.active.BruteforceEngine;
 import com.reconhub.active.MatchReplaceEngine;
 import com.reconhub.active.MatchReplaceTarget;
 import com.reconhub.analysis.PayloadCheatsheet;
@@ -29,7 +28,6 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
     private final DataStore store;
     private final PayloadCheatsheet cheatsheet;
     private final MessageViewer viewer;
-    private BruteforceEngine bruteforce;
     private Settings settings;
     private MatchReplaceEngine matchReplace;
 
@@ -113,12 +111,6 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
         return out;
     }
 
-    /** Wires the (ACTIVE) known-path bruteforce action for this tab's right-click menu; called once. */
-    public void setBruteforce(BruteforceEngine engine, Settings settings) {
-        this.bruteforce = engine;
-        this.settings = settings;
-    }
-
     /** Wires the (ACTIVE) Match & Replace bulk-send action for this tab's right-click menu; called
      * once. */
     public void setMatchReplace(MatchReplaceEngine engine, Settings settings) {
@@ -139,7 +131,6 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
             addMenuItem(menu, "View payload cheatsheet (XXE)…", true,
                     () -> CheatsheetDialog.showFor(this, e.getPath(), List.of(xxe)));
         }
-        addBruteforceMenuItem(menu, bruteforce, settings, store, e.getHost());
         addDeleteHostMenuItem(menu, store, e.getHost());
 
         if (matchReplace != null && settings != null) {

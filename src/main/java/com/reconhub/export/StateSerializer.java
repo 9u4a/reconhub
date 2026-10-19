@@ -7,8 +7,6 @@ import burp.api.montoya.http.message.responses.HttpResponse;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonIOException;
-import com.reconhub.active.BruteforceEngine;
-import com.reconhub.active.BruteforceJob;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
 import com.reconhub.model.Endpoint;
@@ -60,7 +58,6 @@ public final class StateSerializer {
         List<FindingDto> findings;
         List<JsAssetDto> jsAssets;
         List<TechDto> tech;
-        List<BruteforceJobDto> bruteforceJobs;
         List<BookmarkDto> bookmarks;
     }
 
@@ -105,20 +102,6 @@ public final class StateSerializer {
         List<String> technologies, missingSecurityHeaders;
     }
 
-    private static final class HitDto {
-        String path, tag;
-        int status, lengthBytes;
-    }
-
-    // Historical only (see BruteforceJob.restored / BruteforceEngine.restoreHistoricalJob) -- an
-    // imported job is never re-submitted to the dispatcher, so no thread/executor state to capture.
-    private static final class BruteforceJobDto {
-        String host, baseUrl;
-        int budget, sent;
-        boolean cancelled, done;
-        List<HitDto> hits;
-    }
-
     // key == the row's own model key() -- see core.Bookmarks class javadoc for why one string-keyed
     // map covers all five row types without a per-type DTO.
     private static final class BookmarkDto {
@@ -128,22 +111,15 @@ public final class StateSerializer {
 
     // ---- Export ---------------------------------------------------------
 
-    /** Same as {@link #export(DataStore, Path, boolean, BruteforceEngine, Bookmarks)} with no
-     * bruteforce jobs captured (kept for any caller that doesn't have one handy). */
+    /** Same as {@link #export(DataStore, Path, boolean, Bookmarks)} with no bookmarks captured (kept
+     * for any caller that doesn't have one handy). */
     public static void export(DataStore store, Path file, boolean includeMessages)
             throws IOException {
-        export(store, file, includeMessages, null, null);
-    }
-
-    /** Same as {@link #export(DataStore, Path, boolean, BruteforceEngine, Bookmarks)} with no
-     * bookmarks captured (kept for any caller that doesn't have one handy). */
-    public static void export(DataStore store, Path file, boolean includeMessages,
-                              BruteforceEngine bruteforce) throws IOException {
-        export(store, file, includeMessages, bruteforce, null);
+        export(store, file, includeMessages, null);
     }
 
     public static void export(DataStore store, Path file, boolean includeMessages,
-                              BruteforceEngine bruteforce, Bookmarks bookmarks) throws IOException {
+                              Bookmarks bookmarks) throws IOException {
         State s = new State();
         s.format = FORMAT;
         s.version = VERSION;
@@ -245,29 +221,6 @@ public final class StateSerializer {
             s.tech.add(d);
         }
 
-        s.bruteforceJobs = new ArrayList<>();
-        if (bruteforce != null) {
-            for (BruteforceJob job : bruteforce.jobs()) {
-                BruteforceJobDto d = new BruteforceJobDto();
-                d.host = job.getHost();
-                d.baseUrl = job.getBaseUrl();
-                d.budget = job.getBudget();
-                d.sent = job.getSent();
-                d.cancelled = job.isCancelled();
-                d.done = job.isDone();
-                d.hits = new ArrayList<>();
-                for (BruteforceJob.Hit h : job.getHitList()) {
-                    HitDto hd = new HitDto();
-                    hd.path = h.path();
-                    hd.status = h.status();
-                    hd.lengthBytes = h.lengthBytes();
-                    hd.tag = h.tag();
-                    d.hits.add(hd);
-                }
-                s.bruteforceJobs.add(d);
-            }
-        }
-
         s.bookmarks = new ArrayList<>();
         if (bookmarks != null) {
             for (Map.Entry<String, Bookmarks.Entry> e : bookmarks.snapshotAll().entrySet()) {
@@ -299,23 +252,17 @@ public final class StateSerializer {
 
     // ---- Import ---------------------------------------------------------
 
-    /** Same as {@link #importInto(DataStore, Path, boolean, BruteforceEngine, Bookmarks)} with
-     * bruteforce jobs left out of the import (kept for any caller that doesn't have one handy). */
+    /** Same as {@link #importInto(DataStore, Path, boolean, Bookmarks)} with bookmarks left out of the
+     * import (kept for any caller that doesn't have one handy). */
     public static String importInto(DataStore store, Path file, boolean clearFirst)
             throws IOException {
-        return importInto(store, file, clearFirst, null, null);
+        return importInto(store, file, clearFirst, null);
     }
 
-    /** Same as {@link #importInto(DataStore, Path, boolean, BruteforceEngine, Bookmarks)} with
-     * bookmarks left out of the import (kept for any caller that doesn't have one handy). */
+    /** @return a short summary of what was imported. A state file from an older build may still carry a
+     * {@code bruteforceJobs} array (removed in 0.46.0); Gson simply ignores it. */
     public static String importInto(DataStore store, Path file, boolean clearFirst,
-                                    BruteforceEngine bruteforce) throws IOException {
-        return importInto(store, file, clearFirst, bruteforce, null);
-    }
-
-    /** @return a short summary of what was imported. */
-    public static String importInto(DataStore store, Path file, boolean clearFirst,
-                                    BruteforceEngine bruteforce, Bookmarks bookmarks) throws IOException {
+                                    Bookmarks bookmarks) throws IOException {
         State s;
         try (Reader r = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             s = GSON.fromJson(r, State.class);
@@ -399,18 +346,6 @@ public final class StateSerializer {
                     s.counters.hostCounts, s.counters.contentTypeCounts);
         }
 
-        int jobs = 0;
-        if (s.bruteforceJobs != null && bruteforce != null) {
-            for (BruteforceJobDto d : s.bruteforceJobs) {
-                List<BruteforceJob.Hit> hits = new ArrayList<>();
-                for (HitDto hd : d.hits == null ? List.<HitDto>of() : d.hits) {
-                    hits.add(new BruteforceJob.Hit(hd.path, hd.status, hd.lengthBytes, hd.tag));
-                }
-                bruteforce.restoreHistoricalJob(d.host, d.baseUrl, d.budget, d.sent, d.cancelled, d.done, hits);
-                jobs++;
-            }
-        }
-
         // Merge, never clear -- bookmarks are user-authored, not scraped traffic data, so they're
         // deliberately not touched by clearFirst/store.clear() (same reasoning as core.Bookmarks not
         // living inside DataStore at all). An entry already present locally for a key not in this file
@@ -426,9 +361,8 @@ public final class StateSerializer {
         }
 
         store.fireChanged();
-        return String.format("Imported %d endpoints, %d parameters, %d findings, %d JS, %d hosts%s%s%s.",
+        return String.format("Imported %d endpoints, %d parameters, %d findings, %d JS, %d hosts%s%s.",
                 endpoints, params, findings, js, tech,
-                jobs > 0 ? ", " + jobs + " bruteforce jobs" : "",
                 marks > 0 ? ", " + marks + " bookmarks" : "",
                 s.includesMessages ? " (with messages)" : "");
     }

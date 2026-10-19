@@ -1,11 +1,11 @@
 package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
-import com.reconhub.active.BruteforceEngine;
 import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.UserRuleStore;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.Hosts;
 import com.reconhub.core.ScopeFilter;
 import com.reconhub.model.Finding;
 import com.reconhub.model.TechInfo;
@@ -56,7 +56,6 @@ public final class SettingsPanel extends JPanel {
     private final DataStore store;
     private final Settings settings;
     private final TrafficIngestor ingestor;
-    private final BruteforceEngine bruteforce;
     private final Bookmarks bookmarks;
 
     private final JLabel status = new JLabel(" ");
@@ -75,12 +74,11 @@ public final class SettingsPanel extends JPanel {
     private JTable rulesTableRef;
 
     public SettingsPanel(MontoyaApi api, DataStore store, Settings settings,
-                         TrafficIngestor ingestor, BruteforceEngine bruteforce, Bookmarks bookmarks) {
+                         TrafficIngestor ingestor, Bookmarks bookmarks) {
         this.api = api;
         this.store = store;
         this.settings = settings;
         this.ingestor = ingestor;
-        this.bruteforce = bruteforce;
         this.bookmarks = bookmarks;
 
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
@@ -144,8 +142,8 @@ public final class SettingsPanel extends JPanel {
 
         add(section("Match & Replace bulk send (active)"));
         add(new JLabel("Replays selected Endpoints rows with a header/cookie value or raw-request "
-                + "match/replace applied. Off by default (unlike known-path bruteforce, this follows "
-                + "the standard policy: a flag here, not just a per-run confirmation)."));
+                + "match/replace applied. Off by default — a flag here plus a per-run confirmation "
+                + "dialog (this is ReconHub's only traffic-generating feature)."));
         JCheckBox matchReplaceEnabled = leftCheck("Enable Match & Replace",
                 settings.isMatchReplaceEnabled());
         matchReplaceEnabled.addActionListener(
@@ -458,11 +456,11 @@ public final class SettingsPanel extends JPanel {
      * ReconHubExtension} and {@code TrafficIngestor} already each build their own independently.
      *
      * <p>0.41.0: both the scheme lookup and the delete used to happen once per host inside this loop
-     * ({@code RunBruteforceAction.inferScheme} itself re-scans all endpoints on every call, and the old
-     * per-host {@code deleteHost} re-scans all 5 collections on every call) -- O(hosts &times; rows)
-     * against exactly the scenario this button targets, where both host count and row count are large
-     * right after a whole site map was ingested. {@link RunBruteforceAction#schemesByHost} and {@link
-     * DataStore#deleteHosts} each do their respective full scan exactly once instead.
+     * ({@code inferScheme} itself re-scans all endpoints on every call, and the old per-host {@code
+     * deleteHost} re-scans all 5 collections on every call) -- O(hosts &times; rows) against exactly the
+     * scenario this button targets, where both host count and row count are large right after a whole
+     * site map was ingested. {@link Hosts#schemesByHost} and {@link DataStore#deleteHosts} each do their
+     * respective full scan exactly once instead.
      */
     private void doRemoveOutOfScope() {
         ScopeFilter scopeFilter = new ScopeFilter(api, settings);
@@ -474,7 +472,7 @@ public final class SettingsPanel extends JPanel {
         for (TechInfo t : store.snapshotTech()) {
             hosts.add(t.getHost());
         }
-        Map<String, String> schemes = RunBruteforceAction.schemesByHost(store);
+        Map<String, String> schemes = Hosts.schemesByHost(store);
         List<String> outOfScope = new ArrayList<>();
         for (String host : hosts) {
             if (host == null || host.isBlank()) {
@@ -592,7 +590,7 @@ public final class SettingsPanel extends JPanel {
             return;
         }
         boolean withMsgs = includeMessages.isSelected();
-        runExport(() -> StateSerializer.export(store, f.toPath(), withMsgs, bruteforce, bookmarks), f);
+        runExport(() -> StateSerializer.export(store, f.toPath(), withMsgs, bookmarks), f);
     }
 
     private void importState() {
@@ -613,7 +611,7 @@ public final class SettingsPanel extends JPanel {
             private Exception error;
             @Override protected String doInBackground() {
                 try {
-                    return StateSerializer.importInto(store, f.toPath(), clearFirst, bruteforce, bookmarks);
+                    return StateSerializer.importInto(store, f.toPath(), clearFirst, bookmarks);
                 } catch (Exception e) {
                     error = e;
                     return null;
@@ -719,11 +717,9 @@ public final class SettingsPanel extends JPanel {
 
     private interface IntSetter { void set(int v); }
 
-    /** Same shape as {@code BruteforcePanel}'s own {@code spinnerRow} (that one lives in the Bruteforce
-     * tab itself since it has custom layout to spare; Match & Replace's throttle lives here instead
-     * since {@code MatchReplacePanel} is a plain {@code AbstractTablePanel} with no room for a settings
-     * block above its table) -- small deliberate duplication rather than extracting a shared UI helper
-     * for two call sites. */
+    /** A labeled integer spinner row. Match & Replace's throttle and the memory retention cap both use
+     * it; {@code MatchReplacePanel} is a plain {@code AbstractTablePanel} with no room for a settings
+     * block above its table, so those live here in Settings instead. */
     private static JPanel spinnerRow(String label, int value, int min, int max, int step, IntSetter setter) {
         JPanel p = leftFlow();
         p.add(new JLabel(label));

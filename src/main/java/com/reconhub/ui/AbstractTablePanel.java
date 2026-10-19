@@ -4,7 +4,6 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpHeader;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
-import com.reconhub.active.BruteforceEngine;
 import com.reconhub.core.BodyDecoder;
 import com.reconhub.core.BoundedCache;
 import com.reconhub.core.Bookmarks;
@@ -642,23 +641,6 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
     /** Adds a menu item that runs {@code action} (errors are logged, never thrown to the UI). */
     protected void addMenuItem(JPopupMenu menu, String label, boolean enabled, Runnable action) {
         add(menu, label, enabled, action);
-    }
-
-    /**
-     * Adds the "Run known-path bruteforce on this host…" item shared by every table panel that offers
-     * it (Endpoints/Parameters/Tech/Findings) -- was 4 independent copies of the same label text
-     * (CLAUDE.md documents the "(active)" suffix as safety-relevant) and gating logic; now one place to
-     * change either. No-op when {@code bruteforce} is null (feature not wired for this panel) or
-     * {@code host} is blank.
-     */
-    protected void addBruteforceMenuItem(JPopupMenu menu, BruteforceEngine bruteforce,
-                                         Settings settings, DataStore store, String host) {
-        if (bruteforce == null || host == null || host.isBlank()) {
-            return;
-        }
-        menu.addSeparator();
-        addMenuItem(menu, "Run known-path bruteforce on this host… (active)", true,
-                () -> RunBruteforceAction.run(this, bruteforce, settings, store, host));
     }
 
     /**

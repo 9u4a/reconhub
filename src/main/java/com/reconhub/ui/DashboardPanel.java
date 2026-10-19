@@ -72,8 +72,6 @@ public final class DashboardPanel extends JPanel implements Refreshable {
     private final DataStore store;
     private final MontoyaApi api;
     private Navigator navigator;
-    private com.reconhub.active.BruteforceEngine bruteforce;
-    private com.reconhub.core.Settings settings;
 
     private final JLabel requests = stat();
     private final JLabel endpoints = stat();
@@ -180,12 +178,6 @@ public final class DashboardPanel extends JPanel implements Refreshable {
     /** Wires cross-tab navigation; called once by {@code MainTab}. */
     public void setNavigator(Navigator navigator) {
         this.navigator = navigator;
-    }
-
-    /** Wires the (ACTIVE) known-path bruteforce action for the host-scorecard menu; called once. */
-    public void setBruteforce(com.reconhub.active.BruteforceEngine engine, com.reconhub.core.Settings settings) {
-        this.bruteforce = engine;
-        this.settings = settings;
     }
 
     private void configureTables() {
@@ -538,12 +530,11 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         JPopupMenu m = new JPopupMenu();
         boolean real = host != null && host.contains(".") && !host.startsWith("(");
         item(m, "Copy host", host != null, () -> UiUtil.copyToClipboard(host));
-        // Reuses whatever scheme was actually observed for this host (RunBruteforceAction.inferScheme)
-        // instead of hardcoding https:// -- the same bug class already fixed on TechPanel.rowUrl and
-        // the bruteforce path (see CLAUDE.md): a hardcoded https:// silently fails for an http-only host
-        // (e.g. a local dev server).
+        // Reuses whatever scheme was actually observed for this host (Hosts.inferScheme) instead of
+        // hardcoding https:// -- the same bug class already fixed on TechPanel.rowUrl (see CLAUDE.md):
+        // a hardcoded https:// silently fails for an http-only host (e.g. a local dev server).
         item(m, "Open in browser", real,
-                () -> UiUtil.openInBrowser(api, RunBruteforceAction.inferScheme(store, host) + "://" + host));
+                () -> UiUtil.openInBrowser(api, Hosts.inferScheme(store, host) + "://" + host));
         m.addSeparator();
         item(m, "View endpoints for this host", navigator != null && real,
                 () -> navigator.filterEndpoints(host));
@@ -551,11 +542,6 @@ public final class DashboardPanel extends JPanel implements Refreshable {
                 () -> navigator.filterParameters(host));
         item(m, "View findings for this host", navigator != null && real,
                 () -> navigator.filterFindings(host));
-        if (bruteforce != null && real) {
-            m.addSeparator();
-            item(m, "Run known-path bruteforce on this host… (active)", true,
-                    () -> RunBruteforceAction.run(this, bruteforce, settings, store, host));
-        }
         if (real) {
             m.addSeparator();
             // 2+ hosts selected (Ctrl/Shift-click, 0.41.0) and the right-clicked row is one of them ->

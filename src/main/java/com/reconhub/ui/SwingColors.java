@@ -92,21 +92,6 @@ final class SwingColors {
         return isDark() ? LINE_DARK : LINE_LIGHT;
     }
 
-    private static final Color BANNER_BG_DARK = new Color(0x3a1414);
-    private static final Color BANNER_FG_DARK = new Color(0xff8a8a);
-    private static final Color BANNER_BG_LIGHT = new Color(0xffe5e5);
-    private static final Color BANNER_FG_LIGHT = new Color(0xb02020);
-
-    /** The Bruteforce tab's ACTIVE banner background. */
-    static Color bannerBg() {
-        return isDark() ? BANNER_BG_DARK : BANNER_BG_LIGHT;
-    }
-
-    /** The Bruteforce tab's ACTIVE banner text/border color. */
-    static Color bannerFg() {
-        return isDark() ? BANNER_FG_DARK : BANNER_FG_LIGHT;
-    }
-
     // ---- zebra striping (0.37.0+) -- every table in ReconHub renders every other row very slightly
     // tinted, purely so a wide table with many columns stays easy to track by eye across the row. ----
 

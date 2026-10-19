@@ -1,7 +1,6 @@
 package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
-import com.reconhub.active.BruteforceEngine;
 import com.reconhub.active.MatchReplaceEngine;
 import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.Bookmarks;
@@ -55,7 +54,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
     private boolean lastKnownDark = SwingColors.isDark();
 
     public MainTab(MontoyaApi api, DataStore store, Settings settings, TrafficIngestor ingestor,
-                   PayloadCheatsheet cheatsheet, BruteforceEngine bruteforce,
+                   PayloadCheatsheet cheatsheet,
                    MatchReplaceEngine matchReplace, Bookmarks bookmarks) {
         setLayout(new BorderLayout());
         this.store = store;
@@ -66,17 +65,11 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         FindingsPanel findings = new FindingsPanel(store, settings, api, cheatsheet, bookmarks);
         JsAssetsPanel jsAssets = new JsAssetsPanel(store, api, ingestor, bookmarks);
         TechPanel tech = new TechPanel(store, api, bookmarks);
-        SettingsPanel settingsPanel = new SettingsPanel(api, store, settings, ingestor, bruteforce, bookmarks);
-        BruteforcePanel bruteforcePanel = new BruteforcePanel(api, settings, bruteforce);
+        SettingsPanel settingsPanel = new SettingsPanel(api, store, settings, ingestor, bookmarks);
         MatchReplacePanel matchReplacePanel = new MatchReplacePanel(api, matchReplace);
         SnapshotDiffPanel snapshotDiff = new SnapshotDiffPanel(api, store);
-        dashboard.setBruteforce(bruteforce, settings);
-        tech.setBruteforce(bruteforce, settings);
-        endpoints.setBruteforce(bruteforce, settings);
         endpoints.setMatchReplace(matchReplace, settings);
-        parameters.setBruteforce(bruteforce, settings);
         parameters.setMatchReplace(matchReplace, settings);
-        findings.setBruteforce(bruteforce);
         findings.setMatchReplace(matchReplace);
         jsAssets.setMatchReplace(matchReplace, settings);
 
@@ -86,7 +79,6 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         addRefreshableTab("Findings", findings);
         addRefreshableTab("JS Assets", jsAssets);
         addRefreshableTab("Tech", tech);
-        addRefreshableTab("Bruteforce", bruteforcePanel);
         addRefreshableTab("Match & Replace", matchReplacePanel);
         addRefreshableTab("Snapshot Diff", snapshotDiff);
         // Settings is a tall stack of sections — scroll it so lower sections stay reachable at
@@ -166,7 +158,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
      * the rest of the Burp process's life, still polling the theme every second on a now-detached
      * component tree. {@code DataStore.addChangeListener(this)} above had no matching removal either.
      * Call once, from {@code ReconHubExtension}'s unload handler (which already correctly shuts down
-     * the ingest/bruteforce/match-replace executors -- this was the missing piece alongside those).
+     * the ingest/match-replace executors -- this was the missing piece alongside those).
      */
     public void dispose() {
         themeTimer.stop();
@@ -178,9 +170,9 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         AbstractTablePanel.clearSharedBodyCache();
     }
 
-    /** Ctrl+1..8 switch tabs, Ctrl+F focuses the current tab's search field (a no-op on tabs without
-     * one, e.g. Bruteforce/Settings). WHEN_IN_FOCUSED_WINDOW so these work regardless of which child
-     * component (table, search field, ...) currently has focus. */
+    /** Ctrl+1..9 switch tabs (bound to however many tabs currently exist), Ctrl+F focuses the current
+     * tab's search field (a no-op on tabs without one, e.g. Settings). WHEN_IN_FOCUSED_WINDOW so these
+     * work regardless of which child component (table, search field, ...) currently has focus. */
     private void installKeyboardShortcuts() {
         var inputMap = getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
         var actionMap = getActionMap();

@@ -2,8 +2,6 @@ package com.reconhub;
 
 import burp.api.montoya.BurpExtension;
 import burp.api.montoya.MontoyaApi;
-import com.reconhub.active.BruteforceEngine;
-import com.reconhub.active.KnownPaths;
 import com.reconhub.active.MatchReplaceEngine;
 import com.reconhub.analysis.PatternRegistry;
 import com.reconhub.analysis.PayloadCheatsheet;
@@ -61,31 +59,21 @@ public final class ReconHubExtension implements BurpExtension {
         }
         IntruderPayloads.register(api, cheatsheet);   // registration only — no traffic sent
 
-        // Known-path bruteforce (ACTIVE — gated per run by a confirmation dialog, see RunBruteforceAction).
-        KnownPaths wordlist = KnownPaths.loadBundled();
-        for (String err : wordlist.loadErrors()) {
-            api.logging().logToError("ReconHub wordlist load: " + err);
-        }
-        BruteforceEngine bruteforce = new BruteforceEngine(
-                api, store, settings, new ScopeFilter(api, settings), wordlist.entries());
-
-        // Match & Replace bulk send (ACTIVE -- off by default via settings.isMatchReplaceEnabled(),
-        // see Settings' field comment for why this doesn't reuse bruteforce's no-toggle exception).
-        // Its own ScopeFilter instance, same as bruteforce's above and SettingsPanel.doRemoveOutOfScope
-        // -- cheap/stateless, no need to share one.
+        // Match & Replace bulk send -- ReconHub's only ACTIVE feature (off by default via
+        // settings.isMatchReplaceEnabled()). Its own ScopeFilter instance (cheap/stateless, same as
+        // SettingsPanel.doRemoveOutOfScope -- no need to share one).
         MatchReplaceEngine matchReplace = new MatchReplaceEngine(api, settings, new ScopeFilter(api, settings));
 
         api.http().registerHttpHandler(ingestor);
         api.userInterface().registerContextMenuItemsProvider(new SendToReconHubMenu(ingestor));
 
-        MainTab mainTab = buildUi(api, store, settings, ingestor, cheatsheet, bruteforce, matchReplace, bookmarks);
+        MainTab mainTab = buildUi(api, store, settings, ingestor, cheatsheet, matchReplace, bookmarks);
         api.userInterface().registerSuiteTab("ReconHub", mainTab.component());
 
         api.extension().registerUnloadingHandler(() -> {
             settings.save(api);
             bookmarks.save(api);
             ingestor.shutdown();
-            bruteforce.shutdown();
             matchReplace.shutdown();
             // 0.43.8: stops MainTab's theme-poll Timer and detaches its DataStore listener -- without
             // this, both outlived the unload indefinitely (see MainTab.dispose()'s javadoc).
@@ -104,11 +92,10 @@ public final class ReconHubExtension implements BurpExtension {
 
     private static MainTab buildUi(MontoyaApi api, DataStore store, Settings settings,
                                    TrafficIngestor ingestor, PayloadCheatsheet cheatsheet,
-                                   BruteforceEngine bruteforce, MatchReplaceEngine matchReplace,
-                                   Bookmarks bookmarks) {
+                                   MatchReplaceEngine matchReplace, Bookmarks bookmarks) {
         AtomicReference<MainTab> ref = new AtomicReference<>();
         Runnable build = () -> ref.set(
-                new MainTab(api, store, settings, ingestor, cheatsheet, bruteforce, matchReplace, bookmarks));
+                new MainTab(api, store, settings, ingestor, cheatsheet, matchReplace, bookmarks));
         if (SwingUtilities.isEventDispatchThread()) {
             build.run();
         } else {

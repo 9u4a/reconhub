@@ -38,25 +38,10 @@ public final class Settings {
     private final Set<FindingTaxonomy.Category> mutedCategories =
             Collections.synchronizedSet(EnumSet.noneOf(FindingTaxonomy.Category.class));
 
-    // --- Known-path bruteforce (ACTIVE — sends its own traffic). No master on/off switch: the user
-    // explicitly types/edits the target and clicks OK on a confirmation dialog every single run (see
-    // RunBruteforceAction) -- a deliberate, discussed exception to the workspace target-load safety
-    // policy's default-OFF-flag requirement (2026-09-17), since that per-run confirmation already is
-    // explicit informed consent. The other two policy requirements still apply in full: every send
-    // goes through active.Throttler paced by delayMs and capped by bruteforceMaxRequestsPerHost
-    // (user-adjustable, see BruteforcePanel), and the UI clearly labels the feature ACTIVE (banner +
-    // "(active)" menu suffix).
-    private volatile int bruteforceDelayMs = 200;
-    private volatile int bruteforceConcurrency = 1;
-    private volatile int bruteforceMaxRequestsPerHost = 3000;
-
-    // --- Match & Replace bulk send (ACTIVE -- sends its own traffic). Unlike bruteforce above, this
-    // DOES default to off via a settings flag: the bruteforce "no master toggle" design was a one-time,
-    // explicitly-discussed exception for that one feature (2026-09-17), not a general precedent, so a
-    // brand-new active feature follows the workspace target-load-safety policy's actual default
-    // (settings flag OFF + throttle + ACTIVE labeling) instead of silently reusing that exception. A
-    // per-run confirmation dialog (ui.MatchReplaceDialog) is still required on top of this flag, same
-    // strength as bruteforce's.
+    // --- Match & Replace bulk send -- ReconHub's only ACTIVE (traffic-generating) feature (0.46.0
+    // removed the known-path bruteforce). Follows the workspace target-load-safety policy's default:
+    // a settings flag OFF by default + throttle (delay/concurrency) + ACTIVE labeling, plus a per-run
+    // confirmation dialog (ui.MatchReplaceDialog) on top of the flag.
     private volatile boolean matchReplaceEnabled = false;
     private volatile int matchReplaceDelayMs = 500;
     private volatile int matchReplaceConcurrency = 1;
@@ -117,24 +102,6 @@ public final class Settings {
         return sev.ordinal() <= minFindingSeverity.ordinal() && !mutedCategories.contains(cat);
     }
 
-    public int getBruteforceDelayMs() { return bruteforceDelayMs; }
-    // Upper bound matches the BruteforcePanel spinner's own max (60s/request) -- this setter is the
-    // real contract (public, reachable from any future call site, not just the spinner), and was
-    // previously one-sided: an absurd delay would park the Throttler's pace lock indefinitely with no
-    // way to tell why, on the one feature CLAUDE.md documents as safety-critical.
-    public void setBruteforceDelayMs(int ms) { this.bruteforceDelayMs = Math.max(0, Math.min(ms, 60_000)); }
-
-    public int getBruteforceConcurrency() { return bruteforceConcurrency; }
-    public void setBruteforceConcurrency(int n) { this.bruteforceConcurrency = Math.max(1, Math.min(n, 10)); }
-
-    public int getBruteforceMaxRequestsPerHost() { return bruteforceMaxRequestsPerHost; }
-    // Upper bound matches the BruteforcePanel spinner's own max -- same rationale as setBruteforceDelayMs
-    // above: an unbounded budget defeats the per-host request cap that CLAUDE.md names as one of the
-    // three mandatory target-load-safety requirements.
-    public void setBruteforceMaxRequestsPerHost(int n) {
-        this.bruteforceMaxRequestsPerHost = Math.max(1, Math.min(n, 20_000));
-    }
-
     public boolean isMatchReplaceEnabled() { return matchReplaceEnabled; }
     public void setMatchReplaceEnabled(boolean b) { this.matchReplaceEnabled = b; }
 
@@ -173,9 +140,6 @@ public final class Settings {
         String scopeExcludeRegex;
         String minFindingSeverity;
         Set<FindingTaxonomy.Category> mutedCategories;
-        int bruteforceDelayMs;
-        int bruteforceConcurrency;
-        int bruteforceMaxRequestsPerHost;
         boolean matchReplaceEnabled;
         int matchReplaceDelayMs;
         int matchReplaceConcurrency;
@@ -198,9 +162,6 @@ public final class Settings {
         // Snapshot into a plain HashSet -- Gson serializes java.util.Collections$SynchronizedSet fine
         // in practice, but a plain copy avoids relying on that and matches every other set field here.
         d.mutedCategories = new java.util.HashSet<>(mutedCategories);
-        d.bruteforceDelayMs = bruteforceDelayMs;
-        d.bruteforceConcurrency = bruteforceConcurrency;
-        d.bruteforceMaxRequestsPerHost = bruteforceMaxRequestsPerHost;
         d.matchReplaceEnabled = matchReplaceEnabled;
         d.matchReplaceDelayMs = matchReplaceDelayMs;
         d.matchReplaceConcurrency = matchReplaceConcurrency;
@@ -239,9 +200,6 @@ public final class Settings {
         if (d.mutedCategories != null) {
             s.mutedCategories.addAll(d.mutedCategories);
         }
-        s.bruteforceDelayMs = d.bruteforceDelayMs;   // already clamped when originally set/saved
-        s.bruteforceConcurrency = d.bruteforceConcurrency == 0 ? 1 : d.bruteforceConcurrency;
-        s.bruteforceMaxRequestsPerHost = d.bruteforceMaxRequestsPerHost == 0 ? 3000 : d.bruteforceMaxRequestsPerHost;
         s.matchReplaceEnabled = d.matchReplaceEnabled;   // absent/false on old saves -- correct default
         s.matchReplaceDelayMs = d.matchReplaceDelayMs == 0 ? 500 : d.matchReplaceDelayMs;
         s.matchReplaceConcurrency = d.matchReplaceConcurrency == 0 ? 1 : d.matchReplaceConcurrency;

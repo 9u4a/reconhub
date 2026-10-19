@@ -2,7 +2,6 @@ package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
-import com.reconhub.active.BruteforceEngine;
 import com.reconhub.active.MatchReplaceEngine;
 import com.reconhub.active.MatchReplaceTarget;
 import com.reconhub.analysis.FindingTaxonomy;
@@ -63,7 +62,6 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
             new ColumnValueFilter<>("Host", f -> Hosts.label(f.getHost()));
     private boolean rebuildingCatBox;
     private DashboardPanel.Navigator navigator;
-    private BruteforceEngine bruteforce;
     private MatchReplaceEngine matchReplace;
 
     public FindingsPanel(DataStore store, Settings settings, MontoyaApi api,
@@ -143,11 +141,6 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     /** Wires cross-tab navigation (finding → related endpoints/parameters). */
     public void setNavigator(DashboardPanel.Navigator navigator) {
         this.navigator = navigator;
-    }
-
-    /** Wires the (ACTIVE) known-path bruteforce action for this tab's right-click menu; called once. */
-    public void setBruteforce(BruteforceEngine engine) {
-        this.bruteforce = engine;
     }
 
     /** Wires the (ACTIVE) Match & Replace bulk-send action for this tab's right-click menu; called
@@ -327,7 +320,6 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
             // finding might still be worth an IDOR/SSRF cheatsheet look even with no automatic hit.
             PayloadCheatsheetMenu.addTo(menu, this, cheatsheet, f.getType(), suggested);
         }
-        addBruteforceMenuItem(menu, bruteforce, settings, store, host);
         addDeleteHostMenuItem(menu, store, host);
         menu.addSeparator();
         for (Finding.Triage t : Finding.Triage.values()) {

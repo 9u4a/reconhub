@@ -64,26 +64,20 @@ class SwingColorsTest {
     }
 
     @Test
-    void lineAndBannerColorsDifferBetweenThemes() {
+    void lineColorDiffersBetweenThemes() {
         ApiStub stub = new ApiStub();
         SwingColors.init(stub.api);
 
         stub.setTheme(Theme.DARK);
         var darkLine = SwingColors.line();
-        var darkBannerBg = SwingColors.bannerBg();
-        var darkBannerFg = SwingColors.bannerFg();
 
         stub.setTheme(Theme.LIGHT);
         var lightLine = SwingColors.line();
-        var lightBannerBg = SwingColors.bannerBg();
-        var lightBannerFg = SwingColors.bannerFg();
 
-        // These three were the ones actually confirmed dark-tuned this round (a near-black separator,
-        // a near-black-red banner) -- they must have a real, distinct light-theme variant, not just
-        // fall through to the same hardcoded value regardless of theme.
+        // line() (a near-black separator in dark theme) must have a real, distinct light-theme variant,
+        // not fall through to the same hardcoded value regardless of theme. (The ACTIVE-banner colors
+        // this test also covered were removed in 0.46.0 along with the bruteforce tab.)
         assertFalse(darkLine.equals(lightLine), "line() must differ between themes");
-        assertFalse(darkBannerBg.equals(lightBannerBg), "bannerBg() must differ between themes");
-        assertFalse(darkBannerFg.equals(lightBannerFg), "bannerFg() must differ between themes");
     }
 
     // ---- blend()/stripe() -- the zebra-striping math (0.37.0) --------------------------------------

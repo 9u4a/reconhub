@@ -1,10 +1,9 @@
 package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
-import com.reconhub.active.BruteforceEngine;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
-import com.reconhub.core.Settings;
+import com.reconhub.core.Hosts;
 import com.reconhub.model.TechInfo;
 
 import javax.swing.BorderFactory;
@@ -25,8 +24,6 @@ public final class TechPanel extends AbstractTablePanel<TechInfo> {
 
     private final DataStore store;
     private final JPanel detailBody = new JPanel();
-    private BruteforceEngine bruteforce;
-    private Settings settings;
 
     // Same Burp-History-filter-style checklist as Endpoints/Parameters/Findings (0.41.0) -- one row per
     // host here, so the value is picking several hosts at once, not narrowing within one. Technologies/
@@ -59,18 +56,11 @@ public final class TechPanel extends AbstractTablePanel<TechInfo> {
         hostFilter.refreshAvailableValues(rows());
     }
 
-    /** Wires the (ACTIVE) known-path bruteforce action for this tab's right-click menu; called once. */
-    public void setBruteforce(BruteforceEngine engine, Settings settings) {
-        this.bruteforce = engine;
-        this.settings = settings;
-    }
-
     @Override
     protected void extraMenuItems(JPopupMenu menu, TechInfo t) {
         if (t == null) {
             return;
         }
-        addBruteforceMenuItem(menu, bruteforce, settings, store, t.getHost());
         addDeleteHostMenuItem(menu, store, t.getHost());
     }
 
@@ -116,10 +106,10 @@ public final class TechPanel extends AbstractTablePanel<TechInfo> {
         if (t == null || t.getHost() == null || t.getHost().isBlank()) {
             return null;
         }
-        // Reuse the scheme actually observed for this host (see RunBruteforceAction.inferScheme and the
-        // CLAUDE.md note on this exact bug class) -- a hardcoded https:// sends Open-in-browser/Send-to-
-        // Repeater at the wrong scheme for any http-only host (e.g. a local dev server).
-        return RunBruteforceAction.inferScheme(store, t.getHost()) + "://" + t.getHost();
+        // Reuse the scheme actually observed for this host (see Hosts.inferScheme and the CLAUDE.md note
+        // on this exact bug class) -- a hardcoded https:// sends Open-in-browser/Send-to-Repeater at the
+        // wrong scheme for any http-only host (e.g. a local dev server).
+        return Hosts.inferScheme(store, t.getHost()) + "://" + t.getHost();
     }
 
     @Override
