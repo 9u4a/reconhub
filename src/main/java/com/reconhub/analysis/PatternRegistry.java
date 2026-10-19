@@ -157,7 +157,7 @@ public final class PatternRegistry {
     private void loadJsFindings(Gson gson) {
         // Four files, one combined list -- each rule self-describes via name/severity.
         for (String path : new String[]{"/patterns/js-crypto.json", "/patterns/js-authz.json",
-                "/patterns/js-sinks.json", "/patterns/js-config.json"}) {
+                "/patterns/js-sinks.json", "/patterns/js-config.json", "/patterns/js-api-calls.json"}) {
             SecretsFile f = read(gson, path, SecretsFile.class);
             if (f == null || f.patterns == null) {
                 continue;

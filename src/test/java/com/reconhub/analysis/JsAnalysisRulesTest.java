@@ -37,11 +37,11 @@ class JsAnalysisRulesTest {
     }
 
     @Test
-    void rulesLoadedFromAllFourFiles() {
-        // 9 crypto + 5 authz + 12 sinks + 5 config = 31 at time of writing; assert a healthy floor so a
-        // silently-dropped file (bad JSON) fails the build.
-        assertTrue(REGISTRY.jsFindingRules().size() >= 25,
-                "expected the four JS rule files to load, got " + REGISTRY.jsFindingRules().size());
+    void rulesLoadedFromAllFiles() {
+        // 9 crypto + 5 authz + 12 sinks + 5 config + 14 api-calls = 45 at time of writing; assert a
+        // healthy floor so a silently-dropped file (bad JSON) fails the build.
+        assertTrue(REGISTRY.jsFindingRules().size() >= 40,
+                "expected the JS rule files to load, got " + REGISTRY.jsFindingRules().size());
     }
 
     @Test
@@ -104,6 +104,26 @@ class JsAnalysisRulesTest {
             String name = firstMatchName(snippet);
             assertTrue(name != null, "should match a config rule: " + snippet);
             assertEquals(FindingTaxonomy.Category.INFO_LEAK, FindingTaxonomy.categoryOf(name),
+                    "wrong category for [" + name + "] from: " + snippet);
+        }
+    }
+
+    @Test
+    void apiCallSnippetsMatchAndClassifyAsApi() {
+        for (String snippet : new String[]{
+                "fetch('/api/users', { method: 'POST' })",
+                "axios.post('/api/login', body)",
+                "xhr.open('GET', url); xhr.setRequestHeader('Authorization', 'Bearer ' + t);",
+                "$.ajax({ url: '/api/data' })",
+                "const c = axios.create({ baseURL: API_ROOT, timeout: 5000 });",
+                "navigator.sendBeacon('/log', data)",
+                "const ws = new WebSocket('wss://example.com/ws');",
+                "headers: { Authorization: `Bearer ${token}` }",
+                "headers: { 'X-API-Key': 'abc' }",
+                "fetch(url, { credentials: 'include' })"}) {
+            String name = firstMatchName(snippet);
+            assertTrue(name != null, "should match an API-call rule: " + snippet);
+            assertEquals(FindingTaxonomy.Category.API, FindingTaxonomy.categoryOf(name),
                     "wrong category for [" + name + "] from: " + snippet);
         }
     }

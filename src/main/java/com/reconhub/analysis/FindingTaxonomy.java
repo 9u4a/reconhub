@@ -71,7 +71,10 @@ public final class FindingTaxonomy {
         if (has(t, "cors", "csp", "cookie", "mixed content", "cacheable", "missing security header")) {
             return Category.MISCONFIG;
         }
-        if (has(t, "graphql", "api spec", "spec exposed")) {
+        if (has(t, "graphql", "api spec", "spec exposed",
+                "fetch", "axios", "xmlhttprequest", "xhr request", "ajax", "websocket", "sendbeacon",
+                "httpclient", "api call", "api key", "authorization header", "request header",
+                "credentials included", "baseurl", "method option")) {
             return Category.API;
         }
         if (has(t, "open redirect", "xss", "reflected param")) {
