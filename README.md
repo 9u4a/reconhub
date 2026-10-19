@@ -17,6 +17,7 @@
 | **Parameters** | 파라미터 + 취약점 후보 Class 자동 분류, **다중 선택 → Match & Replace 전송** |
 | **Findings** | 탐지 결과 심각도/카테고리 집계 + 트리아지, **다중 선택 → Match & Replace 전송** |
 | **JS Assets** | JS 파일 수집·분석 (엔드포인트/시크릿 추출), **다중 선택 → Match & Replace 전송** |
+| **JS Analysis** | JS에서 나온 로직/API 탐지 결과(암복호화·권한·위험 싱크·설정·API 호출)를 번들 가로질러 한 곳에 모아 카테고리·심각도·호스트로 필터 |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 체크 |
 | **Match & Replace** ⚠**ACTIVE** | Endpoints/Parameters/Findings/JS Assets에서 선택한 행에 헤더/쿠키 값 또는 원문 전체 치환 규칙(**여러 개 체이닝 가능**) 적용해 재전송, 결과+상세 확인 |
 | **Snapshot Diff** | 저장해둔 State 파일을 불러와 현재 데이터와 비교, 새로 생긴/사라진 항목 표시 |
@@ -84,6 +85,13 @@ JS 수집(SHA-256 dedup·옵션 저장) + 내부 엔드포인트·시크릿 추�
 않고 구분할 수 있는 **Preview** 컬럼(감지된 엔드포인트 샘플, 없으면 코드 스니펫), 행 선택 시
 **Response 탭**에서 캡처된 응답 원문 확인(임포트된 파일은 없음). 트래픽에 안 잡힌 파일은 **Import JS
 file(s)…**로 로컬에서 불러와 동일 분석.
+
+### JS Analysis
+JS에서 나온 탐지 결과만 번들을 가로질러 한 곳에 모아 보는 탭 — 암복호화·권한/인가·위험 싱크/DOM·민감
+설정·API 호출 방식(+JS 내 시크릿·주석). Findings 탭에도 들어가지만 여기서는 **JS 소스만** 추려
+Severity/Category/Type/JS 파일/Evidence 컬럼으로 보여주고, **Category 콤보·Severity 토글·Host 체크박스
+필터**로 좁힐 수 있음(예: "전체 번들의 Crypto 사용만"). 행 선택 시 해당 JS 응답 원문을 뷰어에서 확인.
+판정 기준: finding의 `locationUrl`이 알려진 JS 파일 URL과 일치하면 JS 소스로 간주(모델 변경 없음).
 
 ### Tech
 호스트별 기술 식별 + 보안 헤더 누락 체크(Findings에도 동일 항목이 LOW로 집계). 검색창 옆 **Host 필터

@@ -64,6 +64,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         ParametersPanel parameters = new ParametersPanel(store, api, cheatsheet, bookmarks);
         FindingsPanel findings = new FindingsPanel(store, settings, api, cheatsheet, bookmarks);
         JsAssetsPanel jsAssets = new JsAssetsPanel(store, api, ingestor, bookmarks);
+        JsAnalysisPanel jsAnalysis = new JsAnalysisPanel(store, api, bookmarks);
         TechPanel tech = new TechPanel(store, api, bookmarks);
         SettingsPanel settingsPanel = new SettingsPanel(api, store, settings, ingestor, bookmarks);
         MatchReplacePanel matchReplacePanel = new MatchReplacePanel(api, matchReplace);
@@ -78,6 +79,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         addRefreshableTab("Parameters", parameters);
         addRefreshableTab("Findings", findings);
         addRefreshableTab("JS Assets", jsAssets);
+        addRefreshableTab("JS Analysis", jsAnalysis);
         addRefreshableTab("Tech", tech);
         addRefreshableTab("Match & Replace", matchReplacePanel);
         addRefreshableTab("Snapshot Diff", snapshotDiff);
