@@ -102,8 +102,11 @@ public final class TrafficIngestor implements HttpHandler {
         this.authzScanner = new SecretScanner(store, patterns.authzRules(), false);
         this.commentExtractor = new CommentExtractor(store);
         this.sourceMapDetector = new SourceMapDetector(store);
-        this.jsAnalyzer = new JsAnalyzer(api, store, patterns, secretScanner, commentExtractor,
-                sourceMapDetector, settings);
+        // JS-only deep-analysis scanner (0.47.0): crypto/authz/sink/config locators, evidence shown
+        // (non-sensitive). Runs inside JsAnalyzer so both live capture and manual JS import are covered.
+        SecretScanner jsFindingScanner = new SecretScanner(store, patterns.jsFindingRules(), false);
+        this.jsAnalyzer = new JsAnalyzer(api, store, patterns, secretScanner, jsFindingScanner,
+                commentExtractor, sourceMapDetector, settings);
         this.techFingerprinter = new TechFingerprinter(store, patterns);
         this.misconfigInspector = new MisconfigInspector(store, secretScanner);
         this.apiSpecAnalyzer = new ApiSpecAnalyzer(store);

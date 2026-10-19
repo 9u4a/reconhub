@@ -24,7 +24,10 @@
 
 **탐지 항목**: 시크릿(API 키/JWT/쿠키값 포함)·PII·오픈 리다이렉트·반사 XSS 후보·응답 시그니처(스택
 트레이스/SQL 에러)·CORS/쿠키/CSP/캐시 미스컨피그·노출 파일(`.env`·`.git`)·OpenAPI/Swagger·GraphQL
-introspection·소스맵 노출·주석·누락 보안 헤더.
+introspection·소스맵 노출·주석·누락 보안 헤더. **JS 심화 분석**(정적): 암복호화 로직(CryptoJS/Web
+Crypto/JSEncrypt·하드코딩 키/IV·약한 알고리즘·client-side JWT 서명), client-side 권한/인가 로직
+(role 체크·라우트 가드·권한 리스트), 위험 싱크/DOM(eval·innerHTML·postMessage·DOM-XSS 소스), 민감
+설정(debug 플래그·비운영 호스트·클라우드 버킷).
 
 **공통 기능**: 검색(정규식·AND·본문)·정렬(**`Shift`+클릭으로 다중 컬럼**)·CSV 내보내기·행 우클릭 Copy/Repeater/Intruder/
 curl·JS Beautify·**북마크/메모**·**키보드 단축키**·**다크테마 자동 대응**·**모든 표 줄무늬(zebra)

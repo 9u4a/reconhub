@@ -74,6 +74,7 @@ final class SwingColors {
             case INFO_LEAK -> new Color(0x4da3ff);
             case API -> new Color(0x3fb950);
             case INJECTION -> new Color(0xff9d4d);
+            case CRYPTO -> new Color(0x5ad1c7);
             case COMMENT -> new Color(0x9aa4b2);
             case OTHER -> new Color(0x9aa4b2);
         };

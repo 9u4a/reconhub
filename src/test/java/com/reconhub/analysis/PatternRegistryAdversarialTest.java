@@ -39,13 +39,14 @@ class PatternRegistryAdversarialTest {
 
     private static final PatternRegistry REGISTRY = PatternRegistry.load();
 
-    /** {@code signatureRules() + secretRules() + authzRules()} -- every {@code SecretRule}, regardless
-     * of which JSON file it came from. */
+    /** Every {@code SecretRule}, regardless of which JSON file it came from: {@code signatureRules() +
+     * secretRules() + authzRules() + jsFindingRules()} (the last added 0.47.0). */
     private static List<PatternRegistry.SecretRule> allSecretRules() {
         List<PatternRegistry.SecretRule> all = new ArrayList<>();
         all.addAll(REGISTRY.signatureRules());
         all.addAll(REGISTRY.secretRules());
         all.addAll(REGISTRY.authzRules());
+        all.addAll(REGISTRY.jsFindingRules());
         return all;
     }
 

@@ -28,6 +28,7 @@ public final class FindingTaxonomy {
         INFO_LEAK("Info leak"),
         API("API"),
         INJECTION("Injection"),
+        CRYPTO("Crypto"),
         COMMENT("Comment"),
         OTHER("Other");
 
@@ -54,6 +55,19 @@ public final class FindingTaxonomy {
     private static Category compute(String type) {
         String t = type.toLowerCase(Locale.ROOT);
 
+        // JS deep-analysis families (0.47.0) checked first -- their names contain tokens ("cipher",
+        // "cookie access", ...) that later branches (MISCONFIG's "cookie", SECRET's "key") would
+        // otherwise claim.
+        if (has(t, "crypto", "cipher", "jsencrypt", "sjcl", "base64", "jwt signing",
+                "key/iv", "weak cipher", "weak hash")) {
+            return Category.CRYPTO;
+        }
+        if (has(t, "eval", "function constructor", "innerhtml", "document.write", "insertadjacent",
+                "settimeout", "setinterval", "postmessage", "message event", "dom xss",
+                "cookie access", "html() sink", "dangerously")) {
+            return Category.INJECTION;
+        }
+
         if (has(t, "cors", "csp", "cookie", "mixed content", "cacheable", "missing security header")) {
             return Category.MISCONFIG;
         }
@@ -64,7 +78,7 @@ public final class FindingTaxonomy {
             return Category.INJECTION;
         }
         if (has(t, "role", "admin", "privile", "permission", "scope",
-                "authorit", "access level", "clearance")) {
+                "authorit", "access level", "clearance", "guard")) {
             return Category.AUTH;
         }
         if (has(t, "rrn", "주민", "card number", "phone", "email")) {
@@ -72,7 +86,8 @@ public final class FindingTaxonomy {
         }
         if (has(t, "stack", "trace", "traceback", "exception", "error", "debug",
                 "directory listing", "internal path", "var_dump", "print_r",
-                "s3", "blob", "storage", "private ipv4", "exposed", "backup")) {
+                "s3", "blob", "storage", "private ipv4", "exposed", "backup",
+                "feature flag", "non-prod", "internal/", "api base url", "bucket")) {
             return Category.INFO_LEAK;
         }
         if (has(t, "comment")) {

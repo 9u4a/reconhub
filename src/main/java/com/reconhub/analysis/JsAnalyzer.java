@@ -38,18 +38,21 @@ public final class JsAnalyzer {
     private final DataStore store;
     private final PatternRegistry patterns;
     private final SecretScanner secretScanner;
+    private final SecretScanner jsFindingScanner;   // crypto/authz/sink/config locators (0.47.0)
     private final CommentExtractor commentExtractor;
     private final SourceMapDetector sourceMapDetector;
     private final Settings settings;
     private final AtomicInteger saveFailures = new AtomicInteger();
 
     public JsAnalyzer(MontoyaApi api, DataStore store, PatternRegistry patterns,
-                      SecretScanner secretScanner, CommentExtractor commentExtractor,
+                      SecretScanner secretScanner, SecretScanner jsFindingScanner,
+                      CommentExtractor commentExtractor,
                       SourceMapDetector sourceMapDetector, Settings settings) {
         this.api = api;
         this.store = store;
         this.patterns = patterns;
         this.secretScanner = secretScanner;
+        this.jsFindingScanner = jsFindingScanner;
         this.commentExtractor = commentExtractor;
         this.sourceMapDetector = sourceMapDetector;
         this.settings = settings;
@@ -82,6 +85,13 @@ public final class JsAnalyzer {
 
         int secrets = secretScanner.scan(body, url, messages);
         asset.setExtractedSecrets(secrets);
+
+        // Deep JS analysis (0.47.0): crypto/authz/sink/config locators. Runs here (not only in
+        // TrafficIngestor.process) so a manually-imported JS file is analyzed too. Findings only --
+        // not counted into the "Secrets" column.
+        if (jsFindingScanner != null) {
+            jsFindingScanner.scan(body, url, messages);
+        }
 
         sourceMapDetector.checkJsBody(url, body, messages);
 

@@ -58,6 +58,10 @@ public final class PatternRegistry {
     private final List<SecretRule> secretRules = new ArrayList<>();
     private final List<SecretRule> signatureRules = new ArrayList<>();   // interesting-response signatures
     private final List<SecretRule> authzRules = new ArrayList<>();       // authorization/privilege values
+    // JS-only deep-analysis rules (0.47.0): crypto/authz/sink/config locators, scanned against JS bodies
+    // in JsAnalyzer. Loaded from four files but exposed as one list -- each rule carries its own
+    // name/severity, and FindingTaxonomy derives the category from the name.
+    private final List<SecretRule> jsFindingRules = new ArrayList<>();
     private final List<JsLinkRule> jsLinkRules = new ArrayList<>();
     private final List<TechRule> techRules = new ArrayList<>();
     private final List<String> securityHeaders = new ArrayList<>();
@@ -66,6 +70,7 @@ public final class PatternRegistry {
     public List<SecretRule> secretRules() { return secretRules; }
     public List<SecretRule> signatureRules() { return signatureRules; }
     public List<SecretRule> authzRules() { return authzRules; }
+    public List<SecretRule> jsFindingRules() { return jsFindingRules; }
     public List<JsLinkRule> jsLinkRules() { return jsLinkRules; }
     public List<TechRule> techRules() { return techRules; }
     public List<String> securityHeaders() { return securityHeaders; }
@@ -78,6 +83,7 @@ public final class PatternRegistry {
         r.loadSecrets(gson);
         r.loadSignatures(gson);
         r.loadAuthz(gson);
+        r.loadJsFindings(gson);
         r.loadJsLinks(gson);
         r.loadTech(gson);
         return r;
@@ -144,6 +150,25 @@ public final class PatternRegistry {
                 authzRules.add(new SecretRule(raw.name, sev, Pattern.compile(raw.regex)));
             } catch (PatternSyntaxException e) {
                 loadErrors.add("authz[" + raw.name + "]: " + e.getMessage());
+            }
+        }
+    }
+
+    private void loadJsFindings(Gson gson) {
+        // Four files, one combined list -- each rule self-describes via name/severity.
+        for (String path : new String[]{"/patterns/js-crypto.json", "/patterns/js-authz.json",
+                "/patterns/js-sinks.json", "/patterns/js-config.json"}) {
+            SecretsFile f = read(gson, path, SecretsFile.class);
+            if (f == null || f.patterns == null) {
+                continue;
+            }
+            for (SecretsFile.Raw raw : f.patterns) {
+                try {
+                    jsFindingRules.add(new SecretRule(raw.name, parseSeverity(raw.severity),
+                            Pattern.compile(raw.regex)));
+                } catch (PatternSyntaxException e) {
+                    loadErrors.add(path + "[" + raw.name + "]: " + e.getMessage());
+                }
             }
         }
     }

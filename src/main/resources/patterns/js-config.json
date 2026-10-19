@@ -1,0 +1,10 @@
+{
+  "comment": "Sensitive config / flag / non-prod leak locators in JS (0.47.0). Scanned against JS bodies only. Passive. Bounded spans (ReDoS; S3/Azure shapes mirror the 0.41.2-audited secrets.json bounds). Reported non-sensitive.",
+  "patterns": [
+    { "name": "Debug flag enabled", "severity": "LOW", "regex": "(?i)[\"']?(?:debug|verbose|devmode|dev_?mode|is_?dev|testing|trace_?enabled)[\"']?\\s{0,5}[:=]\\s{0,5}(?:true|1|[\"']true[\"'])\\b" },
+    { "name": "Feature flags object", "severity": "INFO", "regex": "(?i)[\"']?(?:featureflags?|feature_?flags?|featureToggles?|toggles)[\"']?\\s{0,5}[:=]\\s{0,5}[\\[{]" },
+    { "name": "Internal/non-prod host URL", "severity": "LOW", "regex": "(?i)https?://(?:localhost|127\\.0\\.0\\.1|[a-z0-9.-]{1,60}\\.(?:dev|test|qa|uat|stg|staging|internal|intranet|corp|local))(?:[:/][^\"'\\s]{0,80})?" },
+    { "name": "Hardcoded API base URL", "severity": "INFO", "regex": "(?i)(?:api_?base_?url|base_?url|api_?url|apiHost|endpoint|baseEndpoint|serviceUrl)\\s{0,5}[:=]\\s{0,5}[\"']https?://[^\"']{1,120}[\"']" },
+    { "name": "Cloud storage bucket reference", "severity": "LOW", "regex": "(?i)(?:[a-z0-9.-]{1,63}\\.s3[.-][a-z0-9-]{1,30}\\.amazonaws\\.com|storage\\.googleapis\\.com/[a-z0-9._-]{1,63}|[a-z0-9]{1,63}\\.blob\\.core\\.windows\\.net)" }
+  ]
+}
