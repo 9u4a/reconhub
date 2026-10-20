@@ -1,19 +1,8 @@
 {
-  "comment": "How JS talks to APIs (0.48.0): HTTP client/mechanism, method, auth headers, base-URL config. Scanned against JS bodies only (JsAnalyzer). Passive inventory -- these orient an analyst ('this bundle uses axios + Bearer against a baseURL'), not vulns. Bounded spans (ReDoS). Reported non-sensitive. Categorized API by FindingTaxonomy.",
+  "comment": "How JS authenticates to APIs (0.48.0; trimmed 0.52.0 to auth-bearing signals only -- the generic fetch/axios/XHR/baseURL inventory was noise). Scanned against JS bodies only (JsAnalyzer). Passive. Bounded spans (ReDoS). Reported non-sensitive. Categorized API by FindingTaxonomy.",
   "patterns": [
-    { "name": "fetch() API call", "severity": "INFO", "regex": "\\bfetch\\s{0,5}\\(" },
-    { "name": "fetch method option", "severity": "INFO", "regex": "(?i)method\\s{0,5}:\\s{0,5}[\"'](?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)[\"']" },
-    { "name": "XMLHttpRequest open", "severity": "INFO", "regex": "\\.open\\s{0,5}\\(\\s{0,5}[\"'](?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)[\"']" },
-    { "name": "XHR request header (auth)", "severity": "MEDIUM", "regex": "setRequestHeader\\s{0,5}\\(\\s{0,5}[\"'](?:Authorization|X-API-Key|X-Auth-Token|X-Access-Token|Cookie)[\"']" },
-    { "name": "axios call", "severity": "INFO", "regex": "\\baxios\\s{0,5}\\(" },
-    { "name": "axios method call", "severity": "INFO", "regex": "\\baxios\\.(?:get|post|put|delete|patch|head|options|request)\\s{0,5}\\(" },
-    { "name": "axios baseURL config", "severity": "LOW", "regex": "axios\\.create\\s{0,5}\\(\\s{0,5}\\{[^}]{0,160}baseURL" },
-    { "name": "jQuery ajax call", "severity": "INFO", "regex": "\\$\\.(?:ajax|get|post|getJSON)\\s{0,5}\\(" },
-    { "name": "Angular HttpClient call", "severity": "INFO", "regex": "\\bhttp(?:Client)?\\.(?:get|post|put|delete|patch|request)\\s{0,5}[(<]" },
-    { "name": "navigator.sendBeacon call", "severity": "INFO", "regex": "navigator\\.sendBeacon\\s{0,5}\\(" },
-    { "name": "WebSocket connect", "severity": "LOW", "regex": "new\\s{1,5}WebSocket\\s{0,5}\\(" },
+    { "name": "XHR request header (auth)", "severity": "MEDIUM", "regex": "setRequestHeader\\s{0,5}\\(\\s{0,5}[\"'](?:Authorization|X-API-Key|X-Auth-Token|X-Access-Token)[\"']" },
     { "name": "Authorization header in request", "severity": "MEDIUM", "regex": "(?i)[\"']?Authorization[\"']?\\s{0,5}:\\s{0,5}[\"'`](?:Bearer|Basic|Token|JWT)\\b" },
-    { "name": "API key header", "severity": "MEDIUM", "regex": "(?i)[\"']?(?:x-api-key|api[_-]?key|x-auth-token|x-access-token|apikey)[\"']?\\s{0,5}:\\s{0,5}[\"'`]" },
-    { "name": "Credentials included in request", "severity": "LOW", "regex": "(?i)(?:withCredentials\\s{0,5}[:=]\\s{0,5}true|credentials\\s{0,5}:\\s{0,5}[\"'](?:include|same-origin)[\"'])" }
+    { "name": "API key header", "severity": "MEDIUM", "regex": "(?i)[\"']?(?:x-api-key|api[_-]?key|x-auth-token|x-access-token|apikey)[\"']?\\s{0,5}:\\s{0,5}[\"'`]" }
   ]
 }

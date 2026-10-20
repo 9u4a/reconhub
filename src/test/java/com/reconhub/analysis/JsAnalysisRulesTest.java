@@ -38,9 +38,9 @@ class JsAnalysisRulesTest {
 
     @Test
     void rulesLoadedFromAllFiles() {
-        // 9 crypto + 5 authz + 12 sinks + 5 config + 14 api-calls = 45 at time of writing; assert a
-        // healthy floor so a silently-dropped file (bad JSON) fails the build.
-        assertTrue(REGISTRY.jsFindingRules().size() >= 40,
+        // 0.52.0: 9 crypto + 5 authz + 3 config + 3 api-auth = 20 jsFindingRules (sinks moved to
+        // js-flow). Assert a healthy floor so a silently-dropped file (bad JSON) fails the build.
+        assertTrue(REGISTRY.jsFindingRules().size() >= 16,
                 "expected the JS rule files to load, got " + REGISTRY.jsFindingRules().size());
     }
 
@@ -76,28 +76,8 @@ class JsAnalysisRulesTest {
     }
 
     @Test
-    void sinkSnippetsMatchAndClassifyAsInjection() {
-        for (String snippet : new String[]{
-                "eval(userInput)",
-                "el.innerHTML = data;",
-                "document.write(x)",
-                "node.insertAdjacentHTML('beforeend', html)",
-                "window.addEventListener('message', onMsg)",
-                "var h = location.hash;",
-                "var c = document.cookie;",
-                "<div dangerouslySetInnerHTML={{__html: body}} />"}) {
-            String name = firstMatchName(snippet);
-            assertTrue(name != null, "should match a sink rule: " + snippet);
-            assertEquals(FindingTaxonomy.Category.INJECTION, FindingTaxonomy.categoryOf(name),
-                    "wrong category for [" + name + "] from: " + snippet);
-        }
-    }
-
-    @Test
     void configSnippetsMatchAndClassifyAsInfoLeak() {
         for (String snippet : new String[]{
-                "debug: true,",
-                "featureFlags: { newUi: true }",
                 "fetch('https://api.staging.example.com/v1/users')",
                 "apiBaseUrl: \"https://internal-api.corp.example/\"",
                 "https://my-bucket.s3.us-east-1.amazonaws.com/key"}) {
@@ -109,23 +89,25 @@ class JsAnalysisRulesTest {
     }
 
     @Test
-    void apiCallSnippetsMatchAndClassifyAsApi() {
+    void apiAuthSnippetsMatchAndClassifyAsApi() {
+        // 0.52.0: the js-api-calls set is trimmed to auth-bearing signals only (generic fetch/axios
+        // inventory was dropped as noise).
         for (String snippet : new String[]{
-                "fetch('/api/users', { method: 'POST' })",
-                "axios.post('/api/login', body)",
-                "xhr.open('GET', url); xhr.setRequestHeader('Authorization', 'Bearer ' + t);",
-                "$.ajax({ url: '/api/data' })",
-                "const c = axios.create({ baseURL: API_ROOT, timeout: 5000 });",
-                "navigator.sendBeacon('/log', data)",
-                "const ws = new WebSocket('wss://example.com/ws');",
+                "xhr.setRequestHeader('Authorization', 'Bearer ' + t);",
                 "headers: { Authorization: `Bearer ${token}` }",
-                "headers: { 'X-API-Key': 'abc' }",
-                "fetch(url, { credentials: 'include' })"}) {
+                "headers: { 'X-API-Key': 'abc' }"}) {
             String name = firstMatchName(snippet);
-            assertTrue(name != null, "should match an API-call rule: " + snippet);
+            assertTrue(name != null, "should match an API-auth rule: " + snippet);
             assertEquals(FindingTaxonomy.Category.API, FindingTaxonomy.categoryOf(name),
                     "wrong category for [" + name + "] from: " + snippet);
         }
+    }
+
+    @Test
+    void genericApiInventoryNoLongerFlagged() {
+        // The noisy generic-call signals were removed in 0.52.0 (moved value to js-flow / dropped).
+        assertFalse(anyMatch("fetch('/api/users', { method: 'POST' })"));
+        assertFalse(anyMatch("axios.get('/api/data')"));
     }
 
     @Test
@@ -139,7 +121,8 @@ class JsAnalysisRulesTest {
         // Loading already compiles them; assert load produced no error entries for the JS files.
         for (String err : REGISTRY.loadErrors()) {
             assertFalse(err.contains("js-crypto") || err.contains("js-authz")
-                    || err.contains("js-sinks") || err.contains("js-config"), "rule load error: " + err);
+                    || err.contains("js-config") || err.contains("js-api-calls")
+                    || err.contains("js-flow"), "rule load error: " + err);
         }
         // sanity: patterns are non-null
         for (PatternRegistry.SecretRule r : REGISTRY.jsFindingRules()) {

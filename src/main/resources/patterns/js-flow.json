@@ -1,0 +1,22 @@
+{
+  "comment": "DOM-XSS-style flow heuristics (0.52.0). JsFlowAnalyzer pairs a dangerous SINK with an attacker-controllable SOURCE appearing within a proximity window in the same JS body, and emits ONE actionable finding ('source -> sink, try X') instead of two noisy inventory hits. Sinks with always=true (eval etc.) are inherently dangerous and reported even with no nearby source. Passive/static (regex proximity, not a real taint/AST analysis) -- the 'test' hint tells the analyst how to confirm by hand. Bounded regex (ReDoS).",
+  "sources": [
+    { "name": "URL fragment (location.hash)", "regex": "location\\.hash", "inject": "the URL fragment after #" },
+    { "name": "URL query (location.search)", "regex": "location\\.search|[\"']?\\.searchParams\\b|new\\s{1,5}URLSearchParams", "inject": "a query-string parameter" },
+    { "name": "full URL (location.href / document.URL)", "regex": "location\\.href|location\\.pathname|document\\.(?:URL|documentURI|baseURI)", "inject": "the request URL" },
+    { "name": "referrer (document.referrer)", "regex": "document\\.referrer", "inject": "the Referer header" },
+    { "name": "window.name", "regex": "window\\.name", "inject": "window.name set from an attacker page" },
+    { "name": "postMessage data", "regex": "addEventListener\\s{0,5}\\(\\s{0,5}[\"']message[\"']|onmessage\\s{0,5}=|event\\.data\\b|\\.data\\b", "inject": "a postMessage sent from another origin (check for a missing origin check)" },
+    { "name": "cookie (document.cookie)", "regex": "document\\.cookie", "inject": "a cookie value" }
+  ],
+  "sinks": [
+    { "name": "innerHTML/outerHTML", "regex": "\\.(?:inner|outer)HTML\\s{0,5}=[^=]", "severity": "HIGH", "test": "feed an HTML payload such as <img src=x onerror=alert(1)> and see if it executes" },
+    { "name": "document.write", "regex": "\\bdocument\\.(?:write|writeln)\\s{0,5}\\(", "severity": "HIGH", "test": "feed <img src=x onerror=alert(1)> or a <script> payload" },
+    { "name": "insertAdjacentHTML", "regex": "\\.insertAdjacentHTML\\s{0,5}\\(", "severity": "HIGH", "test": "feed an <img src=x onerror=alert(1)> payload" },
+    { "name": "jQuery .html()", "regex": "\\.html\\s{0,5}\\(\\s{0,5}[^)\\s]", "severity": "MEDIUM", "test": "feed an HTML/script payload into the value passed to .html()" },
+    { "name": "location assignment (redirect / javascript:)", "regex": "\\blocation\\s{0,5}=[^=]|location\\.(?:href|assign|replace)\\s{0,5}[=(]", "severity": "MEDIUM", "test": "feed a javascript: URI or an external URL (open redirect)" },
+    { "name": "eval()", "regex": "\\beval\\s{0,5}\\(", "severity": "HIGH", "always": true, "test": "if the argument is attacker-controllable, inject a JS expression such as alert(1)" },
+    { "name": "Function constructor", "regex": "\\bnew\\s{1,5}Function\\s{0,5}\\(", "severity": "HIGH", "always": true, "test": "inject a JS function body such as return alert(1)" },
+    { "name": "setTimeout/setInterval string", "regex": "\\b(?:setTimeout|setInterval)\\s{0,5}\\(\\s{0,5}[\"'`]", "severity": "MEDIUM", "always": true, "test": "if the string argument is attacker-controllable, inject JS, e.g. alert(1)" }
+  ]
+}

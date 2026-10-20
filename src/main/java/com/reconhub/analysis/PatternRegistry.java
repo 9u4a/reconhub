@@ -41,6 +41,37 @@ public final class PatternRegistry {
         }
     }
 
+    /** A DOM-XSS-style source (attacker-controllable input) for {@code JsFlowAnalyzer} (0.52.0). */
+    public static final class JsSource {
+        public final String name;
+        public final Pattern pattern;
+        public final String inject;   // how an analyst controls this source, for the test hint
+
+        JsSource(String name, Pattern pattern, String inject) {
+            this.name = name;
+            this.pattern = pattern;
+            this.inject = inject;
+        }
+    }
+
+    /** A dangerous sink for {@code JsFlowAnalyzer}; {@code always} sinks (eval, ...) are reported even
+     * with no nearby source. */
+    public static final class JsSink {
+        public final String name;
+        public final Pattern pattern;
+        public final Finding.Severity severity;
+        public final String test;     // how to confirm by hand, for the finding's evidence
+        public final boolean always;
+
+        JsSink(String name, Pattern pattern, Finding.Severity severity, String test, boolean always) {
+            this.name = name;
+            this.pattern = pattern;
+            this.severity = severity;
+            this.test = test;
+            this.always = always;
+        }
+    }
+
     public static final class TechRule {
         public final String source;   // header | cookie | body
         public final String header;   // for source == header
@@ -62,6 +93,8 @@ public final class PatternRegistry {
     // in JsAnalyzer. Loaded from four files but exposed as one list -- each rule carries its own
     // name/severity, and FindingTaxonomy derives the category from the name.
     private final List<SecretRule> jsFindingRules = new ArrayList<>();
+    private final List<JsSource> jsSources = new ArrayList<>();
+    private final List<JsSink> jsSinks = new ArrayList<>();
     private final List<JsLinkRule> jsLinkRules = new ArrayList<>();
     private final List<TechRule> techRules = new ArrayList<>();
     private final List<String> securityHeaders = new ArrayList<>();
@@ -71,6 +104,8 @@ public final class PatternRegistry {
     public List<SecretRule> signatureRules() { return signatureRules; }
     public List<SecretRule> authzRules() { return authzRules; }
     public List<SecretRule> jsFindingRules() { return jsFindingRules; }
+    public List<JsSource> jsSources() { return jsSources; }
+    public List<JsSink> jsSinks() { return jsSinks; }
     public List<JsLinkRule> jsLinkRules() { return jsLinkRules; }
     public List<TechRule> techRules() { return techRules; }
     public List<String> securityHeaders() { return securityHeaders; }
@@ -84,6 +119,7 @@ public final class PatternRegistry {
         r.loadSignatures(gson);
         r.loadAuthz(gson);
         r.loadJsFindings(gson);
+        r.loadJsFlow(gson);
         r.loadJsLinks(gson);
         r.loadTech(gson);
         return r;
@@ -105,6 +141,13 @@ public final class PatternRegistry {
         List<String> securityHeaders;
         List<Raw> rules;
         static final class Raw { String source; String header; String match; String tech; }
+    }
+
+    private static final class FlowFile {
+        List<Source> sources;
+        List<Sink> sinks;
+        static final class Source { String name; String regex; String inject; }
+        static final class Sink { String name; String regex; String severity; String test; boolean always; }
     }
 
     // ---- Loading --------------------------------------------------------
@@ -157,7 +200,7 @@ public final class PatternRegistry {
     private void loadJsFindings(Gson gson) {
         // Four files, one combined list -- each rule self-describes via name/severity.
         for (String path : new String[]{"/patterns/js-crypto.json", "/patterns/js-authz.json",
-                "/patterns/js-sinks.json", "/patterns/js-config.json", "/patterns/js-api-calls.json"}) {
+                "/patterns/js-config.json", "/patterns/js-api-calls.json"}) {
             SecretsFile f = read(gson, path, SecretsFile.class);
             if (f == null || f.patterns == null) {
                 continue;
@@ -168,6 +211,32 @@ public final class PatternRegistry {
                             Pattern.compile(raw.regex)));
                 } catch (PatternSyntaxException e) {
                     loadErrors.add(path + "[" + raw.name + "]: " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    private void loadJsFlow(Gson gson) {
+        FlowFile f = read(gson, "/patterns/js-flow.json", FlowFile.class);
+        if (f == null) {
+            return;
+        }
+        if (f.sources != null) {
+            for (FlowFile.Source s : f.sources) {
+                try {
+                    jsSources.add(new JsSource(s.name, Pattern.compile(s.regex), s.inject));
+                } catch (PatternSyntaxException e) {
+                    loadErrors.add("js-flow source[" + s.name + "]: " + e.getMessage());
+                }
+            }
+        }
+        if (f.sinks != null) {
+            for (FlowFile.Sink s : f.sinks) {
+                try {
+                    jsSinks.add(new JsSink(s.name, Pattern.compile(s.regex),
+                            parseSeverity(s.severity), s.test, s.always));
+                } catch (PatternSyntaxException e) {
+                    loadErrors.add("js-flow sink[" + s.name + "]: " + e.getMessage());
                 }
             }
         }

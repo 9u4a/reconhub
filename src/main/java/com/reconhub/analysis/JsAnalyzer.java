@@ -38,7 +38,8 @@ public final class JsAnalyzer {
     private final DataStore store;
     private final PatternRegistry patterns;
     private final SecretScanner secretScanner;
-    private final SecretScanner jsFindingScanner;   // crypto/authz/sink/config locators (0.47.0)
+    private final SecretScanner jsFindingScanner;   // crypto/authz/config/api-auth locators (0.47.0)
+    private final JsFlowAnalyzer flowAnalyzer;       // actionable source→sink flow findings (0.52.0)
     private final CommentExtractor commentExtractor;
     private final SourceMapDetector sourceMapDetector;
     private final Settings settings;
@@ -46,6 +47,7 @@ public final class JsAnalyzer {
 
     public JsAnalyzer(MontoyaApi api, DataStore store, PatternRegistry patterns,
                       SecretScanner secretScanner, SecretScanner jsFindingScanner,
+                      JsFlowAnalyzer flowAnalyzer,
                       CommentExtractor commentExtractor,
                       SourceMapDetector sourceMapDetector, Settings settings) {
         this.api = api;
@@ -53,6 +55,7 @@ public final class JsAnalyzer {
         this.patterns = patterns;
         this.secretScanner = secretScanner;
         this.jsFindingScanner = jsFindingScanner;
+        this.flowAnalyzer = flowAnalyzer;
         this.commentExtractor = commentExtractor;
         this.sourceMapDetector = sourceMapDetector;
         this.settings = settings;
@@ -91,6 +94,10 @@ public final class JsAnalyzer {
         // not counted into the "Secrets" column.
         if (jsFindingScanner != null) {
             jsFindingScanner.scan(body, url, messages);
+        }
+        // Actionable DOM-XSS-style flow findings (source→sink proximity + how-to-test hint, 0.52.0).
+        if (flowAnalyzer != null) {
+            flowAnalyzer.analyze(body, url, messages);
         }
 
         sourceMapDetector.checkJsBody(url, body, messages);

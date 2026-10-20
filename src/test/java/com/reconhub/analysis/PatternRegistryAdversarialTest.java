@@ -231,6 +231,35 @@ class PatternRegistryAdversarialTest {
         return tests.stream();
     }
 
+    /** js-flow.json's source + sink patterns (0.52.0) under the same adversarial guard. */
+    @TestFactory
+    Stream<DynamicTest> everyJsFlowPatternSurvivesAdversarialInput() {
+        List<DynamicTest> tests = new ArrayList<>();
+        String[][] adversarial = {
+                {"wordrun", "a".repeat(1_000_000)},
+                {"dot-run", "a.".repeat(500_000)},
+                {"paren-run", "(".repeat(500_000)},
+        };
+        List<Pattern> flow = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        for (PatternRegistry.JsSource s : REGISTRY.jsSources()) { flow.add(s.pattern); names.add("source:" + s.name); }
+        for (PatternRegistry.JsSink s : REGISTRY.jsSinks()) { flow.add(s.pattern); names.add("sink:" + s.name); }
+        for (String[] sample : adversarial) {
+            for (int i = 0; i < flow.size(); i++) {
+                String nm = names.get(i);
+                Pattern p = flow.get(i);
+                tests.add(DynamicTest.dynamicTest(sample[0] + " / " + nm, () -> {
+                    long ms = timeWithTimeout(p, sample[1], 5000);
+                    if (ms < 0) {
+                        fail("timed out (>5000ms) -- likely catastrophic backtracking in " + nm);
+                    }
+                    assertTrue(ms < 1000, nm + " took " + ms + "ms on \"" + sample[0] + "\" (expected < 1000ms)");
+                }));
+            }
+        }
+        return tests.stream();
+    }
+
     private static Pattern findRule(String name) {
         for (PatternRegistry.SecretRule r : allSecretRules()) {
             if (r.name.equals(name)) {
