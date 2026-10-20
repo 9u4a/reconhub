@@ -40,12 +40,15 @@ import java.util.Set;
  */
 public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
 
-    private static final String[] COLS = {"Severity", "Category", "Type", "JS File", "Evidence"};
+    private static final String[] COLS =
+            {"Severity", "Category", "Type", "Match", "JS File", "Evidence"};
     private static final int COL_CATEGORY = 1;
-    private static final int COL_JS_FILE = 3;
+    private static final int COL_MATCH = 3;
+    private static final int COL_JS_FILE = 4;
 
     private final DataStore store;
     private final MessageViewer viewer;
+    private DashboardPanel.Navigator navigator;
 
     private final Set<Finding.Severity> activeSeverities = EnumSet.noneOf(Finding.Severity.class);
     private FindingTaxonomy.Category activeCategory;
@@ -263,18 +266,29 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
         comp.setFont(comp.getFont().deriveFont(viewColumn == 0 ? Font.BOLD : Font.PLAIN));
         if (comp instanceof JComponent jc) {
             String tip = switch (viewColumn) {
-                case 3 -> f.getLocationUrl();
-                case 4 -> f.getEvidence();
+                case COL_MATCH -> f.getRawMatch();
+                case COL_JS_FILE -> f.getLocationUrl();
+                case 5 -> f.getEvidence();
                 default -> null;
             };
             jc.setToolTipText(tip == null || tip.isBlank() ? null : tip);
         }
     }
 
+    /** Wires cross-tab navigation (JS finding → that file in the JS Assets tab). */
+    public void setNavigator(DashboardPanel.Navigator navigator) {
+        this.navigator = navigator;
+    }
+
     @Override
     protected void extraMenuItems(javax.swing.JPopupMenu menu, Finding f) {
         if (f == null) {
             return;
+        }
+        String url = f.getLocationUrl();
+        if (navigator != null && url != null && !url.isBlank()) {
+            addMenuItem(menu, "Open this JS file in JS Assets", true,
+                    () -> navigator.filterJsAssets(url));
         }
         addDeleteHostMenuItem(menu, store, f.getHost());
     }
@@ -310,7 +324,7 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
     @Override protected String[] columns() { return COLS; }
 
     @Override protected int[] columnWidths() {
-        return new int[]{80, 100, 220, 260, 300};
+        return new int[]{80, 100, 200, 240, 240, 260};
     }
 
     @Override protected Object valueAt(Finding f, int c) {
@@ -318,8 +332,9 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
             case 0 -> f.getSeverity().name();
             case COL_CATEGORY -> FindingTaxonomy.labelOf(f.getType());
             case 2 -> f.getType();
-            case 3 -> f.getLocationUrl();
-            case 4 -> f.getEvidence();
+            case COL_MATCH -> f.getRawMatch();
+            case COL_JS_FILE -> f.getLocationUrl();
+            case 5 -> f.getEvidence();
             default -> "";
         };
     }

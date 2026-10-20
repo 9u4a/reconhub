@@ -93,8 +93,9 @@ Severity/Category/Type/JS 파일/Evidence 컬럼으로 보여주고, **Category 
 필터**로 좁힐 수 있음(예: "전체 번들의 Crypto 사용만"). 행 선택 시 해당 JS 응답 원문이 뷰어에 열리며
 **매치된 코드 위치로 자동 하이라이트/점프**. **JS file 필터**로 특정 번들만 추릴 수 있고, 툴바 요약
 라인이 현재 보이는 범위의 "파일 수 · 카테고리별 카운트"를 보여줌(한 파일로 좁히면 그 번들의 분포),
-기본 정렬은 JS 파일 기준이라 번들별로 묶여 보임. 판정 기준: finding의 `locationUrl`이 알려진 JS 파일
-URL과 일치하면 JS 소스로 간주(모델 변경 없음).
+기본 정렬은 JS 파일 기준이라 번들별로 묶여 보임. **Match 컬럼**에 실제 매치된 코드를 바로 표시하고,
+행 우클릭 **Open this JS file in JS Assets**로 해당 파일을 JS Assets 탭에서 열 수 있음. 판정 기준:
+finding의 `locationUrl`이 알려진 JS 파일 URL과 일치하면 JS 소스로 간주(모델 변경 없음).
 
 ### Tech
 호스트별 기술 식별 + 보안 헤더 누락 체크(Findings에도 동일 항목이 LOW로 집계). 검색창 옆 **Host 필터

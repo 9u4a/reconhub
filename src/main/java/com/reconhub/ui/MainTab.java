@@ -121,6 +121,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         dashboard.setNavigator(navigator);
         findings.setNavigator(navigator);
         jsAssets.setNavigator(navigator);
+        jsAnalysis.setNavigator(navigator);
 
         // Global cross-tab search (0.43.0) -- Ctrl+Shift+F, distinct from the existing Ctrl+F ("focus
         // the current tab's own search field"). Bound here (not in installKeyboardShortcuts(), which
