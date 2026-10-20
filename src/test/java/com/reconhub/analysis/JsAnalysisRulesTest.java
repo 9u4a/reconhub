@@ -104,6 +104,18 @@ class JsAnalysisRulesTest {
     }
 
     @Test
+    void jsFindingsCarryAnActionableHint() {
+        // Every js-crypto/authz/config/api rule now has a note; SecretScanner appends it as "Try: …"
+        // so each finding's evidence is actionable (0.53.0). Headless: DataStore + models only.
+        com.reconhub.core.DataStore store = new com.reconhub.core.DataStore();
+        SecretScanner scanner = new SecretScanner(store, REGISTRY.jsFindingRules(), false);
+        scanner.scan("var e = CryptoJS.AES.encrypt(m, k);", "https://h/app.js", null);
+        boolean anyHint = store.snapshotFindings().stream()
+                .anyMatch(f -> f.getEvidence() != null && f.getEvidence().contains("Try: "));
+        assertTrue(anyHint, "a crypto finding should carry a 'Try:' hint in its evidence");
+    }
+
+    @Test
     void genericApiInventoryNoLongerFlagged() {
         // The noisy generic-call signals were removed in 0.52.0 (moved value to js-flow / dropped).
         assertFalse(anyMatch("fetch('/api/users', { method: 'POST' })"));

@@ -1,8 +1,8 @@
 {
-  "comment": "How JS authenticates to APIs (0.48.0; trimmed 0.52.0 to auth-bearing signals only -- the generic fetch/axios/XHR/baseURL inventory was noise). Scanned against JS bodies only (JsAnalyzer). Passive. Bounded spans (ReDoS). Reported non-sensitive. Categorized API by FindingTaxonomy.",
+  "comment": "How JS authenticates to APIs (0.48.0; trimmed 0.52.0 to auth-bearing signals only). Scanned against JS bodies only (JsAnalyzer). Passive; the 'note' says how to use it. Bounded spans (ReDoS). Reported non-sensitive. Categorized API by FindingTaxonomy.",
   "patterns": [
-    { "name": "XHR request header (auth)", "severity": "MEDIUM", "regex": "setRequestHeader\\s{0,5}\\(\\s{0,5}[\"'](?:Authorization|X-API-Key|X-Auth-Token|X-Access-Token)[\"']" },
-    { "name": "Authorization header in request", "severity": "MEDIUM", "regex": "(?i)[\"']?Authorization[\"']?\\s{0,5}:\\s{0,5}[\"'`](?:Bearer|Basic|Token|JWT)\\b" },
-    { "name": "API key header", "severity": "MEDIUM", "regex": "(?i)[\"']?(?:x-api-key|api[_-]?key|x-auth-token|x-access-token|apikey)[\"']?\\s{0,5}:\\s{0,5}[\"'`]" }
+    { "name": "XHR request header (auth)", "severity": "MEDIUM", "regex": "setRequestHeader\\s{0,5}\\(\\s{0,5}[\"'](?:Authorization|X-API-Key|X-Auth-Token|X-Access-Token)[\"']", "note": "see where this header's value comes from -- if it's a hardcoded/derivable token, extract it and replay requests (or strip it to test for missing server-side auth)" },
+    { "name": "Authorization header in request", "severity": "MEDIUM", "regex": "(?i)[\"']?Authorization[\"']?\\s{0,5}:\\s{0,5}[\"'`](?:Bearer|Basic|Token|JWT)\\b", "note": "trace the token's origin; replay the request with a lower-priv token (or none) to check server-side enforcement; decode a JWT for weak alg/claims" },
+    { "name": "API key header", "severity": "MEDIUM", "regex": "(?i)[\"']?(?:x-api-key|api[_-]?key|x-auth-token|x-access-token|apikey)[\"']?\\s{0,5}:\\s{0,5}[\"'`]", "note": "if the key is hardcoded in the JS it's exposed to every user -- extract it and test its scope/rate limits against the API" }
   ]
 }

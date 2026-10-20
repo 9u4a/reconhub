@@ -244,6 +244,10 @@ class PatternRegistryAdversarialTest {
         List<String> names = new ArrayList<>();
         for (PatternRegistry.JsSource s : REGISTRY.jsSources()) { flow.add(s.pattern); names.add("source:" + s.name); }
         for (PatternRegistry.JsSink s : REGISTRY.jsSinks()) { flow.add(s.pattern); names.add("sink:" + s.name); }
+        for (PatternRegistry.JsPair p : REGISTRY.jsPairs()) {
+            flow.add(p.anchor); names.add("pair-anchor:" + p.name);
+            flow.add(p.target); names.add("pair-target:" + p.name);
+        }
         for (String[] sample : adversarial) {
             for (int i = 0; i < flow.size(); i++) {
                 String nm = names.get(i);

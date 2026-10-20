@@ -55,8 +55,12 @@ public final class SecretScanner {
                 if (match.isEmpty()) {
                     continue;
                 }
+                String evidence = evidence(body, m.start(), m.end());
+                if (rule.note != null && !rule.note.isBlank()) {
+                    evidence = evidence + "  |  Try: " + rule.note;   // actionable hint (0.53.0)
+                }
                 Finding f = new Finding(rule.name, rule.severity, match, locationUrl,
-                        evidence(body, m.start(), m.end()), sensitive);
+                        evidence, sensitive);
                 f.setMessages(messages);
                 if (store.recordFinding(f)) {
                     newCount++;

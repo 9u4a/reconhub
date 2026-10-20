@@ -1,14 +1,14 @@
 {
-  "comment": "Client-side crypto / encrypt-decrypt logic locators (0.47.0). Scanned against JS bodies only (JsAnalyzer). Passive: these point an analyst at WHERE crypto happens for manual review -- not a vuln by themselves. Same {name,severity,regex} schema as secrets.json; all spans are explicitly bounded (ReDoS, see CLAUDE.md). Reported non-sensitive (evidence shown).",
+  "comment": "Client-side crypto / encrypt-decrypt logic locators (0.47.0). Scanned against JS bodies only (JsAnalyzer). Passive: these point an analyst at WHERE crypto happens for manual review; the 'note' says how to leverage it. Same {name,severity,regex,note} schema as secrets.json; all spans are explicitly bounded (ReDoS). Reported non-sensitive (evidence shown).",
   "patterns": [
-    { "name": "CryptoJS cipher usage", "severity": "MEDIUM", "regex": "CryptoJS\\.(?:AES|DES|TripleDES|Rabbit|RC4|RC4Drop|RabbitLegacy|MD5|SHA1|SHA256|SHA512|HmacSHA256|HmacSHA1|PBKDF2|EvpKDF|enc|mode|pad|lib|format)\\b" },
-    { "name": "Web Crypto API usage", "severity": "INFO", "regex": "crypto\\.subtle\\.(?:encrypt|decrypt|sign|verify|digest|deriveKey|deriveBits|generateKey|importKey|exportKey|wrapKey|unwrapKey)\\b" },
-    { "name": "forge crypto usage", "severity": "INFO", "regex": "forge\\.(?:cipher|pki|md|random|util|aes|rsa|rc2|des|hmac|pkcs5|pkcs7)\\b" },
-    { "name": "JSEncrypt client-side RSA", "severity": "MEDIUM", "regex": "(?:new\\s{1,5})?JSEncrypt\\s{0,5}\\(" },
-    { "name": "SJCL crypto usage", "severity": "INFO", "regex": "sjcl\\.(?:encrypt|decrypt|codec|hash|misc|cipher|bitArray)\\b" },
-    { "name": "Weak cipher/hash algorithm", "severity": "LOW", "regex": "(?i)[\"'](?:MD5|MD4|SHA-?1|DES|DES-[A-Z0-9]{1,10}|RC4|3DES|AES-[0-9]{1,4}-ECB|[A-Z0-9-]{1,16}-ECB)[\"']" },
-    { "name": "Hardcoded crypto key/IV/salt", "severity": "MEDIUM", "regex": "(?i)(?:secretKey|secret_key|passphrase|\\biv\\b|\\bsalt\\b|encryptionKey|aesKey|privateKey)\\s{0,8}[:=]\\s{0,5}[\"'][A-Za-z0-9+/=_-]{8,64}[\"']" },
-    { "name": "Base64 encode/decode (atob/btoa)", "severity": "INFO", "regex": "\\b(?:atob|btoa)\\s{0,5}\\(" },
-    { "name": "Client-side JWT signing", "severity": "MEDIUM", "regex": "(?i)(?:jwt|jose)\\.sign\\s{0,5}\\(|KJUR\\.jws\\b|new\\s{1,5}SignJWT\\s{0,5}\\(" }
+    { "name": "CryptoJS cipher usage", "severity": "MEDIUM", "regex": "CryptoJS\\.(?:AES|DES|TripleDES|Rabbit|RC4|RC4Drop|RabbitLegacy|MD5|SHA1|SHA256|SHA512|HmacSHA256|HmacSHA1|PBKDF2|EvpKDF|enc|mode|pad|lib|format)\\b", "note": "client-side crypto is reversible by the client -- find the key/IV/mode nearby and reproduce/decrypt offline (e.g. CyberChef); never a security control" },
+    { "name": "Web Crypto API usage", "severity": "INFO", "regex": "crypto\\.subtle\\.(?:encrypt|decrypt|sign|verify|digest|deriveKey|deriveBits|generateKey|importKey|exportKey|wrapKey|unwrapKey)\\b", "note": "trace where the key material comes from -- if it's shipped to the browser, you can reproduce the operation offline" },
+    { "name": "forge crypto usage", "severity": "INFO", "regex": "forge\\.(?:cipher|pki|md|random|util|aes|rsa|rc2|des|hmac|pkcs5|pkcs7)\\b", "note": "check for a hardcoded key/private key nearby; client-side crypto can be reproduced offline" },
+    { "name": "JSEncrypt client-side RSA", "severity": "MEDIUM", "regex": "(?:new\\s{1,5})?JSEncrypt\\s{0,5}\\(", "note": "client-side RSA usually encrypts credentials before send -- the public key is in the JS; it stops passive sniffing only, not an authz/integrity control" },
+    { "name": "SJCL crypto usage", "severity": "INFO", "regex": "sjcl\\.(?:encrypt|decrypt|codec|hash|misc|cipher|bitArray)\\b", "note": "look for the passphrase/key nearby; reproduce offline to decrypt" },
+    { "name": "Weak cipher/hash algorithm", "severity": "LOW", "regex": "(?i)[\"'](?:MD5|MD4|SHA-?1|DES|DES-[A-Z0-9]{1,10}|RC4|3DES|AES-[0-9]{1,4}-ECB|[A-Z0-9-]{1,16}-ECB)[\"']", "note": "weak/broken primitive -- flag it; ECB leaks plaintext structure, MD5/SHA1/DES are collision/brute weak" },
+    { "name": "Hardcoded crypto key/IV/salt", "severity": "MEDIUM", "regex": "(?i)(?:secretKey|secret_key|passphrase|\\biv\\b|\\bsalt\\b|encryptionKey|aesKey|privateKey)\\s{0,8}[:=]\\s{0,5}[\"'][A-Za-z0-9+/=_-]{8,64}[\"']", "note": "the key/IV is embedded in the client -- extract it and decrypt/forge whatever this code protects (e.g. CyberChef)" },
+    { "name": "Base64 encode/decode (atob/btoa)", "severity": "INFO", "regex": "\\b(?:atob|btoa)\\s{0,5}\\(", "note": "base64 is encoding, not encryption -- decode it to see what the app treats as 'hidden'" },
+    { "name": "Client-side JWT signing", "severity": "MEDIUM", "regex": "(?i)(?:jwt|jose)\\.sign\\s{0,5}\\(|KJUR\\.jws\\b|new\\s{1,5}SignJWT\\s{0,5}\\(", "note": "if the signing secret is in the JS you can forge arbitrary tokens -- extract it and mint a token with elevated claims" }
   ]
 }

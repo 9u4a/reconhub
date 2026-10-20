@@ -23,11 +23,19 @@ public final class PatternRegistry {
         public final String name;
         public final Finding.Severity severity;
         public final Pattern pattern;
+        /** Optional "how to use/test this" hint appended to the finding's evidence (0.53.0). Null for
+         * rules that don't carry one (secrets/signatures/response-authz). */
+        public final String note;
 
         SecretRule(String name, Finding.Severity severity, Pattern pattern) {
+            this(name, severity, pattern, null);
+        }
+
+        SecretRule(String name, Finding.Severity severity, Pattern pattern, String note) {
             this.name = name;
             this.severity = severity;
             this.pattern = pattern;
+            this.note = note;
         }
     }
 
@@ -51,6 +59,24 @@ public final class PatternRegistry {
             this.name = name;
             this.pattern = pattern;
             this.inject = inject;
+        }
+    }
+
+    /** An anchor→target proximity pairing for {@code JsPairAnalyzer} (0.53.0): find {@code anchor}
+     * (a piece of logic), extract the nearest {@code target} (a concrete value, group 1 if present). */
+    public static final class JsPair {
+        public final String name;
+        public final Finding.Severity severity;
+        public final Pattern anchor;
+        public final Pattern target;
+        public final String note;
+
+        JsPair(String name, Finding.Severity severity, Pattern anchor, Pattern target, String note) {
+            this.name = name;
+            this.severity = severity;
+            this.anchor = anchor;
+            this.target = target;
+            this.note = note;
         }
     }
 
@@ -95,6 +121,7 @@ public final class PatternRegistry {
     private final List<SecretRule> jsFindingRules = new ArrayList<>();
     private final List<JsSource> jsSources = new ArrayList<>();
     private final List<JsSink> jsSinks = new ArrayList<>();
+    private final List<JsPair> jsPairs = new ArrayList<>();
     private final List<JsLinkRule> jsLinkRules = new ArrayList<>();
     private final List<TechRule> techRules = new ArrayList<>();
     private final List<String> securityHeaders = new ArrayList<>();
@@ -106,6 +133,7 @@ public final class PatternRegistry {
     public List<SecretRule> jsFindingRules() { return jsFindingRules; }
     public List<JsSource> jsSources() { return jsSources; }
     public List<JsSink> jsSinks() { return jsSinks; }
+    public List<JsPair> jsPairs() { return jsPairs; }
     public List<JsLinkRule> jsLinkRules() { return jsLinkRules; }
     public List<TechRule> techRules() { return techRules; }
     public List<String> securityHeaders() { return securityHeaders; }
@@ -120,6 +148,7 @@ public final class PatternRegistry {
         r.loadAuthz(gson);
         r.loadJsFindings(gson);
         r.loadJsFlow(gson);
+        r.loadJsPairs(gson);
         r.loadJsLinks(gson);
         r.loadTech(gson);
         return r;
@@ -129,7 +158,7 @@ public final class PatternRegistry {
 
     private static final class SecretsFile {
         List<Raw> patterns;
-        static final class Raw { String name; String severity; String regex; }
+        static final class Raw { String name; String severity; String regex; String note; }
     }
 
     private static final class JsFile {
@@ -148,6 +177,11 @@ public final class PatternRegistry {
         List<Sink> sinks;
         static final class Source { String name; String regex; String inject; }
         static final class Sink { String name; String regex; String severity; String test; boolean always; }
+    }
+
+    private static final class PairsFile {
+        List<Raw> pairs;
+        static final class Raw { String name; String severity; String anchor; String target; String note; }
     }
 
     // ---- Loading --------------------------------------------------------
@@ -208,7 +242,7 @@ public final class PatternRegistry {
             for (SecretsFile.Raw raw : f.patterns) {
                 try {
                     jsFindingRules.add(new SecretRule(raw.name, parseSeverity(raw.severity),
-                            Pattern.compile(raw.regex)));
+                            Pattern.compile(raw.regex), raw.note));
                 } catch (PatternSyntaxException e) {
                     loadErrors.add(path + "[" + raw.name + "]: " + e.getMessage());
                 }
@@ -238,6 +272,21 @@ public final class PatternRegistry {
                 } catch (PatternSyntaxException e) {
                     loadErrors.add("js-flow sink[" + s.name + "]: " + e.getMessage());
                 }
+            }
+        }
+    }
+
+    private void loadJsPairs(Gson gson) {
+        PairsFile f = read(gson, "/patterns/js-pairs.json", PairsFile.class);
+        if (f == null || f.pairs == null) {
+            return;
+        }
+        for (PairsFile.Raw raw : f.pairs) {
+            try {
+                jsPairs.add(new JsPair(raw.name, parseSeverity(raw.severity),
+                        Pattern.compile(raw.anchor), Pattern.compile(raw.target), raw.note));
+            } catch (PatternSyntaxException e) {
+                loadErrors.add("js-pairs[" + raw.name + "]: " + e.getMessage());
             }
         }
     }

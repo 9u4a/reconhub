@@ -14,6 +14,7 @@ import com.reconhub.analysis.CommentExtractor;
 import com.reconhub.analysis.EndpointExtractor;
 import com.reconhub.analysis.JsAnalyzer;
 import com.reconhub.analysis.JsFlowAnalyzer;
+import com.reconhub.analysis.JsPairAnalyzer;
 import com.reconhub.analysis.MisconfigInspector;
 import com.reconhub.analysis.ParameterExtractor;
 import com.reconhub.analysis.PiiScanner;
@@ -107,8 +108,9 @@ public final class TrafficIngestor implements HttpHandler {
         // (non-sensitive). Runs inside JsAnalyzer so both live capture and manual JS import are covered.
         SecretScanner jsFindingScanner = new SecretScanner(store, patterns.jsFindingRules(), false);
         JsFlowAnalyzer flowAnalyzer = new JsFlowAnalyzer(store, patterns);
+        JsPairAnalyzer pairAnalyzer = new JsPairAnalyzer(store, patterns);
         this.jsAnalyzer = new JsAnalyzer(api, store, patterns, secretScanner, jsFindingScanner,
-                flowAnalyzer, commentExtractor, sourceMapDetector, settings);
+                flowAnalyzer, pairAnalyzer, commentExtractor, sourceMapDetector, settings);
         this.techFingerprinter = new TechFingerprinter(store, patterns);
         this.misconfigInspector = new MisconfigInspector(store, secretScanner);
         this.apiSpecAnalyzer = new ApiSpecAnalyzer(store);

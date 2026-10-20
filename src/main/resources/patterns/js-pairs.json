@@ -1,0 +1,19 @@
+{
+  "comment": "Anchor->target proximity pairings (0.53.0). JsPairAnalyzer finds an 'anchor' (a piece of logic) and extracts a concrete 'target' appearing within a proximity window in the same JS body, emitting ONE actionable finding (anchor -> target, try X). Passive/static regex proximity, not taint/AST -- a lead to confirm by hand. Bounded regex (ReDoS). Reported non-sensitive.",
+  "pairs": [
+    {
+      "name": "Client-side authorization gate -> route",
+      "severity": "MEDIUM",
+      "anchor": "(?i)(?:is_?admin|has_?role|has_?permission|can_?access|requireRole|requireAuth|authGuard|roleGuard|canActivate|beforeEnter|PrivateRoute|ProtectedRoute|RequireAuth|withAuth)\\b",
+      "target": "[\"'](/[A-Za-z0-9_./:-]{1,60})[\"']",
+      "note": "this route appears to be gated only in the browser -- request its backing API directly with a low-priv/no session to check server-side authorization"
+    },
+    {
+      "name": "Embedded crypto key/IV -> value",
+      "severity": "HIGH",
+      "anchor": "CryptoJS\\.|crypto\\.subtle\\.|(?:new\\s{1,5})?JSEncrypt\\s{0,5}\\(|forge\\.(?:cipher|aes|rsa|des)|sjcl\\.(?:encrypt|decrypt)",
+      "target": "[\"']([A-Za-z0-9+/=_-]{16,64})[\"']",
+      "note": "a key/IV/secret is embedded next to client-side crypto -- extract it and decrypt or forge offline (e.g. CyberChef); client-side crypto is not a control"
+    }
+  ]
+}
