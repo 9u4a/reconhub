@@ -9,6 +9,7 @@ import com.reconhub.analysis.JwtDecoder;
 import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.HostFocus;
 import com.reconhub.core.Hosts;
 import com.reconhub.core.Settings;
 import com.reconhub.model.Finding;
@@ -320,6 +321,7 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
             // finding might still be worth an IDOR/SSRF cheatsheet look even with no automatic hit.
             PayloadCheatsheetMenu.addTo(menu, this, cheatsheet, f.getType(), suggested);
         }
+        addFocusHostMenuItem(menu, host);
         addDeleteHostMenuItem(menu, store, host);
         menu.addSeparator();
         for (Finding.Triage t : Finding.Triage.values()) {
@@ -370,7 +372,12 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         return f.isSensitive() && f.getRawMatch() != null ? f.getRawMatch() : "";
     }
 
-    @Override protected List<Finding> supplyRows() { return store.snapshotFindings(); }
+    // Host focus (0.54.0) applied at the source, so counts/checklists/search follow it -- see HostFocus.
+    private final HostFocus.Scoped<Finding> focusScoped = new HostFocus.Scoped<>(Finding::getHost);
+
+    @Override protected List<Finding> supplyRows() {
+        return focusScoped.apply(store.snapshotFindings(), hostFocus == null ? null : hostFocus.get());
+    }
 
     @Override protected String[] columns() { return COLS; }
 

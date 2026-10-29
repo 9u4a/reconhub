@@ -8,6 +8,7 @@ import com.reconhub.core.BodyDecoder;
 import com.reconhub.core.BoundedCache;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.HostFocus;
 import com.reconhub.core.Settings;
 
 import javax.swing.AbstractAction;
@@ -72,6 +73,9 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
     protected final MontoyaApi api;
     /** Bookmarks/notes store, shared across every tab; null-tolerant (bookmark UI just doesn't show). */
     protected final Bookmarks bookmarks;
+    /** Session-wide host focus (0.54.0), wired by {@code MainTab} only on the panels whose
+     * {@code supplyRows()} honor it; null elsewhere (no "Focus" menu item then). */
+    protected HostFocus hostFocus;
 
     // NOTE: `rows` MUST be initialized before `table`, because `new JTable(model)` immediately
     // queries model.getRowCount() -> rows.size(). Field initializers run in declaration order.
@@ -664,6 +668,24 @@ public abstract class AbstractTablePanel<T> extends JPanel implements Refreshabl
                 store.deleteHost(host);
             }
         });
+    }
+
+    public void setHostFocus(HostFocus hostFocus) {
+        this.hostFocus = hostFocus;
+    }
+
+    /** Adds "Show only this host" (or "Show all hosts" when {@code host} is already the focus). No-op
+     * on panels without a {@link #hostFocus} or for host-less rows. */
+    protected void addFocusHostMenuItem(JPopupMenu menu, String host) {
+        if (hostFocus == null || host == null || host.isBlank()) {
+            return;
+        }
+        menu.addSeparator();
+        if (HostFocus.matches(host, hostFocus.get())) {
+            addMenuItem(menu, "Show all hosts (clear focus)", true, hostFocus::clear);
+        } else {
+            addMenuItem(menu, "Show only this host: " + host, true, () -> hostFocus.set(host));
+        }
     }
 
     private void add(JPopupMenu menu, String label, boolean enabled, Runnable action) {

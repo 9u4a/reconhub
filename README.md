@@ -12,6 +12,7 @@
 
 | 탭 | 한 줄 설명 |
 |----|------|
+| **Host focus** (상단 바) | 호스트 하나를 고르면 Endpoints·Parameters·Findings가 **그 호스트 행만** 표시 (정확 일치) |
 | **Dashboard** | 요약 통계 + 호스트 스코어카드, 다른 탭으로 크로스탭 이동, **호스트 데이터 삭제(다중 선택)** |
 | **Endpoints** | 엔드포인트 인벤토리 (dedup, Auth 관찰), **다중 선택 → Match & Replace 전송** |
 | **Parameters** | 파라미터 + 취약점 후보 Class 자동 분류, **다중 선택 → Match & Replace 전송** |
@@ -142,6 +143,11 @@ introspection**(스키마를 실제로 파싱해 타입.필드를 엔드포인�
 원문 확인·복사 가능, 리포트에선 마스킹)
 
 ### 공통 기능 상세
+**Host focus**: 탭 위 `Host focus` 콤보에서 호스트를 고르거나, Dashboard 호스트 / Endpoints·Parameters·
+Findings 행 우클릭 **Show only this host** → 세 탭이 그 호스트 행만 보여줌(행 수·체크박스 필터·카테고리
+개수·검색·CSV도 그 호스트 기준). 검색창과 달리 정확히 같은 호스트만 매칭(`a.com` 선택 시
+`a.com.evil.net`은 제외). `Show all`로 해제. 세션 동안만 유지되고 Export/리포트에는 영향 없음.
+
 한/영·본문 검색(정규식·다중 AND·제외·컬럼 지정), 정렬 3단계(오름 → 내림 → 기본), CSV 내보내기, 행
 우클릭 Copy/Open/Repeater/Intruder/curl. Request/Response 뷰어가 있는 탭(Endpoints·Parameters·
 Findings·JS Assets)에서 JS 응답이면 **Beautify JS** 토글로 한 줄로 압축된 minified 본문을 줄바꿈·

@@ -63,6 +63,8 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         void filterFindings(String query);
         void filterJsAssets(String query);
         void filterTech(String query);
+        /** Sets the session-wide host focus (0.54.0) -- Endpoints/Parameters/Findings show only it. */
+        void focusHost(String host);
     }
 
     /** Param-name classes considered high-risk for the "Notable endpoints" list. */
@@ -536,6 +538,8 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         item(m, "Open in browser", real,
                 () -> UiUtil.openInBrowser(api, Hosts.inferScheme(store, host) + "://" + host));
         m.addSeparator();
+        item(m, "Show only this host (Endpoints/Parameters/Findings)", navigator != null && real,
+                () -> navigator.focusHost(host));
         item(m, "View endpoints for this host", navigator != null && real,
                 () -> navigator.filterEndpoints(host));
         item(m, "View parameters for this host", navigator != null && real,

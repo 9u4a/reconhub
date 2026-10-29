@@ -7,6 +7,7 @@ import com.reconhub.active.MatchReplaceTarget;
 import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.HostFocus;
 import com.reconhub.core.Settings;
 import com.reconhub.model.Endpoint;
 
@@ -131,6 +132,7 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
             addMenuItem(menu, "View payload cheatsheet (XXE)…", true,
                     () -> CheatsheetDialog.showFor(this, e.getPath(), List.of(xxe)));
         }
+        addFocusHostMenuItem(menu, e.getHost());
         addDeleteHostMenuItem(menu, store, e.getHost());
 
         if (matchReplace != null && settings != null) {
@@ -188,7 +190,12 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
         return e == null ? null : MessageViewer.toSearchText(e.getMessages());
     }
 
-    @Override protected List<Endpoint> supplyRows() { return store.snapshotEndpoints(); }
+    // Host focus (0.54.0) applied at the source, so counts/checklists/search follow it -- see HostFocus.
+    private final HostFocus.Scoped<Endpoint> focusScoped = new HostFocus.Scoped<>(Endpoint::getHost);
+
+    @Override protected List<Endpoint> supplyRows() {
+        return focusScoped.apply(store.snapshotEndpoints(), hostFocus == null ? null : hostFocus.get());
+    }
 
     @Override protected String[] columns() { return COLS; }
 

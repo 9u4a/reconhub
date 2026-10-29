@@ -8,6 +8,7 @@ import com.reconhub.analysis.ParameterClassifier;
 import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.HostFocus;
 import com.reconhub.core.Settings;
 import com.reconhub.model.ParameterInfo;
 
@@ -138,6 +139,7 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
             // class manually (e.g. a hunch the name-based classifier didn't happen to catch).
             PayloadCheatsheetMenu.addTo(menu, this, cheatsheet, p.getName(), suggested);
         }
+        addFocusHostMenuItem(menu, p.getHost());
         addDeleteHostMenuItem(menu, store, p.getHost());
 
         if (matchReplace != null && settings != null) {
@@ -209,7 +211,12 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
         return p == null ? null : MessageViewer.toSearchText(p.getMessages());
     }
 
-    @Override protected List<ParameterInfo> supplyRows() { return store.snapshotParameters(); }
+    // Host focus (0.54.0) applied at the source, so counts/checklists/search follow it -- see HostFocus.
+    private final HostFocus.Scoped<ParameterInfo> focusScoped = new HostFocus.Scoped<>(ParameterInfo::getHost);
+
+    @Override protected List<ParameterInfo> supplyRows() {
+        return focusScoped.apply(store.snapshotParameters(), hostFocus == null ? null : hostFocus.get());
+    }
 
     @Override protected String[] columns() { return COLS; }
 

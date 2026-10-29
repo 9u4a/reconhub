@@ -5,10 +5,15 @@ import com.reconhub.active.MatchReplaceEngine;
 import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
+import com.reconhub.core.HostFocus;
 import com.reconhub.core.Settings;
 import com.reconhub.core.TrafficIngestor;
 
 import javax.swing.AbstractAction;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JLabel;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
@@ -17,12 +22,15 @@ import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.FlowLayout;
+import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.TreeSet;
 import java.util.Map;
 
 /**
@@ -53,6 +61,18 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
     // change callback -- see SwingColors -- so this is the one place that notices a live theme switch).
     private boolean lastKnownDark = SwingColors.isDark();
 
+    // Host focus (0.54.0): one session-wide "show only this host" selection, honored by the
+    // Endpoints/Parameters/Findings panels' supplyRows(). Owned here, never persisted.
+    private final HostFocus hostFocus = new HostFocus();
+    private final JPanel focusBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 3));
+    private final JLabel focusLabel = new JLabel("Host focus:");
+    private final JComboBox<String> hostBox = new JComboBox<>();
+    private final JButton clearFocusButton = new JButton("Show all");
+    private static final String ALL_HOSTS = "All hosts";
+    // Last item list rendered into hostBox -- the combo is only rebuilt when the host set changes.
+    private List<String> lastHostItems = List.of();
+    private boolean rebuildingHostBox;
+
     public MainTab(MontoyaApi api, DataStore store, Settings settings, TrafficIngestor ingestor,
                    PayloadCheatsheet cheatsheet,
                    MatchReplaceEngine matchReplace, Bookmarks bookmarks) {
@@ -69,6 +89,9 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         SettingsPanel settingsPanel = new SettingsPanel(api, store, settings, ingestor, bookmarks);
         MatchReplacePanel matchReplacePanel = new MatchReplacePanel(api, matchReplace);
         SnapshotDiffPanel snapshotDiff = new SnapshotDiffPanel(api, store);
+        endpoints.setHostFocus(hostFocus);
+        parameters.setHostFocus(hostFocus);
+        findings.setHostFocus(hostFocus);
         endpoints.setMatchReplace(matchReplace, settings);
         parameters.setMatchReplace(matchReplace, settings);
         findings.setMatchReplace(matchReplace);
@@ -92,6 +115,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         settingsScroll.setBorder(null);
         tabs.addTab("Settings", settingsScroll);
         add(tabs, BorderLayout.CENTER);
+        add(buildFocusBar(), BorderLayout.NORTH);
 
         installKeyboardShortcuts();
 
@@ -117,6 +141,10 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
                 tabs.setSelectedComponent(tech);
                 tech.searchFor(q);
             }
+            @Override public void focusHost(String host) {
+                hostFocus.set(host);
+                tabs.setSelectedComponent(endpoints);
+            }
         };
         dashboard.setNavigator(navigator);
         findings.setNavigator(navigator);
@@ -138,7 +166,16 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         // Switching to a tab shows current data immediately -- it hasn't been refreshed while hidden.
         tabs.addChangeListener(e -> refreshSelected());
 
-        refreshTimer = new Timer(300, e -> refreshSelected());
+        // Hidden tabs pick the new focus up via the tab-switch refresh above, same as new data.
+        hostFocus.addListener(() -> {
+            syncHostBox();
+            refreshSelected();
+        });
+
+        refreshTimer = new Timer(300, e -> {
+            refreshSelected();
+            updateHostItems();
+        });
         refreshTimer.setRepeats(false);
 
         // Separate from refreshTimer above, which only fires on actual data changes (it's a one-shot
@@ -151,6 +188,76 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
 
         store.addChangeListener(this);
         refreshAll();
+        updateHostItems();
+    }
+
+    private JPanel buildFocusBar() {
+        focusLabel.setFont(focusLabel.getFont().deriveFont(Font.BOLD));
+        hostBox.setPrototypeDisplayValue("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+        hostBox.setMaximumRowCount(25);
+        hostBox.setToolTipText("Show only this host's rows in Endpoints / Parameters / Findings (exact host match)");
+        hostBox.addActionListener(e -> {
+            if (rebuildingHostBox) {
+                return;
+            }
+            Object sel = hostBox.getSelectedItem();
+            hostFocus.set(sel == null || ALL_HOSTS.equals(sel) ? null : sel.toString());
+        });
+        clearFocusButton.addActionListener(e -> hostFocus.clear());
+        focusBar.add(focusLabel);
+        focusBar.add(hostBox);
+        focusBar.add(clearFocusButton);
+        syncHostBox();
+        return focusBar;
+    }
+
+    /** Rebuilds the host combo from {@code DataStore.hostCounts()} -- only when the host set changed
+     * (by-value compare), so a live-capture tick that adds rows to known hosts doesn't touch it. The
+     * focused host is kept as an item even after it's deleted, so the bar never silently reads "All". */
+    private void updateHostItems() {
+        TreeSet<String> hosts = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+        hosts.addAll(store.hostCounts().keySet());
+        hosts.removeIf(h -> h == null || h.isBlank());
+        String focus = hostFocus.get();
+        if (focus != null) {
+            hosts.add(focus);
+        }
+        List<String> items = new ArrayList<>(hosts.size() + 1);
+        items.add(ALL_HOSTS);
+        items.addAll(hosts);
+        if (items.equals(lastHostItems)) {
+            return;
+        }
+        lastHostItems = items;
+        rebuildingHostBox = true;
+        try {
+            hostBox.removeAllItems();
+            for (String item : items) {
+                hostBox.addItem(item);
+            }
+        } finally {
+            rebuildingHostBox = false;
+        }
+        syncHostBox();
+    }
+
+    /** Points the combo at the current focus and restyles the bar (accent when a focus is active). */
+    private void syncHostBox() {
+        String focus = hostFocus.get();
+        if (focus != null && !lastHostItems.contains(focus)) {
+            updateHostItems();   // a host focused from a menu before the combo ever listed it
+            return;
+        }
+        rebuildingHostBox = true;
+        try {
+            hostBox.setSelectedItem(focus == null ? ALL_HOSTS : focus);
+        } finally {
+            rebuildingHostBox = false;
+        }
+        clearFocusButton.setEnabled(focus != null);
+        focusLabel.setForeground(focus != null ? SwingColors.ACCENT : null);
+        focusBar.setBorder(BorderFactory.createMatteBorder(0, 0, focus != null ? 2 : 1, 0,
+                focus != null ? SwingColors.ACCENT : SwingColors.line()));
     }
 
     /**
@@ -211,6 +318,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         boolean dark = SwingColors.isDark();
         if (dark != lastKnownDark) {
             lastKnownDark = dark;
+            syncHostBox();   // the bar's idle border uses the theme-dependent line() color
             repaint();
         }
     }
