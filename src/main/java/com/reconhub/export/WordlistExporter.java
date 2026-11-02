@@ -39,6 +39,10 @@ public final class WordlistExporter {
                         add(lines, n);
                     }
                 }
+                // Names only referenced in app JS (0.56.0) -- the untested ones param mining is for.
+                for (String n : store.snapshotJsParamNames().keySet()) {
+                    add(lines, n);
+                }
             }
             case HOSTS -> {
                 for (Endpoint e : store.snapshotEndpoints()) {

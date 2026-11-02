@@ -55,6 +55,12 @@ public final class FindingTaxonomy {
     private static Category compute(String type) {
         String t = type.toLowerCase(Locale.ROOT);
 
+        // Access-control leads (0.56.0) -- prefix match first: the label after the colon is a route family
+        // or a parameter name ("redirect", "debug", ...) that later keyword branches would otherwise claim.
+        if (t.startsWith("unauthenticated access:") || t.startsWith("hidden parameter in js:")) {
+            return Category.AUTH;
+        }
+
         // JS deep-analysis families (0.47.0) checked first -- their names contain tokens ("cipher",
         // "cookie access", ...) that later branches (MISCONFIG's "cookie", SECRET's "key") would
         // otherwise claim.

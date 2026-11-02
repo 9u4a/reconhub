@@ -59,6 +59,7 @@ public final class StateSerializer {
         List<JsAssetDto> jsAssets;
         List<TechDto> tech;
         List<BookmarkDto> bookmarks;
+        Map<String, String> jsParamNames;   // 0.56.0, optional (null in older files)
     }
 
     private static final class Counters {
@@ -222,6 +223,7 @@ public final class StateSerializer {
             d.missingSecurityHeaders = new ArrayList<>(t.getMissingSecurityHeaders());
             s.tech.add(d);
         }
+        s.jsParamNames = store.snapshotJsParamNames();
 
         s.bookmarks = new ArrayList<>();
         if (bookmarks != null) {
@@ -344,6 +346,9 @@ public final class StateSerializer {
                 store.restoreTech(t);
                 tech++;
             }
+        }
+        if (s.jsParamNames != null) {
+            s.jsParamNames.forEach(store::recordJsParamName);
         }
         if (s.counters != null) {
             store.restoreCounters(s.counters.requestsProcessed, s.counters.statusCodeCounts,

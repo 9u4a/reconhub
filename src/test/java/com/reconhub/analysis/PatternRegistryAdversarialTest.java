@@ -265,6 +265,44 @@ class PatternRegistryAdversarialTest {
         return tests.stream();
     }
 
+    /** js-params.json extractors + its "interesting" name filter, and ValueKind's value-shape patterns
+     * (0.56.0), under the same guard -- inputs shaped like query strings, quotes and param objects. */
+    @TestFactory
+    Stream<DynamicTest> everyJsParamAndValueKindPatternSurvivesAdversarialInput() {
+        List<DynamicTest> tests = new ArrayList<>();
+        String[][] adversarial = {
+                {"wordrun", "a".repeat(200_000)},
+                {"query-run", "?a=".repeat(50_000)},
+                {"amp-run", "&a".repeat(80_000)},
+                {"quote-run", "\"a".repeat(80_000)},
+                {"params-object-run", "params:{".repeat(30_000)},
+                {"append-run", ".append(\"a".repeat(30_000)},
+                {"email-ish", "a@" + "b.".repeat(60_000)},
+                {"slash-run", "/".repeat(150_000)},
+        };
+        List<Pattern> pats = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        for (PatternRegistry.JsLinkRule r : REGISTRY.jsParamRules()) { pats.add(r.pattern); names.add("param:" + r.name); }
+        assertTrue(REGISTRY.jsParamInteresting() != null, "js-params.json 'interesting' failed to load");
+        pats.add(REGISTRY.jsParamInteresting()); names.add("param:interesting");
+        List<Pattern> kinds = ValueKind.patterns();
+        for (int i = 0; i < kinds.size(); i++) { pats.add(kinds.get(i)); names.add("valueKind#" + i); }
+        for (String[] sample : adversarial) {
+            for (int i = 0; i < pats.size(); i++) {
+                String nm = names.get(i);
+                Pattern p = pats.get(i);
+                tests.add(DynamicTest.dynamicTest(sample[0] + " / " + nm, () -> {
+                    long ms = timeWithTimeout(p, sample[1], 5000);
+                    if (ms < 0) {
+                        fail("timed out (>5000ms) -- likely catastrophic backtracking in " + nm);
+                    }
+                    assertTrue(ms < 1000, nm + " took " + ms + "ms on \"" + sample[0] + "\" (expected < 1000ms)");
+                }));
+            }
+        }
+        return tests.stream();
+    }
+
     /** js-flow.json's source + sink patterns (0.52.0) under the same adversarial guard. */
     @TestFactory
     Stream<DynamicTest> everyJsFlowPatternSurvivesAdversarialInput() {

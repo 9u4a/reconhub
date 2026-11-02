@@ -18,6 +18,7 @@ import com.reconhub.analysis.JsPairAnalyzer;
 import com.reconhub.analysis.MisconfigInspector;
 import com.reconhub.analysis.ParameterExtractor;
 import com.reconhub.analysis.PiiScanner;
+import com.reconhub.analysis.AccessLeads;
 import com.reconhub.analysis.PatternRegistry;
 import com.reconhub.analysis.RequestInspector;
 import com.reconhub.analysis.SecretScanner;
@@ -52,6 +53,7 @@ public final class TrafficIngestor implements HttpHandler {
 
     private final ParameterExtractor parameterExtractor;
     private final SecretScanner secretScanner;
+    private final List<PatternRegistry.SecretRule> routeRules;   // sensitive-route families (AccessLeads)
     private final SecretScanner userScanner;
     private final UserRuleStore userRules;
     private final SecretScanner signatureScanner;
@@ -98,6 +100,7 @@ public final class TrafficIngestor implements HttpHandler {
         this.scopeFilter = new ScopeFilter(api, settings);
         this.parameterExtractor = new ParameterExtractor(store);
         this.secretScanner = new SecretScanner(store, patterns.secretRules(), true);
+        this.routeRules = patterns.jsRouteRules();
         this.userRules = new UserRuleStore(api);
         this.userScanner = new SecretScanner(store, userRules.compiledRules(), true);
         this.signatureScanner = new SecretScanner(store, patterns.signatureRules(), false);
@@ -332,6 +335,15 @@ public final class TrafficIngestor implements HttpHandler {
         boolean authed = request.headerValue("Authorization") != null
                 || request.headerValue("Cookie") != null;
         endpoint.recordAuth(authed);
+        if (settings.isRunPassiveChecks()) {
+            // 0.56.0: an anonymous 2xx from an API / sensitive route is an access-control lead.
+            com.reconhub.model.Finding lead = AccessLeads.lead(authed, status, ep.method(), ep.path(), ep.normalizedUrl(),
+                    contentType, routeRules);
+            if (lead != null) {
+                lead.setMessages(stored);
+                store.recordFinding(lead);
+            }
+        }
         store.countRequest(ep.host(), status, contentType);
 
         parameterExtractor.extract(request, params, endpointKey, ep.path(), responseBody, stored);

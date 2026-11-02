@@ -5,6 +5,7 @@ import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.active.MatchReplaceEngine;
 import com.reconhub.active.MatchReplaceTarget;
 import com.reconhub.analysis.ParameterClassifier;
+import com.reconhub.analysis.ValueKind;
 import com.reconhub.analysis.PayloadCheatsheet;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
@@ -28,9 +29,10 @@ import java.util.List;
 public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
 
     private static final String[] COLS =
-            {"Host", "Endpoint", "Type", "Name", "Value", "Class", "Reflected", "Seen"};
+            {"Host", "Endpoint", "Type", "Name", "Value", "Class", "Reflected", "Seen", "Value kind"};
     private static final int COL_CLASS = 5;
     private static final int COL_REFLECTED = 6;
+    private static final int COL_VALUE_KIND = 8;   // ValueKind (0.56.0)
 
     private final DataStore store;
     private final PayloadCheatsheet cheatsheet;
@@ -42,7 +44,7 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
     private final ColumnValueFilter<ParameterInfo> locationFilter =
             new ColumnValueFilter<>("Location", p -> p.getLocation().name());
     private final ColumnValueFilter<ParameterInfo> classFilter =
-            new ColumnValueFilter<>("Class", p -> ParameterClassifier.classifyJoined(p.getName()));
+            new ColumnValueFilter<>("Class", ParameterClassifier::classesJoinedOf);
 
     public ParametersPanel(DataStore store, MontoyaApi api, PayloadCheatsheet cheatsheet, Bookmarks bookmarks) {
         super(api, bookmarks);
@@ -112,7 +114,7 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
             return;
         }
         if (cheatsheet != null) {
-            List<String> classes = ParameterClassifier.classify(p.getName());
+            List<String> classes = ParameterClassifier.classesOf(p);
             List<PayloadCheatsheet.Set> suggested = new ArrayList<>();
             for (String c : classes) {
                 PayloadCheatsheet.Set s = cheatsheet.forClass(c);
@@ -167,7 +169,7 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
         if (p == null) {
             return;
         }
-        String classes = ParameterClassifier.classifyJoined(p.getName());
+        String classes = ParameterClassifier.classesJoinedOf(p);
         boolean hasClass = !classes.isEmpty();
 
         if (comp instanceof JComponent jc) {
@@ -194,7 +196,7 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
             return;
         }
         viewer.show(p.getMessages());
-        String classes = ParameterClassifier.classifyJoined(p.getName());
+        String classes = ParameterClassifier.classesJoinedOf(p);
         StringBuilder sb = new StringBuilder();
         sb.append(p.getLocation().name()).append(" parameter \"").append(p.getName())
                 .append("\" on ").append(p.getEndpointPath());
@@ -221,13 +223,13 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
     @Override protected String[] columns() { return COLS; }
 
     @Override protected int[] columnWidths() {
-        return new int[]{150, 250, 60, 150, 190, 150, 80, 55};
+        return new int[]{150, 250, 60, 150, 190, 150, 80, 55, 80};
     }
 
     // Seen (7) is numeric -- declared so the sorter compares it as a number, not lexicographically.
     // Static constant (0.43.8) -- see EndpointsPanel's identical note.
     private static final Class<?>[] COLUMN_CLASSES =
-            {null, null, null, null, null, null, null, Integer.class};
+            {null, null, null, null, null, null, null, Integer.class, null};
 
     @Override protected Class<?>[] columnClasses() {
         return COLUMN_CLASSES;
@@ -240,9 +242,10 @@ public final class ParametersPanel extends AbstractTablePanel<ParameterInfo> {
             case 2 -> p.getLocation().name();
             case 3 -> p.getName();
             case 4 -> p.getExampleValue();
-            case 5 -> ParameterClassifier.classifyJoined(p.getName());
+            case 5 -> ParameterClassifier.classesJoinedOf(p);
             case 6 -> p.isReflected() ? "yes" : "";
             case 7 -> p.getSeen();
+            case COL_VALUE_KIND -> ValueKind.of(p.getExampleValue());
             default -> "";
         };
     }

@@ -1,0 +1,11 @@
+{
+  "comment": "Hidden parameters referenced in JS (0.56.0). JsAnalyzer runs these against app (non-library) JS bodies; capture group 1 is the parameter name. Every name goes into the param-name wordlist (param mining); only names matching 'interesting' (whole name, case-insensitive) become a 'Hidden parameter in JS' finding, and the JS Analysis tab's Seen column shows whether that name ever appeared in captured traffic. Keep every span bounded (ReDoS).",
+  "interesting": "^(?:debug|debug_?mode|test|testing|dev|devmode|admin|is_?admin|is_?staff|is_?super(?:user)?|role|roles|user_?role|group|groups|permission|permissions|perm|priv|privilege|internal|preview|draft|bypass|skip_?\\w{1,20}|force|override|redirect\\w{0,20}|return_?url|returnto|next|callback|jsonp|cb|url|uri|dest|destination|target|file|filepath|path|template|tpl|access_?level|tier|plan|price|amount|discount|coupon|user_?id|uid|account_?id|owner_?id|tenant_?id|org_?id|member_?id|verified|approved|show_?all|include_?deleted|deleted|hidden)$",
+  "patterns": [
+    { "name": "URL params accessor", "regex": "(?:[sS]earchParams|[pP]arams|[qQ]uery|URLSearchParams\\([^()]{0,80}\\))\\.(?:get|getAll|has|append|set)\\(\\s*[\"'`]([A-Za-z_][\\w.\\-\\[\\]]{0,40})[\"'`]" },
+    { "name": "FormData/params append", "regex": "\\.append\\(\\s*[\"'`]([a-z_][\\w\\-\\[\\]]{0,40})[\"'`]\\s*," },
+    { "name": "query string in literal", "regex": "[\"'`][^\"'`\\s<>();,]{0,150}?\\?([A-Za-z_][\\w\\-\\[\\]]{0,40})=" },
+    { "name": "query string follow-on", "regex": "(?<!&)&([A-Za-z_][\\w\\-\\[\\]]{0,40})=(?![=&])" },
+    { "name": "params object", "regex": "\\b(?:params|data|query|searchParams)\\s*:\\s*\\{\\s*[\"']?([A-Za-z_$][\\w$]{0,40})[\"']?\\s*:" }
+  ]
+}

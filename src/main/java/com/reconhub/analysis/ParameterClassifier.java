@@ -1,6 +1,7 @@
 package com.reconhub.analysis;
 
 import com.google.gson.Gson;
+import com.reconhub.model.ParameterInfo;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -67,6 +68,46 @@ public final class ParameterClassifier {
             return "";
         }
         return CACHE.computeIfAbsent(name, n -> String.join(", ", classify(n)));
+    }
+
+    // (name, value kind) -> classes (0.56.0). A handful of kinds, so this stays ~#names x small.
+    private static final Map<String, List<String>> VALUE_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, String> VALUE_JOINED_CACHE = new ConcurrentHashMap<>();
+
+    /** Name-based classes plus the one the example value's shape implies ({@link ValueKind}) -- e.g. a
+     * numeric {@code no=1234} is an IDOR lead, a URL value a redirect/SSRF lead, whatever the name. */
+    public static List<String> classesOf(ParameterInfo p) {
+        if (p == null) {
+            return List.of();
+        }
+        return classify(p.getName(), ValueKind.of(p.getExampleValue()));
+    }
+
+    /** {@link #classesOf} joined with ", " (empty string if none). Cached by (name, value kind). */
+    public static String classesJoinedOf(ParameterInfo p) {
+        if (p == null) {
+            return "";
+        }
+        String name = p.getName() == null ? "" : p.getName();
+        String kind = ValueKind.of(p.getExampleValue());
+        return VALUE_JOINED_CACHE.computeIfAbsent(name + "|" + kind,
+                k -> String.join(", ", classify(name, kind)));
+    }
+
+    /** Pure core of {@link #classesOf}: name classes, then the value kind's implied class if new. */
+    static List<String> classify(String name, String valueKind) {
+        String implied = valueKind == null ? null : ValueKind.impliedClass(valueKind);
+        if (implied == null) {
+            return classifyCached(name);
+        }
+        String safeName = name == null ? "" : name;
+        return VALUE_CACHE.computeIfAbsent(safeName + "|" + valueKind, k -> {
+            List<String> out = new ArrayList<>(classifyCached(safeName));
+            if (!out.contains(implied)) {
+                out.add(implied);
+            }
+            return List.copyOf(out);
+        });
     }
 
     // ---- Loading --------------------------------------------------------

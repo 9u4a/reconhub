@@ -1,5 +1,6 @@
 package com.reconhub.export;
 
+import com.reconhub.analysis.FindingHints;
 import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.ParameterClassifier;
 import com.reconhub.core.DataStore;
@@ -117,8 +118,8 @@ public final class MarkdownReporter {
             b.append("_No findings._\n\n");
             return;
         }
-        b.append("| Severity | Category | Type | Value | Location | Evidence | Seen | Status |\n"
-                + "| --- | --- | --- | --- | --- | --- | --- | --- |\n");
+        b.append("| Severity | Category | Type | Value | Location | Evidence | Seen | Status | Hint |\n"
+                + "| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n");
         for (Finding f : findings) {
             b.append("| ").append(f.getSeverity().name())
                     .append(" | ").append(md(FindingTaxonomy.labelOf(f.getType())))
@@ -128,6 +129,7 @@ public final class MarkdownReporter {
                     .append(" | ").append(md(f.getEvidence()))
                     .append(" | ").append(f.getTimesSeen())
                     .append(" | ").append(md(triageLabel(f.getTriage())))
+                    .append(" | ").append(md(FindingHints.extra(f)))
                     .append(" |\n");
         }
         b.append('\n');
@@ -170,7 +172,7 @@ public final class MarkdownReporter {
                     .append(" | ").append(code(p.getEndpointPath()))
                     .append(" | ").append(p.getLocation().name())
                     .append(" | ").append(md(p.getName()))
-                    .append(" | ").append(md(ParameterClassifier.classifyJoined(p.getName())))
+                    .append(" | ").append(md(ParameterClassifier.classesJoinedOf(p)))
                     .append(" | ").append(code(p.getExampleValue()))
                     .append(" | ").append(p.isReflected() ? "yes" : "–")
                     .append(" | ").append(p.getSeen())

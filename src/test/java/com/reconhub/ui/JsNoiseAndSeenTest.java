@@ -3,6 +3,7 @@ package com.reconhub.ui;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
 import com.reconhub.model.JsAsset;
+import com.reconhub.model.ParameterInfo;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -48,6 +49,19 @@ class JsNoiseAndSeenTest {
         assertEquals(Boolean.TRUE, JsAnalysisPanel.seen(route, seen));
         assertEquals(Boolean.FALSE, JsAnalysisPanel.seen(unseen, seen));
         assertNull(JsAnalysisPanel.seen(other, seen));
+    }
+
+    @Test
+    void hiddenParamSeenMeansCapturedAsARequestParameter() {
+        // 0.56.0: Seen for "Hidden parameter in JS" = that name was captured in traffic.
+        ParameterInfo captured = new ParameterInfo(ParameterInfo.Location.QUERY, "debug", "k", "/p");
+        Set<String> names = JsAnalysisPanel.seenParams(List.of(captured));
+        Finding seen = new Finding("Hidden parameter in JS: debug", Finding.Severity.LOW, "debug",
+                "https://h.example/app.js", "ev", false);
+        Finding unseen = new Finding("Hidden parameter in JS: isAdmin", Finding.Severity.LOW, "isAdmin",
+                "https://h.example/app.js", "ev", false);
+        assertEquals(Boolean.TRUE, JsAnalysisPanel.seen(seen, Set.of(), names));
+        assertEquals(Boolean.FALSE, JsAnalysisPanel.seen(unseen, Set.of(), names));
     }
 
     @Test

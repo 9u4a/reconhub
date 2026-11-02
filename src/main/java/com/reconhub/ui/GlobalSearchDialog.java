@@ -188,7 +188,7 @@ final class GlobalSearchDialog {
                     hay, e.getHost() + " " + e.getPath()));
         }
         for (ParameterInfo p : store.snapshotParameters()) {
-            String cls = ParameterClassifier.classifyJoined(p.getName());
+            String cls = ParameterClassifier.classesJoinedOf(p);
             String hay = p.getHost() + " " + p.getEndpointPath() + " " + p.getLocation().name() + " "
                     + p.getName() + " " + p.getExampleValue() + " " + cls;
             out.add(new Result(Kind.PARAMETER, p.getHost(),

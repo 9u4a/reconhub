@@ -481,7 +481,7 @@ public final class DashboardPanel extends JPanel implements Refreshable {
         Map<String, Integer> counts = new TreeMap<>();
         for (ParameterInfo p : params) {
             // Cached (0.43.8) -- see buildNotableEndpoints' identical note above.
-            for (String cls : ParameterClassifier.classifyCached(p.getName())) {
+            for (String cls : ParameterClassifier.classesOf(p)) {
                 counts.merge(cls, 1, Integer::sum);
             }
         }

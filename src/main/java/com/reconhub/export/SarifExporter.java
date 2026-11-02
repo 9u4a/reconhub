@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.reconhub.analysis.FindingHints;
 import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.HashUtil;
@@ -51,6 +52,12 @@ public final class SarifExporter {
                 JsonObject sd = new JsonObject();
                 sd.addProperty("text", id + " (" + FindingTaxonomy.labelOf(id) + ")");
                 rule.add("shortDescription", sd);
+                String hint = FindingHints.forType(id);
+                if (!hint.isEmpty()) {
+                    JsonObject help = new JsonObject();
+                    help.addProperty("text", "Try: " + hint);
+                    rule.add("help", help);
+                }
                 return rule;
             });
             results.add(result(f, ruleId));

@@ -4,6 +4,7 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.active.MatchReplaceEngine;
 import com.reconhub.active.MatchReplaceTarget;
+import com.reconhub.analysis.FindingHints;
 import com.reconhub.analysis.JsRisk;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
@@ -314,9 +315,10 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
                 sb.append(" = ").append(f.getMasked());
             }
             sb.append('\n');
-            String ev = f.getEvidence();
-            if (ev != null && ev.contains("Try:")) {
-                sb.append("        ").append(ev.substring(ev.indexOf("Try:"))).append('\n');
+            // own "Try:" hint, else the type's generic one (0.56.0, e.g. secrets carry no note)
+            String hint = FindingHints.of(f);
+            if (!hint.isEmpty()) {
+                sb.append("        Try: ").append(hint).append('\n');
             }
         }
 

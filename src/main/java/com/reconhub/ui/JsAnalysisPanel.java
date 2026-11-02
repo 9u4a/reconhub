@@ -2,6 +2,7 @@ package com.reconhub.ui;
 
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
+import com.reconhub.analysis.FindingHints;
 import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.JsAnalyzer;
 import com.reconhub.analysis.JsRisk;
@@ -11,6 +12,7 @@ import com.reconhub.core.Hosts;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
 import com.reconhub.model.JsAsset;
+import com.reconhub.model.ParameterInfo;
 
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
@@ -72,7 +74,7 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
             new ColumnValueFilter<>("JS file", JsAnalysisPanel::jsFileLabel);
     private final JLabel summary = new JLabel(" ");
     private final JCheckBox hideLibrary = new JCheckBox("Hide library JS", true);
-    private final JCheckBox unvisitedOnly = new JCheckBox("Unvisited routes only", false);
+    private final JCheckBox unvisitedOnly = new JCheckBox("Untested only", false);
 
     // Identity memos (0.55.0): this tab used to rebuild the JS-URL set and rescan every finding on every
     // 300ms tick. Each derived value below is recomputed only when its source snapshot list changes.
@@ -84,6 +86,8 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
     private Map<String, JsRisk.Stat> stats = Map.of();
     private List<Endpoint> lastEndpoints;
     private Set<String> seenPaths = Set.of();
+    private List<ParameterInfo> lastParameters;
+    private Set<String> seenParams = Set.of();   // parameter names captured in traffic (0.56.0)
 
     public JsAnalysisPanel(DataStore store, MontoyaApi api, Bookmarks bookmarks) {
         super(api, bookmarks);
@@ -126,8 +130,8 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
         hideLibrary.setToolTipText("Hide findings located in library / vendor / third-party JS (view only)");
         hideLibrary.addActionListener(e -> onFilterChanged());
         addToToolbar(hideLibrary);
-        unvisitedOnly.setToolTipText("Only sensitive routes referenced in JS that were never seen answering "
-                + "in captured traffic -- the untested surface");
+        unvisitedOnly.setToolTipText("Only sensitive routes / hidden parameters referenced in JS that never "
+                + "appeared in captured traffic -- the untested surface");
         unvisitedOnly.addActionListener(e -> onFilterChanged());
         addToToolbar(unvisitedOnly);
         addToToolbar(summary);
@@ -160,19 +164,39 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
         if (hideLibrary.isSelected() && libraryUrls.contains(f.getLocationUrl())) {
             return false;
         }
-        if (unvisitedOnly.isSelected() && !Boolean.FALSE.equals(seen(f, seenPaths))) {
+        if (unvisitedOnly.isSelected() && !Boolean.FALSE.equals(seen(f, seenPaths, seenParams))) {
             return false;
         }
         return sevOk && catOk && hostFilter.test(f) && fileFilter.test(f);
     }
 
-    /** For a sensitive-route finding: whether its route was seen answering in captured traffic; null for
-     * every other finding. Pure/static for headless testing. */
     static Boolean seen(Finding f, Set<String> seenPaths) {
-        if (f == null || f.getType() == null || !f.getType().startsWith(ROUTE_PREFIX)) {
+        return seen(f, seenPaths, Set.of());
+    }
+
+    /** For a sensitive-route finding: whether its route was seen answering in captured traffic; for a
+     * hidden-parameter finding (0.56.0): whether that name was ever captured as a request parameter; null
+     * for every other finding. Pure/static for headless testing. */
+    static Boolean seen(Finding f, Set<String> seenPaths, Set<String> seenParams) {
+        if (f == null || f.getType() == null) {
             return null;
         }
-        return seenPaths.contains(JsAnalyzer.routePath(f.getRawMatch()));
+        if (f.getType().startsWith(ROUTE_PREFIX)) {
+            return seenPaths.contains(JsAnalyzer.routePath(f.getRawMatch()));
+        }
+        if (f.getType().startsWith(JsAnalyzer.HIDDEN_PARAM_PREFIX)) {
+            return seenParams.contains(f.getRawMatch());
+        }
+        return null;
+    }
+
+    /** Names of every captured request parameter. Pure/static for headless testing. */
+    static Set<String> seenParams(List<ParameterInfo> params) {
+        Set<String> out = new HashSet<>();
+        for (ParameterInfo p : params) {
+            out.add(p.getName());
+        }
+        return out;
     }
 
     /** Paths of endpoints that actually answered in captured traffic (status != 0), normalized like
@@ -328,13 +352,20 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
             String tip = switch (viewColumn) {
                 case COL_MATCH -> f.getRawMatch();
                 case COL_JS_FILE -> f.getLocationUrl();
-                case COL_SEEN -> seen(f, seenPaths) == null ? null
-                        : "Y = answered in captured traffic, N = only referenced in JS (not yet requested)";
-                case COL_EVIDENCE -> f.getEvidence();
+                case COL_SEEN -> seen(f, seenPaths, seenParams) == null ? null
+                        : "Y = seen in captured traffic, N = only referenced in JS (not yet tested)";
+                case COL_EVIDENCE -> evidenceWithHint(f);
                 default -> null;
             };
             jc.setToolTipText(tip == null || tip.isBlank() ? null : tip);
         }
+    }
+
+    /** Evidence plus the type's generic hint when it carries no {@code Try:} of its own (0.56.0). */
+    private static String evidenceWithHint(Finding f) {
+        String ev = f.getEvidence() == null ? "" : f.getEvidence();
+        String extra = FindingHints.extra(f);
+        return extra.isEmpty() ? ev : (ev.isBlank() ? "" : ev + "  |  ") + "Try: " + extra;
     }
 
     /** Wires cross-tab navigation (JS finding → that file in the JS Assets tab). */
@@ -379,6 +410,11 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
         if (endpoints != lastEndpoints) {
             seenPaths = seenPaths(endpoints);
             lastEndpoints = endpoints;
+        }
+        List<ParameterInfo> params = store.snapshotParameters();
+        if (params != lastParameters) {
+            seenParams = seenParams(params);
+            lastParameters = params;
         }
         return jsRows;
     }
@@ -426,12 +462,12 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
             case 2 -> f.getType();
             case COL_MATCH -> f.getRawMatch();
             case COL_SEEN -> {
-                Boolean seen = seen(f, seenPaths);
+                Boolean seen = seen(f, seenPaths, seenParams);
                 yield seen == null ? "" : seen ? "Y" : "N";
             }
             case COL_JS_FILE -> f.getLocationUrl();
             case COL_RISK -> JsRisk.of(stats, f.getLocationUrl()).score();
-            case COL_EVIDENCE -> f.getEvidence();
+            case COL_EVIDENCE -> evidenceWithHint(f);
             default -> "";
         };
     }

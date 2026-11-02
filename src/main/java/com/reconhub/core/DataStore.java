@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -41,6 +42,10 @@ public final class DataStore {
     private final Map<String, Finding> findings = new ConcurrentHashMap<>();
     private final Map<String, JsAsset> jsAssets = new ConcurrentHashMap<>();
     private final Map<String, TechInfo> techByHost = new ConcurrentHashMap<>();
+    // Parameter names referenced in app JS (0.56.0): name -> first JS URL. Feeds the param-name wordlist
+    // and state backups only (no table), so it carries no mod counter / snapshot cache.
+    static final int MAX_JS_PARAM_NAMES = 20_000;
+    private final Map<String, String> jsParamNames = new ConcurrentHashMap<>();
 
     // ---- Snapshot cache ---------------------------------------------------
     // Each snapshot*() below used to copy + sort its whole collection on every single call. The sort
@@ -226,6 +231,19 @@ public final class DataStore {
     public void restoreFinding(Finding f) { findings.put(f.key(), f); findingsMod.incrementAndGet(); findingOrder.add(f.key()); }
     public void restoreJsAsset(JsAsset a) { jsAssets.put(a.key(), a); jsAssetsMod.incrementAndGet(); jsAssetOrder.add(a.key()); }
     public void restoreTech(TechInfo t) { techByHost.put(t.key(), t); techMod.incrementAndGet(); }
+
+    /** Records a parameter name seen in app JS (first JS URL wins); silently capped. */
+    public void recordJsParamName(String name, String jsUrl) {
+        if (name == null || name.isEmpty() || jsParamNames.size() >= MAX_JS_PARAM_NAMES) {
+            return;
+        }
+        jsParamNames.putIfAbsent(name, jsUrl == null ? "" : jsUrl);
+    }
+
+    /** @return a sorted copy of the JS-referenced parameter names (name -> first JS URL). */
+    public Map<String, String> snapshotJsParamNames() {
+        return new TreeMap<>(jsParamNames);
+    }
 
     public void restoreCounters(int requests, Map<Integer, Integer> status,
                                 Map<String, Integer> hosts, Map<String, Integer> ctypes) {
@@ -468,6 +486,7 @@ public final class DataStore {
         findings.clear();
         jsAssets.clear();
         techByHost.clear();
+        jsParamNames.clear();
         endpointOrder.clear();
         parameterOrder.clear();
         findingOrder.clear();

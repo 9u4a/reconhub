@@ -37,6 +37,10 @@ public final class JsAnalyzer {
             Pattern.compile("[a-z]+/[a-z0-9.+-]+", Pattern.CASE_INSENSITIVE);
     /** Cap on sensitive-route findings from one body (0.55.0) -- one bundle can't flood the tab. */
     private static final int MAX_ROUTES_PER_BODY = 30;
+    // Hidden-parameter caps (0.56.0): names collected per body, and how many become findings.
+    static final int MAX_PARAMS_PER_BODY = 200;
+    private static final int MAX_PARAM_FINDINGS_PER_BODY = 30;
+    public static final String HIDDEN_PARAM_PREFIX = "Hidden parameter in JS: ";
     /** A link ending in one of these is a static asset, never a "sensitive route". */
     private static final Set<String> STATIC_EXT = Set.of("css", "png", "jpg", "jpeg", "gif", "svg", "ico",
             "webp", "avif", "bmp", "woff", "woff2", "ttf", "otf", "eot", "map", "mp3", "mp4", "webm", "ogg",
@@ -115,6 +119,7 @@ public final class JsAnalyzer {
         if (jsFindingScanner != null) {
             jsFindingScanner.scan(body, url, messages);
         }
+        recordHiddenParams(url, body, messages);
         // Actionable DOM-XSS-style flow findings (source→sink proximity + how-to-test hint, 0.52.0).
         if (flowAnalyzer != null) {
             flowAnalyzer.analyze(body, url, messages);
@@ -191,9 +196,51 @@ public final class JsAnalyzer {
         }
     }
 
+    /** Hidden parameters (0.56.0): every name goes to the wordlist; names matching the "interesting" list
+     * become one finding each (deduped by name across bundles) with a how-to-test hint. */
+    private void recordHiddenParams(String jsUrl, String body, HttpRequestResponse messages) {
+        if (patterns.jsParamRules().isEmpty()) {
+            return;
+        }
+        Pattern interesting = patterns.jsParamInteresting();
+        int recorded = 0;
+        for (String name : paramNames(body, patterns.jsParamRules())) {
+            store.recordJsParamName(name, jsUrl);
+            if (recorded >= MAX_PARAM_FINDINGS_PER_BODY || !isInterestingParam(name, interesting)) {
+                continue;
+            }
+            Finding f = new Finding(HIDDEN_PARAM_PREFIX + name, Finding.Severity.LOW, name, jsUrl,
+                    "parameter referenced in JS  |  Try: add ?" + name + "=1 (or true / admin / another "
+                            + "user's id) to the endpoints that use it and diff the response", false);
+            f.setMessages(messages);
+            store.recordFinding(f);
+            recorded++;
+        }
+    }
+
+    /** Distinct parameter names (group 1) the rules find in {@code body}, insertion order, capped at
+     * {@link #MAX_PARAMS_PER_BODY}. Pure/static for headless testing. */
+    static Set<String> paramNames(String body, List<PatternRegistry.JsLinkRule> rules) {
+        Set<String> names = new LinkedHashSet<>();
+        for (PatternRegistry.JsLinkRule rule : rules) {
+            Matcher m = rule.pattern.matcher(body);
+            while (names.size() < MAX_PARAMS_PER_BODY && m.find()) {
+                String n = m.groupCount() >= 1 ? m.group(1) : null;
+                if (n != null && n.length() >= 2) {
+                    names.add(n);
+                }
+            }
+        }
+        return names;
+    }
+
+    static boolean isInterestingParam(String name, Pattern interesting) {
+        return interesting != null && interesting.matcher(name).find();
+    }
+
     /** The first route rule matching {@code link}'s path, or null (static assets never match). Pure/
      * static for headless testing. */
-    static PatternRegistry.SecretRule routeRuleFor(String link, List<PatternRegistry.SecretRule> rules) {
+    public static PatternRegistry.SecretRule routeRuleFor(String link, List<PatternRegistry.SecretRule> rules) {
         String path = routePath(link);
         if (path.isEmpty() || isStaticAsset(path)) {
             return null;

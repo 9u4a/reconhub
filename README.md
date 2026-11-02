@@ -15,8 +15,8 @@
 | **Host focus** (상단 바) | 호스트 하나를 고르면 Endpoints·Parameters·Findings가 **그 호스트 행만** 표시 (정확 일치) |
 | **Dashboard** | 요약 통계 + 호스트 스코어카드, 다른 탭으로 크로스탭 이동, **호스트 데이터 삭제(다중 선택)** |
 | **Endpoints** | 엔드포인트 인벤토리 (dedup, Auth 관찰), **다중 선택 → Match & Replace 전송** |
-| **Parameters** | 파라미터 + 취약점 후보 Class 자동 분류, **다중 선택 → Match & Replace 전송** |
-| **Findings** | 탐지 결과 심각도/카테고리 집계 + 트리아지, **다중 선택 → Match & Replace 전송** |
+| **Parameters** | 파라미터 + 취약점 후보 Class 자동 분류(이름 + **값 모양**: 숫자 ID·UUID→IDOR, URL→Redirect/SSRF 등), **다중 선택 → Match & Replace 전송** |
+| **Findings** | 탐지 결과 심각도/카테고리 집계 + 트리아지, 모든 탐지에 **Hint**(어떻게 테스트할지), **다중 선택 → Match & Replace 전송** |
 | **JS Assets** | JS 파일 수집·분석 (엔드포인트/탐지 추출), **라이브러리·서드파티·빈 청크 자동 숨김**, 파일별 **Risk** 순 정렬, **다중 선택 → Match & Replace 전송** |
 | **JS Analysis** | JS에서 나온 로직/API 탐지 결과(암복호화·권한·위험 싱크·설정·API 호출·**민감 경로**)를 번들 가로질러 모아 **위험한 파일 순**으로 표시, 민감 경로는 **실제 호출 여부(Seen)** 표시 |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 체크 |
@@ -71,7 +71,9 @@ Status/Type 필터 버튼**으로 값을 체크박스로 골라 필터링(Burp H
 
 ### Parameters
 엔드포인트별 파라미터(query/body/JSON/cookie) + 취약점 후보 **Class** 자동 분류(IDOR·Redirect/SSRF·
-File/Path·SQLi/Sort·Command·**SSTI**). 우클릭 **Payload cheatsheet ▸**로 자동 제안 클래스는 원클릭,
+File/Path·SQLi/Sort·Command·**SSTI**). 이름뿐 아니라 **예시 값의 모양**도 봄 — **Value kind** 컬럼에
+numeric-id·uuid·email·url·path·jwt·serialized·base64를 표시하고, `?no=884213`·UUID 값은 IDOR, URL 값은
+Redirect/SSRF, 경로 값은 File/Path, 직렬화 값은 Deserialization 클래스로 이름과 무관하게 추가. 우클릭 **Payload cheatsheet ▸**로 자동 제안 클래스는 원클릭,
 **전체 클래스도 항상 수동으로 직접 선택 가능**(Basic/Bypass·우회 페이로드, Intruder에 클래스당 2세트
 등록). **JSON 파라미터**는 Prototype Pollution, **직렬화 값처럼 보이는 파라미터**(Java/PHP
 serialize·ViewState)는 Deserialization이 이름과 무관하게 자동 제안. **Location/Class 필터 버튼**으로
@@ -79,6 +81,9 @@ serialize·ViewState)는 Deserialization이 이름과 무관하게 자동 제안
 
 ### Findings
 시크릿·PII·미스컨피그 등을 심각도·**카테고리**로 집계(필터·트리아지·JWT 디코드, 행 선택 시 원문).
+**Hint** 컬럼이 모든 탐지에 "어떻게 테스트할지"를 보여줌(CORS·CSP·쿠키·노출 파일·OpenAPI·GraphQL·소스맵·
+시크릿 검증 등; 탐지 자체에 `Try:`가 있으면 그것을 우선) — HTML/Markdown 리포트의 Hint 열, SARIF의 rule
+help에도 포함.
 우클릭 **Payload cheatsheet ▸**로 반사 XSS·오픈 리다이렉트는 자동 제안, **전체 클래스도 수동 선택
 가능**. 검색창 옆 **Host 필터 버튼**으로 여러 호스트를 체크박스로 골라 필터링(심각도/카테고리 필터와
 동시 적용).
@@ -108,8 +113,12 @@ Severity/Category/Type/JS 파일/Evidence 컬럼으로 보여주고, **Category 
 위에 묶여 보임. **Hide library JS**(기본 켜짐)로 라이브러리 코드에서 나온 탐지를 숨김.
 **민감 경로**: JS에서 추출한 경로 중 admin·actuator/진단·internal/debug·업로드·export·ID 기반 객체
 (`/users/123`)·config·GraphQL 경로를 "어떻게 테스트할지" 힌트와 함께 탐지하고, **Seen** 컬럼에 그 경로가
-캡처된 트래픽에서 실제 응답한 적 있는지(Y/N) 표시 — **Unvisited routes only**로 아직 한 번도 요청하지
-않은(N) 경로만 모아 바로 테스트 대상으로 볼 수 있음. **Match 컬럼**에 실제 매치된 코드를 바로 표시하고,
+캡처된 트래픽에서 실제 응답한 적 있는지(Y/N) 표시. **숨은 파라미터**: JS에서 쓰는 파라미터 이름
+(`URLSearchParams`/`FormData`/쿼리 문자열/axios `params` 등)을 모으고, 그중 debug·isAdmin·role·redirect·
+callback·userId 같은 의미 있는 이름은 "Hidden parameter in JS" 탐지로 표시 — **Seen**은 그 이름이 캡처된
+요청 파라미터로 나온 적 있는지(Y/N). **Untested only**로 아직 한 번도 요청하지 않은(N) 경로·파라미터만
+모아 바로 테스트 대상으로 볼 수 있음. JS에서 모은 파라미터 이름은 전부 **워드리스트(Param names)** 내보내기에도
+포함돼 Param Miner/Arjun 같은 파라미터 마이닝에 바로 쓸 수 있음. **Match 컬럼**에 실제 매치된 코드를 바로 표시하고,
 행 우클릭 **Open this JS file in JS Assets**로 해당 파일을 JS Assets 탭에서 열 수 있음. 판정 기준:
 finding의 `locationUrl`이 알려진 JS 파일 URL과 일치하면 JS 소스로 간주(모델 변경 없음).
 
@@ -150,7 +159,9 @@ API 키/토큰·JWT·인증 헤더·스토리지 URL 등 **시크릿**(응답 �
 오는 JWT 등도 잡힘), **PII**(주민번호·카드·휴대폰), URL 노출 시크릿·오픈 리다이렉트·반사 XSS 후보,
 스택트레이스/SQL 에러 등 응답 시그니처, CORS(와일드카드·크리덴셜·Origin 미검증·Allow-Methods/Headers
 와일드카드)·쿠키·CSP·캐시·혼합 콘텐츠 **미스컨피그**, 노출 파일(`.env`·`.git` 등)·백업, 디버그/진단
-경로, 권한 단서, **OpenAPI/Swagger 스펙**(JSON·**YAML 둘 다**)·**GraphQL
+경로, 권한 단서, **비인증 접근 후보**(Authorization·Cookie 없이 보낸 요청에 JSON/XML API나 admin·
+actuator 등 민감 경로가 2xx로 응답 — "Unauthenticated access", 다른 계정/무세션으로 재전송해 비교하라는
+힌트 포함), **OpenAPI/Swagger 스펙**(JSON·**YAML 둘 다**)·**GraphQL
 introspection**(스키마를 실제로 파싱해 타입.필드를 엔드포인트/파라미터로 등록), **소스맵(.map) 노출**
 (JS 내 `sourceMappingURL` 참조 / 캡처된 `.map`의 원본 소스 목록), 주석, 누락된 보안 헤더. (화면에선
 원문 확인·복사 가능, 리포트에선 마스킹)

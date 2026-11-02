@@ -134,6 +134,9 @@ public final class PatternRegistry {
     private final List<JsLinkRule> jsLinkRules = new ArrayList<>();
     // Sensitive-route rules (0.55.0), matched against each link JsAnalyzer extracts (not the body).
     private final List<SecretRule> jsRouteRules = new ArrayList<>();
+    // Hidden-parameter extractors (0.56.0): group 1 = a parameter name referenced in app JS.
+    private final List<JsLinkRule> jsParamRules = new ArrayList<>();
+    private Pattern jsParamInteresting;   // null when js-params.json is missing/invalid
     private final List<TechRule> techRules = new ArrayList<>();
     private final List<String> securityHeaders = new ArrayList<>();
     private final List<String> loadErrors = new ArrayList<>();
@@ -147,6 +150,8 @@ public final class PatternRegistry {
     public List<JsPair> jsPairs() { return jsPairs; }
     public List<JsLinkRule> jsLinkRules() { return jsLinkRules; }
     public List<SecretRule> jsRouteRules() { return jsRouteRules; }
+    public List<JsLinkRule> jsParamRules() { return jsParamRules; }
+    public Pattern jsParamInteresting() { return jsParamInteresting; }
     public List<TechRule> techRules() { return techRules; }
     public List<String> securityHeaders() { return securityHeaders; }
     public List<String> loadErrors() { return loadErrors; }
@@ -163,6 +168,7 @@ public final class PatternRegistry {
         r.loadJsPairs(gson);
         r.loadJsLinks(gson);
         r.loadJsRoutes(gson);
+        r.loadJsParams(gson);
         r.loadTech(gson);
         return r;
     }
@@ -177,6 +183,11 @@ public final class PatternRegistry {
     private static final class JsFile {
         List<Raw> patterns;
         static final class Raw { String name; String regex; }
+    }
+
+    private static final class JsParamFile {
+        String interesting;
+        List<JsFile.Raw> patterns;
     }
 
     private static final class TechFile {
@@ -330,6 +341,30 @@ public final class PatternRegistry {
                         Pattern.compile(raw.regex, Pattern.CASE_INSENSITIVE), raw.note));
             } catch (PatternSyntaxException e) {
                 loadErrors.add("js-routes[" + raw.name + "]: " + e.getMessage());
+            }
+        }
+    }
+
+    private void loadJsParams(Gson gson) {
+        JsParamFile f = read(gson, "/patterns/js-params.json", JsParamFile.class);
+        if (f == null) {
+            return;
+        }
+        if (f.interesting != null) {
+            try {
+                jsParamInteresting = Pattern.compile(f.interesting, Pattern.CASE_INSENSITIVE);
+            } catch (PatternSyntaxException e) {
+                loadErrors.add("js-params[interesting]: " + e.getMessage());
+            }
+        }
+        if (f.patterns == null) {
+            return;
+        }
+        for (JsFile.Raw raw : f.patterns) {
+            try {
+                jsParamRules.add(new JsLinkRule(raw.name, Pattern.compile(raw.regex)));
+            } catch (PatternSyntaxException e) {
+                loadErrors.add("js-params[" + raw.name + "]: " + e.getMessage());
             }
         }
     }

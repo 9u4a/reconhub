@@ -4,6 +4,7 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.active.MatchReplaceEngine;
 import com.reconhub.active.MatchReplaceTarget;
+import com.reconhub.analysis.FindingHints;
 import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.JwtDecoder;
 import com.reconhub.analysis.PayloadCheatsheet;
@@ -36,9 +37,10 @@ import java.util.Set;
 public final class FindingsPanel extends AbstractTablePanel<Finding> {
 
     private static final String[] COLS =
-            {"Severity", "Category", "Type", "Evidence", "Location", "Value", "Seen", "Status"};
+            {"Severity", "Category", "Type", "Evidence", "Location", "Value", "Seen", "Status", "Hint"};
     private static final int COL_CATEGORY = 1;
     private static final int COL_STATUS = 7;
+    private static final int COL_HINT = 8;   // how-to-test (0.56.0), see FindingHints
 
     private final DataStore store;
     private final Settings settings;
@@ -249,6 +251,12 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
         if (f.getEvidence() != null && !f.getEvidence().isBlank()) {
             sb.append("   |   ").append(f.getEvidence());
         }
+        if (FindingHints.ownHint(f.getEvidence()).isEmpty()) {
+            String hint = FindingHints.forType(f.getType());
+            if (!hint.isEmpty()) {
+                sb.append("   |   Try: ").append(hint);
+            }
+        }
         viewer.setInfo(sb.toString());
     }
 
@@ -295,6 +303,7 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
                 case 3 -> f.getEvidence();
                 case 4 -> f.getLocationUrl();
                 case 5 -> fullValue(f);
+                case COL_HINT -> FindingHints.of(f);
                 default -> null;
             };
             jc.setToolTipText(tip == null || tip.isBlank() ? null : tip);
@@ -382,13 +391,13 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
     @Override protected String[] columns() { return COLS; }
 
     @Override protected int[] columnWidths() {
-        return new int[]{80, 95, 200, 240, 240, 240, 50, 90};
+        return new int[]{80, 95, 200, 240, 240, 240, 50, 90, 320};
     }
 
     // Seen (6) is numeric -- declared so the sorter compares it as a number, not lexicographically.
     // Static constant (0.43.8) -- see EndpointsPanel's identical note.
     private static final Class<?>[] COLUMN_CLASSES =
-            {null, null, null, null, null, null, Integer.class, null};
+            {null, null, null, null, null, null, Integer.class, null, null};
 
     @Override protected Class<?>[] columnClasses() {
         return COLUMN_CLASSES;
@@ -404,6 +413,7 @@ public final class FindingsPanel extends AbstractTablePanel<Finding> {
             case 5 -> fullValue(f);
             case 6 -> f.getTimesSeen();
             case COL_STATUS -> label(f.getTriage());
+            case COL_HINT -> FindingHints.of(f);
             default -> "";
         };
     }

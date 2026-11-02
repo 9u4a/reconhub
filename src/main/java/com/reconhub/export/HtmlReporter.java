@@ -1,5 +1,6 @@
 package com.reconhub.export;
 
+import com.reconhub.analysis.FindingHints;
 import com.reconhub.analysis.FindingTaxonomy;
 import com.reconhub.analysis.ParameterClassifier;
 import com.reconhub.core.DataStore;
@@ -161,7 +162,7 @@ public final class HtmlReporter {
         }
         b.append("<table id=\"findings-table\"><thead><tr><th>Severity</th><th>Category</th>"
                 + "<th>Type</th><th>Value</th><th>Location</th><th>Evidence</th><th>Seen</th>"
-                + "<th>Status</th></tr></thead><tbody>");
+                + "<th>Status</th><th>Hint</th></tr></thead><tbody>");
         for (Finding f : findings) {
             FindingTaxonomy.Category c = FindingTaxonomy.categoryOf(f.getType());
             b.append("<tr data-sev=\"").append(f.getSeverity().name())
@@ -176,7 +177,8 @@ public final class HtmlReporter {
                     .append(esc(f.getLocationUrl())).append("</code></td><td class=\"muted\">")
                     .append(esc(f.getEvidence())).append("</td><td>")
                     .append(f.getTimesSeen()).append("</td><td class=\"muted\">")
-                    .append(esc(triageLabel(f.getTriage()))).append("</td></tr>");
+                    .append(esc(triageLabel(f.getTriage()))).append("</td><td class=\"muted\">")
+                    .append(esc(FindingHints.extra(f))).append("</td></tr>");
         }
         b.append("</tbody></table></section>");
     }
@@ -217,7 +219,7 @@ public final class HtmlReporter {
                     .append(esc(p.getEndpointPath())).append("</code></td><td><code>")
                     .append(p.getLocation().name()).append("</code></td><td>")
                     .append(esc(p.getName())).append("</td><td>");
-            for (String cls : ParameterClassifier.classifyCached(p.getName())) {   // cached (0.43.7)
+            for (String cls : ParameterClassifier.classesOf(p)) {   // name + value kind (0.56.0), cached
                 b.append("<span class=\"tag\" style=\"color:var(--low)\">").append(esc(cls))
                         .append("</span>");
             }
