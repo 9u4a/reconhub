@@ -67,6 +67,31 @@ class JsFlowAnalyzerTest {
     }
 
     @Test
+    void anchoredSourceNeedsItsAnchorSomewhereInTheBody() {
+        // 0.55.0: postMessage-style source -- e.data only counts when a message listener exists.
+        PatternRegistry.JsSource pm = new PatternRegistry.JsSource("postMessage data",
+                Pattern.compile("\\be\\.data\\b"), "a postMessage",
+                Pattern.compile("addEventListener\\(\"message\""));
+        List<PatternRegistry.JsSource> sources = List.of(pm);
+
+        String noListener = "function render(e){ el.innerHTML = e.data.html; }";
+        assertTrue(JsFlowAnalyzer.findFlows(noListener, sources, SINKS).isEmpty());
+
+        String withListener = "window.addEventListener(\"message\", h); function h(e){ el.innerHTML = e.data; }";
+        assertTrue(JsFlowAnalyzer.findFlows(withListener, sources, SINKS).stream()
+                .anyMatch(h -> h.type().equals("DOM XSS: postMessage data -> innerHTML")));
+    }
+
+    @Test
+    void shippedPostMessageSourceIgnoresBareDataProperty() {
+        // React/axios-style `.data` next to an innerHTML write must no longer read as a postMessage flow.
+        PatternRegistry reg = PatternRegistry.load();
+        String body = "axios.get(u).then(function(r){ node.innerHTML = r.data.html; });";
+        assertTrue(JsFlowAnalyzer.findFlows(body, reg.jsSources(), reg.jsSinks()).stream()
+                .noneMatch(h -> h.type().contains("postMessage")));
+    }
+
+    @Test
     void oneFindingPerSinkSourceKindPerBody() {
         // many innerHTML+hash occurrences collapse to a single finding (noise cap).
         String one = "location.hash; el.innerHTML = x; ";

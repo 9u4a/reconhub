@@ -31,6 +31,16 @@ class SettingsPersistenceTest {
     }
 
     @Test
+    void analyzeLibraryJsDefaultsOffAndSurvivesSaveLoad() {
+        assertEquals(false, new Settings().isAnalyzeLibraryJs());
+        ApiStub stub = new ApiStub();
+        Settings s = new Settings();
+        s.setAnalyzeLibraryJs(true);
+        s.save(stub.api);
+        assertEquals(true, Settings.load(stub.api).isAnalyzeLibraryJs());
+    }
+
+    @Test
     void positiveCapIsFlooredToSaneMinimum() {
         Settings s = new Settings();
         s.setMaxRetainedItems(5);        // below the 1000 floor

@@ -7,12 +7,14 @@ import com.reconhub.core.HashUtil;
 import com.reconhub.core.Hosts;
 import com.reconhub.core.Settings;
 import com.reconhub.export.JsFileWriter;
+import com.reconhub.model.Finding;
 import com.reconhub.model.JsAsset;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
@@ -33,6 +35,12 @@ public final class JsAnalyzer {
     // so it's compiled once and needs no lowercased copy of the input.
     private static final Pattern MIME_LIKE =
             Pattern.compile("[a-z]+/[a-z0-9.+-]+", Pattern.CASE_INSENSITIVE);
+    /** Cap on sensitive-route findings from one body (0.55.0) -- one bundle can't flood the tab. */
+    private static final int MAX_ROUTES_PER_BODY = 30;
+    /** A link ending in one of these is a static asset, never a "sensitive route". */
+    private static final Set<String> STATIC_EXT = Set.of("css", "png", "jpg", "jpeg", "gif", "svg", "ico",
+            "webp", "avif", "bmp", "woff", "woff2", "ttf", "otf", "eot", "map", "mp3", "mp4", "webm", "ogg",
+            "wav", "pdf", "txt", "js", "mjs", "ts", "tsx", "jsx", "scss", "less");
 
     private final MontoyaApi api;   // nullable (headless tests); used only to log a save failure
     private final DataStore store;
@@ -74,6 +82,11 @@ public final class JsAnalyzer {
 
         JsAsset asset = store.recordJsAsset(new JsAsset(url, sha, body.length()));
         asset.setMessages(messages);   // null for a manually-imported local file -- that's correct
+        // Library / vendor / third-party code (0.55.0): still stored, saved, secret-scanned and
+        // source-map-checked, but skips endpoint extraction + every deep-analysis pass unless the user
+        // opted in -- those passes are where library code turned into noise (and the biggest CPU cost).
+        asset.setKind(JsLibraryClassifier.shared().classify(url, body));
+        boolean deep = !asset.isLibrary() || settings.isAnalyzeLibraryJs();
 
         if (settings.isSaveJsToDisk()) {
             try {
@@ -84,12 +97,17 @@ public final class JsAnalyzer {
             }
         }
 
-        List<String> links = extractEndpoints(url, body);
+        List<String> links = deep ? extractEndpoints(url, body, messages) : List.of();
         asset.setExtractedEndpoints(links.size());
         asset.setPreview(buildPreview(links, body));
 
         int secrets = secretScanner.scan(body, url, messages);
         asset.setExtractedSecrets(secrets);
+
+        sourceMapDetector.checkJsBody(url, body, messages);
+        if (!deep) {
+            return;
+        }
 
         // Deep JS analysis (0.47.0): crypto/authz/sink/config locators. Runs here (not only in
         // TrafficIngestor.process) so a manually-imported JS file is analyzed too. Findings only --
@@ -105,8 +123,6 @@ public final class JsAnalyzer {
         if (pairAnalyzer != null) {
             pairAnalyzer.analyze(body, url, messages);
         }
-
-        sourceMapDetector.checkJsBody(url, body, messages);
 
         if (settings.isRunPassiveChecks()) {
             commentExtractor.extractJs(body, url, messages);
@@ -126,7 +142,7 @@ public final class JsAnalyzer {
 
     /** @return the distinct links discovered (insertion order), so the caller can both count them and
      * sample a few for {@link #buildPreview}. */
-    private List<String> extractEndpoints(String jsUrl, String body) {
+    private List<String> extractEndpoints(String jsUrl, String body, HttpRequestResponse messages) {
         String host = Hosts.of(jsUrl);
         // LinkedHashSet, not HashSet: preview sampling needs a deterministic order (the same body is
         // only ever analyzed once, due to SHA-256 dedup, so its preview must come out the same way
@@ -147,7 +163,87 @@ public final class JsAnalyzer {
                         Set.of(), null, Set.of(jsUrl));
             }
         }
+        recordSensitiveRoutes(seen, jsUrl, messages);
         return new ArrayList<>(seen);
+    }
+
+    /** One finding per (route rule, route) for links that look like sensitive surface (0.55.0) -- the
+     * how-to-test note rides in the evidence, like every other actionable JS finding. */
+    private void recordSensitiveRoutes(Set<String> links, String jsUrl, HttpRequestResponse messages) {
+        List<PatternRegistry.SecretRule> rules = patterns.jsRouteRules();
+        if (rules.isEmpty()) {
+            return;
+        }
+        int recorded = 0;
+        for (String link : links) {
+            if (recorded >= MAX_ROUTES_PER_BODY) {
+                break;
+            }
+            PatternRegistry.SecretRule rule = routeRuleFor(link, rules);
+            if (rule == null) {
+                continue;
+            }
+            String evidence = "route referenced in JS" + (rule.note == null ? "" : "  |  Try: " + rule.note);
+            Finding f = new Finding(rule.name, rule.severity, link, jsUrl, evidence, false);
+            f.setMessages(messages);
+            store.recordFinding(f);
+            recorded++;
+        }
+    }
+
+    /** The first route rule matching {@code link}'s path, or null (static assets never match). Pure/
+     * static for headless testing. */
+    static PatternRegistry.SecretRule routeRuleFor(String link, List<PatternRegistry.SecretRule> rules) {
+        String path = routePath(link);
+        if (path.isEmpty() || isStaticAsset(path)) {
+            return null;
+        }
+        for (PatternRegistry.SecretRule r : rules) {
+            if (r.pattern.matcher(path).find()) {
+                return r;
+            }
+        }
+        return null;
+    }
+
+    /** {@code link}'s path for route matching / "seen in traffic" lookup: scheme+host and fragment
+     * dropped, query kept off, leading '/' ensured, trailing '/' trimmed. Public so the JS Analysis
+     * tab's Seen column normalizes captured endpoint paths the same way. */
+    public static String routePath(String link) {
+        if (link == null) {
+            return "";
+        }
+        String p = link.trim();
+        int scheme = p.indexOf("://");
+        if (scheme >= 0) {
+            int slash = p.indexOf('/', scheme + 3);
+            p = slash < 0 ? "/" : p.substring(slash);
+        } else if (p.startsWith("//")) {
+            int slash = p.indexOf('/', 2);
+            p = slash < 0 ? "/" : p.substring(slash);
+        }
+        int cut = p.length();
+        int q = p.indexOf('?');
+        if (q >= 0) cut = Math.min(cut, q);
+        int h = p.indexOf('#');
+        if (h >= 0) cut = Math.min(cut, h);
+        p = p.substring(0, cut);
+        if (p.startsWith("./")) {
+            p = p.substring(1);
+        }
+        if (!p.startsWith("/")) {
+            p = "/" + p;
+        }
+        while (p.length() > 1 && p.endsWith("/")) {
+            p = p.substring(0, p.length() - 1);
+        }
+        return p;
+    }
+
+    private static boolean isStaticAsset(String path) {
+        int slash = path.lastIndexOf('/');
+        int dot = path.lastIndexOf('.');
+        return dot > slash && STATIC_EXT.contains(path.substring(dot + 1).toLowerCase(Locale.ROOT));
     }
 
     /**

@@ -6,7 +6,7 @@
     { "name": "full URL (location.href / document.URL)", "regex": "location\\.href|location\\.pathname|document\\.(?:URL|documentURI|baseURI)", "inject": "the request URL" },
     { "name": "referrer (document.referrer)", "regex": "document\\.referrer", "inject": "the Referer header" },
     { "name": "window.name", "regex": "window\\.name", "inject": "window.name set from an attacker page" },
-    { "name": "postMessage data", "regex": "addEventListener\\s{0,5}\\(\\s{0,5}[\"']message[\"']|onmessage\\s{0,5}=|event\\.data\\b|\\.data\\b", "inject": "a postMessage sent from another origin (check for a missing origin check)" },
+    { "name": "postMessage data", "regex": "addEventListener\\s{0,5}\\(\\s{0,5}[\"']message[\"']|onmessage\\s{0,5}=|\\b(?:e|ev|evt|event|msg|message)\\.data\\b", "anchor": "addEventListener\\s{0,5}\\(\\s{0,5}[\"']message[\"']|onmessage\\s{0,5}=", "inject": "a postMessage sent from another origin (check for a missing origin check)" },
     { "name": "cookie (document.cookie)", "regex": "document\\.cookie", "inject": "a cookie value" }
   ],
   "sinks": [

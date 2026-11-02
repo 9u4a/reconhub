@@ -59,12 +59,20 @@ public final class JsFlowAnalyzer {
                                           List<PatternRegistry.JsSink> sinks) {
         List<FlowHit> out = new ArrayList<>();
         Set<String> seen = new HashSet<>();   // one finding per (sink,source) kind per body
+        // A source with an anchor (0.55.0) only counts when the anchor exists somewhere in this body --
+        // decided once per body, not per sink window.
+        List<PatternRegistry.JsSource> active = new ArrayList<>(sources.size());
+        for (PatternRegistry.JsSource s : sources) {
+            if (s.anchor == null || s.anchor.matcher(body).find()) {
+                active.add(s);
+            }
+        }
         for (PatternRegistry.JsSink sink : sinks) {
             Matcher m = sink.pattern.matcher(body);
             int hits = 0;
             while (m.find() && out.size() < MAX_PER_BODY && hits < 200) {
                 hits++;
-                PatternRegistry.JsSource src = nearestSource(body, m.start(), sources);
+                PatternRegistry.JsSource src = nearestSource(body, m.start(), active);
                 if (src == null && !sink.always) {
                     continue;   // a non-"always" sink with no attacker source nearby is just noise
                 }

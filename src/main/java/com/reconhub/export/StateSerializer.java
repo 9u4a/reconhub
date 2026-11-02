@@ -94,6 +94,7 @@ public final class StateSerializer {
 
     private static final class JsAssetDto {
         String url, sha256, savedPath, preview;
+        String kind;   // 0.55.0; absent (null) in older state files -> re-classified by URL on import
         int sizeBytes, extractedEndpoints, extractedSecrets;
     }
 
@@ -209,6 +210,7 @@ public final class StateSerializer {
             d.extractedSecrets = a.getExtractedSecrets();
             d.savedPath = a.getSavedPath();
             d.preview = a.getPreview();
+            d.kind = a.getKind();
             s.jsAssets.add(d);
         }
 
@@ -326,6 +328,8 @@ public final class StateSerializer {
                 a.setExtractedSecrets(d.extractedSecrets);
                 a.setSavedPath(d.savedPath == null ? "" : d.savedPath);
                 a.setPreview(d.preview == null ? "" : d.preview);
+                a.setKind(d.kind != null ? d.kind
+                        : com.reconhub.analysis.JsLibraryClassifier.shared().classify(d.url, null));
                 store.restoreJsAsset(a);
                 js++;
             }

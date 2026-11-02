@@ -4,6 +4,7 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.active.MatchReplaceEngine;
 import com.reconhub.active.MatchReplaceTarget;
+import com.reconhub.analysis.JsRisk;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.Hosts;
@@ -14,6 +15,7 @@ import com.reconhub.model.Finding;
 import com.reconhub.model.JsAsset;
 
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
@@ -23,6 +25,8 @@ import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.ListSelectionModel;
+import javax.swing.RowSorter;
+import javax.swing.SortOrder;
 import javax.swing.SwingWorker;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.BorderLayout;
@@ -34,17 +38,26 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /** Collected JS files, with a detail panel: metadata/preview (Info tab) and the captured
  * request/response (Response tab, when this asset came from traffic rather than a local import). */
 public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
 
+    // 0.55.0: Secrets -> Findings (every JS finding, not just secrets) + Risk + Kind; Saved path moved
+    // to the Info tab only (it's on the "Open saved file" button there).
     private static final String[] COLS =
-            {"URL", "Preview", "Size (B)", "Endpoints", "Secrets", "Saved path"};
-    private static final int COL_PREVIEW = 1;
+            {"URL", "Kind", "Size (KB)", "Endpoints", "Findings", "Risk", "Preview"};
+    private static final int COL_URL = 0;
+    private static final int COL_RISK = 5;
+    private static final int COL_PREVIEW = 6;
     private static final int RESPONSE_TAB = 1;
+    /** Below this size, a JS file with no endpoints and no findings is an empty chunk (webpack runtime,
+     * manifest, ...) -- hidden with the libraries. */
+    static final int EMPTY_CHUNK_MAX_CHARS = 2048;
 
     private final DataStore store;
     private final TrafficIngestor ingestor;
@@ -58,6 +71,10 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
     private DashboardPanel.Navigator navigator;
     private MatchReplaceEngine matchReplace;
     private Settings settings;
+    private final JCheckBox hideNoise = new JCheckBox("Hide libraries & empty chunks", true);
+    private final JsRisk.Memo riskMemo = new JsRisk.Memo();
+    // url -> findings/risk, rebuilt only when the findings snapshot changes (see JsRisk.Memo).
+    private Map<String, JsRisk.Stat> stats = Map.of();
 
     public JsAssetsPanel(DataStore store, MontoyaApi api, TrafficIngestor ingestor, Bookmarks bookmarks) {
         super(api, bookmarks);
@@ -86,8 +103,45 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
         detailTabs.addTab("Response", viewer);
         installDetail(detailTabs, viewer);
 
+        hideNoise.setToolTipText("Hide JS recognized as a library / vendor chunk / third-party script, and "
+                + "tiny files with no endpoints or findings (view only -- nothing is deleted)");
+        hideNoise.addActionListener(e -> reapplyFilter());
+        addToToolbar(hideNoise);
+
         // MULTIPLE_INTERVAL_SELECTION (0.43.0) -- same reasoning as EndpointsPanel's (0.42.0).
         table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        // Riskiest file first by default (header click / Shift-multi-sort still work as usual).
+        table.getRowSorter().setSortKeys(List.of(new RowSorter.SortKey(COL_RISK, SortOrder.DESCENDING)));
+    }
+
+    @Override protected boolean hasRowFilter() { return true; }
+
+    @Override
+    protected boolean rowIncluded(JsAsset a) {
+        return a == null || !hideNoise.isSelected() || !isNoise(a, JsRisk.of(stats, a.getUrl()).findings());
+    }
+
+    /** Library / vendor / third-party JS, or an empty chunk. Pure/static for headless testing. */
+    static boolean isNoise(JsAsset a, int findings) {
+        return a.isLibrary() || (a.getSizeBytes() < EMPTY_CHUNK_MAX_CHARS
+                && a.getExtractedEndpoints() == 0 && findings == 0);
+    }
+
+    @Override
+    public void refreshData() {
+        // Before super: valueAt()/rowIncluded() read `stats` during the table reload.
+        stats = riskMemo.get(store.snapshotFindings());
+        super.refreshData();
+        int hidden = 0;
+        for (JsAsset a : rows()) {
+            if (isNoise(a, JsRisk.of(stats, a.getUrl()).findings())) {
+                hidden++;
+            }
+        }
+        String label = "Hide libraries & empty chunks (" + hidden + ")";
+        if (!label.equals(hideNoise.getText())) {
+            hideNoise.setText(label);
+        }
     }
 
     /** Wires cross-tab navigation (this JS file → endpoints/findings found in it). */
@@ -240,13 +294,31 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
         viewer.setInfo(a.getUrl() + "   |   " + a.getSizeBytes() + " chars   |   " + a.getSha256());
         detailTabs.setTitleAt(RESPONSE_TAB, a.getMessages() != null ? "Response ✓" : "Response");
 
+        // 0.55.0: actionable first -- findings (severity order, each with its "Try:" hint), then the
+        // endpoints this JS references, then file metadata.
         StringBuilder sb = new StringBuilder();
-        sb.append("URL       : ").append(a.getUrl()).append('\n');
-        sb.append("SHA-256   : ").append(a.getSha256()).append('\n');
-        sb.append("Size      : ").append(a.getSizeBytes()).append(" bytes\n");
-        sb.append("Preview   : ").append(a.getPreview().isEmpty() ? "(none)" : a.getPreview()).append('\n');
-        sb.append("Saved     : ").append(a.getSavedPath().isEmpty() ? "(not saved)" : a.getSavedPath())
-                .append("\n\n");
+        sb.append(a.getUrl()).append('\n');
+        if (a.isLibrary()) {
+            sb.append(a.getKind()).append(" -- deep analysis skipped unless enabled in Settings > JavaScript\n");
+        }
+        sb.append('\n');
+
+        List<Finding> fs = store.snapshotFindings().stream()
+                .filter(f -> a.getUrl().equals(f.getLocationUrl()))
+                .sorted(Comparator.comparing(Finding::getSeverity))
+                .toList();
+        sb.append("Findings in this JS (").append(fs.size()).append("):\n");
+        for (Finding f : fs) {
+            sb.append("  [").append(f.getSeverity().name()).append("] ").append(f.getType());
+            if (!f.getMasked().isEmpty()) {
+                sb.append(" = ").append(f.getMasked());
+            }
+            sb.append('\n');
+            String ev = f.getEvidence();
+            if (ev != null && ev.contains("Try:")) {
+                sb.append("        ").append(ev.substring(ev.indexOf("Try:"))).append('\n');
+            }
+        }
 
         // hasOrigin (0.43.9), not getOrigins().contains(...) -- this runs over every endpoint in the
         // store on every row selection/arrow-key move, and hasOrigin is an O(1) lookup against the raw
@@ -258,16 +330,11 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
             sb.append("  ").append(e.getNormalizedUrl()).append('\n');
         }
 
-        List<Finding> fs = store.snapshotFindings().stream()
-                .filter(f -> a.getUrl().equals(f.getLocationUrl())).toList();
-        sb.append("\nFindings in this JS (").append(fs.size()).append("):\n");
-        for (Finding f : fs) {
-            sb.append("  [").append(f.getSeverity().name()).append("] ").append(f.getType());
-            if (!f.getMasked().isEmpty()) {
-                sb.append(" = ").append(f.getMasked());
-            }
-            sb.append('\n');
-        }
+        sb.append("\nSHA-256   : ").append(a.getSha256()).append('\n');
+        sb.append("Size      : ").append(a.getSizeBytes()).append(" chars\n");
+        sb.append("Preview   : ").append(a.getPreview().isEmpty() ? "(none)" : a.getPreview()).append('\n');
+        sb.append("Saved     : ").append(a.getSavedPath().isEmpty() ? "(not saved)" : a.getSavedPath())
+                .append('\n');
 
         detail.setText(sb.toString());
         detail.setCaretPosition(0);
@@ -306,15 +373,14 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
     @Override protected String[] columns() { return COLS; }
 
     @Override protected int[] columnWidths() {
-        return new int[]{300, 300, 80, 80, 70, 260};
+        return new int[]{320, 170, 70, 75, 70, 55, 300};
     }
 
-    // Size (2), Endpoints (3), Secrets (4) are numeric -- declared so the sorter compares them as
-    // numbers, not lexicographically (which would put e.g. "10" before "2"). Preview (1) is a plain
-    // String column, so it takes no entry here. Static constant (0.43.8) -- see EndpointsPanel's
-    // identical note.
+    // Size (2), Endpoints (3), Findings (4), Risk (5) are numeric -- declared so the sorter compares
+    // them as numbers, not lexicographically (which would put e.g. "10" before "2"). Static constant
+    // (0.43.8) -- see EndpointsPanel's identical note.
     private static final Class<?>[] COLUMN_CLASSES =
-            {null, null, Integer.class, Integer.class, Integer.class, null};
+            {null, null, Integer.class, Integer.class, Integer.class, Integer.class, null};
 
     @Override protected Class<?>[] columnClasses() {
         return COLUMN_CLASSES;
@@ -322,21 +388,26 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
 
     @Override protected Object valueAt(JsAsset a, int c) {
         return switch (c) {
-            case 0 -> a.getUrl();
-            case COL_PREVIEW -> a.getPreview();
-            case 2 -> a.getSizeBytes();
+            case COL_URL -> a.getUrl();
+            case 1 -> a.getKind();
+            case 2 -> (a.getSizeBytes() + 1023) / 1024;
             case 3 -> a.getExtractedEndpoints();
-            case 4 -> a.getExtractedSecrets();
-            case 5 -> a.getSavedPath();
+            case 4 -> JsRisk.of(stats, a.getUrl()).findings();
+            case COL_RISK -> JsRisk.of(stats, a.getUrl()).score();
+            case COL_PREVIEW -> a.getPreview();
             default -> "";
         };
     }
 
     @Override
     protected void styleCell(Component comp, JsAsset a, int viewColumn, boolean selected) {
-        if (a == null || viewColumn != COL_PREVIEW || !(comp instanceof JComponent jc)) {
+        if (a == null || !(comp instanceof JComponent jc)) {
             return;
         }
-        jc.setToolTipText(a.getPreview().isEmpty() ? null : a.getPreview());
+        if (viewColumn == COL_PREVIEW) {
+            jc.setToolTipText(a.getPreview().isEmpty() ? null : a.getPreview());
+        } else if (viewColumn == COL_URL) {
+            jc.setToolTipText(a.getUrl());
+        }
     }
 }

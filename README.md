@@ -17,8 +17,8 @@
 | **Endpoints** | 엔드포인트 인벤토리 (dedup, Auth 관찰), **다중 선택 → Match & Replace 전송** |
 | **Parameters** | 파라미터 + 취약점 후보 Class 자동 분류, **다중 선택 → Match & Replace 전송** |
 | **Findings** | 탐지 결과 심각도/카테고리 집계 + 트리아지, **다중 선택 → Match & Replace 전송** |
-| **JS Assets** | JS 파일 수집·분석 (엔드포인트/시크릿 추출), **다중 선택 → Match & Replace 전송** |
-| **JS Analysis** | JS에서 나온 로직/API 탐지 결과(암복호화·권한·위험 싱크·설정·API 호출)를 번들 가로질러 한 곳에 모아 카테고리·심각도·호스트로 필터 |
+| **JS Assets** | JS 파일 수집·분석 (엔드포인트/탐지 추출), **라이브러리·서드파티·빈 청크 자동 숨김**, 파일별 **Risk** 순 정렬, **다중 선택 → Match & Replace 전송** |
+| **JS Analysis** | JS에서 나온 로직/API 탐지 결과(암복호화·권한·위험 싱크·설정·API 호출·**민감 경로**)를 번들 가로질러 모아 **위험한 파일 순**으로 표시, 민감 경로는 **실제 호출 여부(Seen)** 표시 |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 체크 |
 | **Match & Replace** ⚠**ACTIVE** | Endpoints/Parameters/Findings/JS Assets에서 선택한 행에 헤더/쿠키 값 또는 원문 전체 치환 규칙(**여러 개 체이닝 가능**) 적용해 재전송, 결과+상세 확인 |
 | **Snapshot Diff** | 저장해둔 State 파일을 불러와 현재 데이터와 비교, 새로 생긴/사라진 항목 표시 |
@@ -84,8 +84,16 @@ serialize·ViewState)는 Deserialization이 이름과 무관하게 자동 제안
 동시 적용).
 
 ### JS Assets
-JS 수집(SHA-256 dedup·옵션 저장) + 내부 엔드포인트·시크릿 추출. 해시 이름 코드-스플릿 청크를 열어보지
-않고 구분할 수 있는 **Preview** 컬럼(감지된 엔드포인트 샘플, 없으면 코드 스니펫), 행 선택 시
+JS 수집(SHA-256 dedup·옵션 저장) + 내부 엔드포인트·탐지 추출. 컬럼: URL · **Kind**(라이브러리/벤더 청크/
+서드파티 구분) · Size(KB) · Endpoints · **Findings**(이 JS에서 나온 탐지 수) · **Risk**(심각도 가중 점수,
+기본 내림차순 정렬) · Preview(감지된 엔드포인트 샘플, 없으면 코드 스니펫).
+
+**라이브러리/서드파티 정리**: jQuery·React·Vue 등 라이브러리, `vendors~`/`chunk-vendors`/`framework-`
+같은 벤더·런타임 청크, GTM/GA·CDN·채팅/결제 위젯 등 서드파티 스크립트를 URL·파일명·배너로 자동 판별해
+**Kind**에 표시하고, 툴바 **Hide libraries & empty chunks**(기본 켜짐)로 이들과 내용 없는 작은 청크를
+숨김(보기만 숨기고 데이터는 유지). 라이브러리는 기본적으로 시크릿 스캔만 하고 엔드포인트 추출·심화 분석은
+건너뜀(**Settings → JavaScript collection → Analyze library / vendor / 3rd-party JS too**로 켤 수 있음).
+행 선택 시 **Info 탭**은 탐지(심각도순, `Try:` 힌트 포함) → 엔드포인트 → 파일 정보 순으로 보여주고,
 **Response 탭**에서 캡처된 응답 원문 확인(임포트된 파일은 없음). 트래픽에 안 잡힌 파일은 **Import JS
 file(s)…**로 로컬에서 불러와 동일 분석.
 
@@ -96,7 +104,12 @@ Severity/Category/Type/JS 파일/Evidence 컬럼으로 보여주고, **Category 
 필터**로 좁힐 수 있음(예: "전체 번들의 Crypto 사용만"). 행 선택 시 해당 JS 응답 원문이 뷰어에 열리며
 **매치된 코드 위치로 자동 하이라이트/점프**. **JS file 필터**로 특정 번들만 추릴 수 있고, 툴바 요약
 라인이 현재 보이는 범위의 "파일 수 · 카테고리별 카운트"를 보여줌(한 파일로 좁히면 그 번들의 분포),
-기본 정렬은 JS 파일 기준이라 번들별로 묶여 보임. **Match 컬럼**에 실제 매치된 코드를 바로 표시하고,
+기본 정렬은 **File Risk**(그 JS 파일의 위험 점수) 내림차순 → JS 파일이라 가장 위험한 번들의 탐지가 맨
+위에 묶여 보임. **Hide library JS**(기본 켜짐)로 라이브러리 코드에서 나온 탐지를 숨김.
+**민감 경로**: JS에서 추출한 경로 중 admin·actuator/진단·internal/debug·업로드·export·ID 기반 객체
+(`/users/123`)·config·GraphQL 경로를 "어떻게 테스트할지" 힌트와 함께 탐지하고, **Seen** 컬럼에 그 경로가
+캡처된 트래픽에서 실제 응답한 적 있는지(Y/N) 표시 — **Unvisited routes only**로 아직 한 번도 요청하지
+않은(N) 경로만 모아 바로 테스트 대상으로 볼 수 있음. **Match 컬럼**에 실제 매치된 코드를 바로 표시하고,
 행 우클릭 **Open this JS file in JS Assets**로 해당 파일을 JS Assets 탭에서 열 수 있음. 판정 기준:
 finding의 `locationUrl`이 알려진 JS 파일 URL과 일치하면 JS 소스로 간주(모델 변경 없음).
 

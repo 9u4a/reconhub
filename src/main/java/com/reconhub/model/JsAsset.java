@@ -17,6 +17,8 @@ public final class JsAsset {
     private volatile int extractedSecrets;
     private volatile String savedPath = "";   // absolute path on disk, once written
     private volatile String preview = "";     // short identifying hint (sample endpoints or a snippet)
+    // Library / vendor-chunk / third-party label from JsLibraryClassifier (0.55.0); "" = app code.
+    private volatile String kind = "";
     private volatile HttpRequestResponse messages;   // null for a manually-imported local file
     private volatile String host;      // derived lazily from url -- see getHost()
 
@@ -63,11 +65,14 @@ public final class JsAsset {
     public int getExtractedSecrets() { return extractedSecrets; }
     public String getSavedPath() { return savedPath; }
     public String getPreview() { return preview; }
+    public String getKind() { return kind; }
+    public boolean isLibrary() { return !kind.isEmpty(); }
     public HttpRequestResponse getMessages() { return messages; }
 
     public void setExtractedEndpoints(int n) { this.extractedEndpoints = n; }
     public void setExtractedSecrets(int n) { this.extractedSecrets = n; }
     public void setSavedPath(String p) { this.savedPath = p; }
     public void setPreview(String p) { this.preview = p == null ? "" : p; }
+    public void setKind(String k) { this.kind = k == null ? "" : k; }
     public void setMessages(HttpRequestResponse m) { this.messages = m; }
 }

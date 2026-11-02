@@ -121,6 +121,13 @@ public final class SettingsPanel extends JPanel {
         JCheckBox saveJs = leftCheck("Save collected JS to disk", settings.isSaveJsToDisk());
         saveJs.addActionListener(e -> settings.setSaveJsToDisk(saveJs.isSelected()));
         add(saveJs);
+        JCheckBox libJs = leftCheck("Analyze library / vendor / 3rd-party JS too (slower, noisier)",
+                settings.isAnalyzeLibraryJs());
+        libJs.setToolTipText("Off: JS recognized as a library, vendor chunk or third-party script is still "
+                + "collected and secret-scanned, but skips endpoint extraction and deep JS analysis. "
+                + "Applies to JS ingested after the change.");
+        libJs.addActionListener(e -> settings.setAnalyzeLibraryJs(libJs.isSelected()));
+        add(libJs);
         add(jsDirRow());
         add(gap());
 

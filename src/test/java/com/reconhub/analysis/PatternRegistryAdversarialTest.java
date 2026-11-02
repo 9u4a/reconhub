@@ -231,6 +231,40 @@ class PatternRegistryAdversarialTest {
         return tests.stream();
     }
 
+    /** js-routes.json (0.55.0, matched against one extracted link, <= 300 chars) and js-libraries.json
+     * (0.55.0, host / filename / first-2KB banner) under the same guard -- inputs sized to well past what
+     * each is ever fed, so a blowup still shows. */
+    @TestFactory
+    Stream<DynamicTest> everyJsRouteAndLibraryRuleSurvivesAdversarialInput() {
+        List<DynamicTest> tests = new ArrayList<>();
+        String[][] adversarial = {
+                {"wordrun", "a".repeat(200_000)},
+                {"slash-run", "/admin".repeat(30_000)},
+                {"dot-dash-run", "a.-~".repeat(50_000)},
+                {"digit-run", "/users/".repeat(10_000) + "1".repeat(50_000)},
+        };
+        List<Pattern> pats = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        for (PatternRegistry.SecretRule r : REGISTRY.jsRouteRules()) { pats.add(r.pattern); names.add("route:" + r.name); }
+        for (JsLibraryClassifier.Rule r : JsLibraryClassifier.shared().rules()) {
+            pats.add(r.pattern()); names.add("library:" + r.label);
+        }
+        for (String[] sample : adversarial) {
+            for (int i = 0; i < pats.size(); i++) {
+                String nm = names.get(i);
+                Pattern p = pats.get(i);
+                tests.add(DynamicTest.dynamicTest(sample[0] + " / " + nm, () -> {
+                    long ms = timeWithTimeout(p, sample[1], 5000);
+                    if (ms < 0) {
+                        fail("timed out (>5000ms) -- likely catastrophic backtracking in " + nm);
+                    }
+                    assertTrue(ms < 1000, nm + " took " + ms + "ms on \"" + sample[0] + "\" (expected < 1000ms)");
+                }));
+            }
+        }
+        return tests.stream();
+    }
+
     /** js-flow.json's source + sink patterns (0.52.0) under the same adversarial guard. */
     @TestFactory
     Stream<DynamicTest> everyJsFlowPatternSurvivesAdversarialInput() {
@@ -242,7 +276,10 @@ class PatternRegistryAdversarialTest {
         };
         List<Pattern> flow = new ArrayList<>();
         List<String> names = new ArrayList<>();
-        for (PatternRegistry.JsSource s : REGISTRY.jsSources()) { flow.add(s.pattern); names.add("source:" + s.name); }
+        for (PatternRegistry.JsSource s : REGISTRY.jsSources()) {
+            flow.add(s.pattern); names.add("source:" + s.name);
+            if (s.anchor != null) { flow.add(s.anchor); names.add("source-anchor:" + s.name); }
+        }
         for (PatternRegistry.JsSink s : REGISTRY.jsSinks()) { flow.add(s.pattern); names.add("sink:" + s.name); }
         for (PatternRegistry.JsPair p : REGISTRY.jsPairs()) {
             flow.add(p.anchor); names.add("pair-anchor:" + p.name);

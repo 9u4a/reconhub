@@ -24,6 +24,8 @@ public final class Settings {
 
     private volatile ScopeMode scopeMode = ScopeMode.BURP_SCOPE;
     private volatile boolean saveJsToDisk = true;
+    // 0.55.0: library / vendor / third-party JS (JsLibraryClassifier) skips deep analysis unless on.
+    private volatile boolean analyzeLibraryJs = false;
     private volatile Path jsSaveDirectory =
             Paths.get(System.getProperty("user.home"), "reconhub", "js");
     private volatile boolean scanResponsesForSecrets = true;
@@ -58,6 +60,9 @@ public final class Settings {
 
     public boolean isSaveJsToDisk() { return saveJsToDisk; }
     public void setSaveJsToDisk(boolean b) { this.saveJsToDisk = b; }
+
+    public boolean isAnalyzeLibraryJs() { return analyzeLibraryJs; }
+    public void setAnalyzeLibraryJs(boolean b) { this.analyzeLibraryJs = b; }
 
     public Path getJsSaveDirectory() { return jsSaveDirectory; }
     public void setJsSaveDirectory(Path p) { this.jsSaveDirectory = p; }
@@ -130,6 +135,7 @@ public final class Settings {
     private static final class Dto {
         String scopeMode;
         boolean saveJsToDisk;
+        boolean analyzeLibraryJs;
         String jsSaveDirectory;
         boolean scanResponsesForSecrets;
         boolean liveCaptureEnabled;
@@ -150,6 +156,7 @@ public final class Settings {
         Dto d = new Dto();
         d.scopeMode = scopeMode.name();
         d.saveJsToDisk = saveJsToDisk;
+        d.analyzeLibraryJs = analyzeLibraryJs;
         d.jsSaveDirectory = jsSaveDirectory == null ? null : jsSaveDirectory.toString();
         d.scanResponsesForSecrets = scanResponsesForSecrets;
         d.liveCaptureEnabled = liveCaptureEnabled;
@@ -182,6 +189,7 @@ public final class Settings {
             } catch (IllegalArgumentException ignored) { /* keep default */ }
         }
         s.saveJsToDisk = d.saveJsToDisk;
+        s.analyzeLibraryJs = d.analyzeLibraryJs;
         if (d.jsSaveDirectory != null && !d.jsSaveDirectory.isBlank()) {
             s.jsSaveDirectory = Paths.get(d.jsSaveDirectory);
         }

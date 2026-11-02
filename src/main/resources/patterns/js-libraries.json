@@ -1,0 +1,32 @@
+{
+  "comment": "Third-party / library JS classification (0.55.0). JsLibraryClassifier tags a JS asset as non-app code so JS Assets can hide it and JsAnalyzer can skip deep analysis on it (Settings > JavaScript > 'Analyze library JS' turns that back on). Each rule has a kind (library | vendor | third-party), a label (may use $1 from the matching group), and ONE of: host (regex on the URL host), file (regex on the lowercased last path segment), banner (regex on the first 2KB of the body; only trusted for bodies <= 300K chars, since an app bundle that concatenates a library starts with that library's banner too). All regexes are matched case-insensitively and must stay bounded (ReDoS).",
+  "rules": [
+    { "kind": "third-party", "label": "Google Tag Manager / Analytics / Ads", "host": "(?:^|\\.)(?:googletagmanager\\.com|google-analytics\\.com|googleadservices\\.com|googlesyndication\\.com|doubleclick\\.net|googleoptimize\\.com)$" },
+    { "kind": "third-party", "label": "Google (static / reCAPTCHA / Maps)", "host": "(?:^|\\.)(?:gstatic\\.com|ajax\\.googleapis\\.com|maps\\.googleapis\\.com|apis\\.google\\.com|www\\.google\\.com|accounts\\.google\\.com)$" },
+    { "kind": "third-party", "label": "Public CDN library", "host": "(?:^|\\.)(?:cdnjs\\.cloudflare\\.com|cdn\\.jsdelivr\\.net|unpkg\\.com|code\\.jquery\\.com|(?:stackpath|maxcdn|netdna)\\.bootstrapcdn\\.com|ajax\\.aspnetcdn\\.com|cdn\\.polyfill\\.io|polyfill\\.io|esm\\.sh|cdn\\.skypack\\.dev)$" },
+    { "kind": "third-party", "label": "Social / login SDK", "host": "(?:^|\\.)(?:connect\\.facebook\\.net|platform\\.twitter\\.com|platform\\.linkedin\\.com|snap\\.licdn\\.com|t1\\.kakaocdn\\.net|developers\\.kakao\\.com|static\\.nid\\.naver\\.com|appleid\\.cdn-apple\\.com)$" },
+    { "kind": "third-party", "label": "Analytics / marketing", "host": "(?:^|\\.)(?:hotjar\\.com|clarity\\.ms|cdn\\.segment\\.com|cdn\\.mxpnl\\.com|mixpanel\\.com|amplitude\\.com|cdn\\.amplitude\\.com|braze\\.com|appboycdn\\.com|branch\\.io|appsflyer\\.com|criteo\\.(?:com|net)|adobedtm\\.com|omtrdc\\.net|optimizely\\.com|wcs\\.naver\\.net|analytics\\.tiktok\\.com|static\\.ads-twitter\\.com|bat\\.bing\\.com|cdn\\.heapanalytics\\.com|fullstory\\.com|logrocket\\.(?:io|com)|cdn\\.lr-ingest\\.io|datadoghq-browser-agent\\.com|js-agent\\.newrelic\\.com|browser\\.sentry-cdn\\.com)$" },
+    { "kind": "third-party", "label": "Chat / support / consent widget", "host": "(?:^|\\.)(?:cdn\\.channel\\.io|channel\\.io|widget\\.intercom\\.io|js\\.intercomcdn\\.com|static\\.zdassets\\.com|zopim\\.com|cdn\\.cookielaw\\.org|cookielaw\\.org|onetrust\\.com|cookiebot\\.com|consent\\.cookiebot\\.com|js\\.hs-scripts\\.com|js\\.hsforms\\.net|js\\.stripe\\.com|js\\.tosspayments\\.com|stdpay\\.inicis\\.com|cdn\\.iamport\\.kr)$" },
+
+    { "kind": "library", "label": "jQuery", "file": "^jquery(?:[.-][a-z0-9.-]{0,60})?\\.js$" },
+    { "kind": "library", "label": "React", "file": "^react(?:-dom)?(?:\\.(?:production|development|profiling))?(?:\\.min)?\\.js$" },
+    { "kind": "library", "label": "Vue", "file": "^vue(?:\\.runtime)?(?:\\.global|\\.esm-browser|\\.common)?(?:\\.prod)?(?:\\.min)?\\.js$" },
+    { "kind": "library", "label": "AngularJS", "file": "^angular(?:-[a-z]{1,20})?(?:\\.min)?\\.js$" },
+    { "kind": "library", "label": "Utility library", "file": "^(?:lodash|underscore|moment|dayjs|axios|require|modernizr|hammer|clipboard|crypto-js|purify|dompurify)(?:[.-][a-z0-9.-]{0,40})?\\.js$" },
+    { "kind": "library", "label": "UI library", "file": "^(?:bootstrap|popper|swiper|slick|select2|sweetalert2?|chart|d3|gsap|three|lottie|aos|fullpage|datatables|jquery\\.datatables)(?:[.-][a-z0-9.-]{0,40})?\\.js$" },
+    { "kind": "library", "label": "Polyfill", "file": "^(?:polyfills?|core-js|babel-polyfill|es[56]-shim|regenerator-runtime|whatwg-fetch)(?:[.-][a-z0-9.-]{0,60})?\\.js$" },
+
+    { "kind": "vendor", "label": "Vendor chunk", "file": "^(?:[a-z0-9_]{1,40}[.~-])?(?:vendors?|chunk-vendors|npm\\.[a-z0-9@_.-]{1,60})(?:[.~-][a-z0-9_.~-]{0,160})?\\.m?js$" },
+    { "kind": "vendor", "label": "Framework / runtime chunk", "file": "^(?:framework|polyfills|runtime|webpack-runtime|webpack|main-app-runtime)(?:[.~-][a-z0-9_.~-]{0,160})?\\.m?js$" },
+
+    { "kind": "library", "label": "jQuery $1", "banner": "jQuery(?: JavaScript Library)? v(\\d{1,2}\\.\\d{1,2}\\.\\d{1,2})" },
+    { "kind": "library", "label": "React", "banner": "@license React\\b" },
+    { "kind": "library", "label": "Vue $1", "banner": "Vue\\.js v(\\d{1,2}\\.\\d{1,2}\\.\\d{1,2})" },
+    { "kind": "library", "label": "Angular $1", "banner": "@license Angular v(\\d{1,2}\\.\\d{1,2}\\.\\d{1,2})" },
+    { "kind": "library", "label": "Lodash", "banner": "@license Lodash\\b|Lodash <https://lodash\\.com/>" },
+    { "kind": "library", "label": "Bootstrap $1", "banner": "Bootstrap v(\\d{1,2}\\.\\d{1,2}\\.\\d{1,2})" },
+    { "kind": "library", "label": "Moment", "banner": "//! moment\\.js" },
+    { "kind": "library", "label": "core-js polyfill", "banner": "core-js \\d{1,2}\\.\\d{1,2}|\\(c\\) 20\\d\\d-20\\d\\d Denis Pushkarev" },
+    { "kind": "library", "label": "Swiper $1", "banner": "Swiper (\\d{1,2}\\.\\d{1,2}\\.\\d{1,2})" }
+  ]
+}

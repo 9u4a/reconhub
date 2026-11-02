@@ -67,6 +67,11 @@ public final class FindingTaxonomy {
                 "cookie access", "html() sink", "dangerously")) {
             return Category.INJECTION;
         }
+        // Sensitive routes referenced in JS (0.55.0) -- before API/INFO_LEAK, whose keywords
+        // ("graphql", "debug", "exposed") some route family names contain.
+        if (has(t, "sensitive route")) {
+            return Category.AUTH;
+        }
 
         if (has(t, "cors", "csp", "cookie", "mixed content", "cacheable", "missing security header")) {
             return Category.MISCONFIG;

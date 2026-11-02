@@ -3,12 +3,16 @@ package com.reconhub.ui;
 import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.analysis.FindingTaxonomy;
+import com.reconhub.analysis.JsAnalyzer;
+import com.reconhub.analysis.JsRisk;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
 import com.reconhub.core.Hosts;
+import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
 import com.reconhub.model.JsAsset;
 
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -40,11 +44,19 @@ import java.util.Set;
  */
 public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
 
+    // 0.55.0: + Seen (sensitive routes: answered in captured traffic? Y/N) + File Risk (JsRisk score of
+    // the finding's JS file -- the default sort key, so the riskiest bundle's findings come first).
     private static final String[] COLS =
-            {"Severity", "Category", "Type", "Match", "JS File", "Evidence"};
+            {"Severity", "Category", "Type", "Match", "Seen", "JS File", "File Risk", "Evidence"};
     private static final int COL_CATEGORY = 1;
     private static final int COL_MATCH = 3;
-    private static final int COL_JS_FILE = 4;
+    private static final int COL_SEEN = 4;
+    private static final int COL_JS_FILE = 5;
+    private static final int COL_RISK = 6;
+    private static final int COL_EVIDENCE = 7;
+    private static final Class<?>[] COLUMN_CLASSES =
+            {null, null, null, null, null, null, Integer.class, null};
+    static final String ROUTE_PREFIX = "Sensitive route in JS";
 
     private final DataStore store;
     private final MessageViewer viewer;
@@ -59,6 +71,19 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
     private final ColumnValueFilter<Finding> fileFilter =
             new ColumnValueFilter<>("JS file", JsAnalysisPanel::jsFileLabel);
     private final JLabel summary = new JLabel(" ");
+    private final JCheckBox hideLibrary = new JCheckBox("Hide library JS", true);
+    private final JCheckBox unvisitedOnly = new JCheckBox("Unvisited routes only", false);
+
+    // Identity memos (0.55.0): this tab used to rebuild the JS-URL set and rescan every finding on every
+    // 300ms tick. Each derived value below is recomputed only when its source snapshot list changes.
+    private List<JsAsset> lastAssets;
+    private List<Finding> lastFindings;
+    private List<Finding> jsRows = List.of();
+    private Set<String> libraryUrls = Set.of();
+    private final JsRisk.Memo riskMemo = new JsRisk.Memo();
+    private Map<String, JsRisk.Stat> stats = Map.of();
+    private List<Endpoint> lastEndpoints;
+    private Set<String> seenPaths = Set.of();
 
     public JsAnalysisPanel(DataStore store, MontoyaApi api, Bookmarks bookmarks) {
         super(api, bookmarks);
@@ -98,11 +123,19 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
         addToToolbar(hostFilter.component());
         fileFilter.setOnChange(this::onFilterChanged);
         addToToolbar(fileFilter.component());
+        hideLibrary.setToolTipText("Hide findings located in library / vendor / third-party JS (view only)");
+        hideLibrary.addActionListener(e -> onFilterChanged());
+        addToToolbar(hideLibrary);
+        unvisitedOnly.setToolTipText("Only sensitive routes referenced in JS that were never seen answering "
+                + "in captured traffic -- the untested surface");
+        unvisitedOnly.addActionListener(e -> onFilterChanged());
+        addToToolbar(unvisitedOnly);
         addToToolbar(summary);
 
-        // Cluster rows by JS file by default so one bundle's findings sit together (header click /
-        // Shift-multi-sort still work as usual -- TriStateRowSorter honors an explicit sort key).
+        // Riskiest JS file first, its findings clustered together (header click / Shift-multi-sort still
+        // work as usual -- TriStateRowSorter honors an explicit sort key).
         table.getRowSorter().setSortKeys(List.of(
+                new RowSorter.SortKey(COL_RISK, SortOrder.DESCENDING),
                 new RowSorter.SortKey(COL_JS_FILE, SortOrder.ASCENDING)));
     }
 
@@ -124,7 +157,34 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
         boolean sevOk = activeSeverities.isEmpty() || activeSeverities.contains(f.getSeverity());
         boolean catOk = activeCategory == null
                 || FindingTaxonomy.categoryOf(f.getType()) == activeCategory;
+        if (hideLibrary.isSelected() && libraryUrls.contains(f.getLocationUrl())) {
+            return false;
+        }
+        if (unvisitedOnly.isSelected() && !Boolean.FALSE.equals(seen(f, seenPaths))) {
+            return false;
+        }
         return sevOk && catOk && hostFilter.test(f) && fileFilter.test(f);
+    }
+
+    /** For a sensitive-route finding: whether its route was seen answering in captured traffic; null for
+     * every other finding. Pure/static for headless testing. */
+    static Boolean seen(Finding f, Set<String> seenPaths) {
+        if (f == null || f.getType() == null || !f.getType().startsWith(ROUTE_PREFIX)) {
+            return null;
+        }
+        return seenPaths.contains(JsAnalyzer.routePath(f.getRawMatch()));
+    }
+
+    /** Paths of endpoints that actually answered in captured traffic (status != 0), normalized like
+     * {@link JsAnalyzer#routePath}. Pure/static for headless testing. */
+    static Set<String> seenPaths(List<Endpoint> endpoints) {
+        Set<String> out = new HashSet<>();
+        for (Endpoint e : endpoints) {
+            if (e.getLastStatusCode() != 0) {
+                out.add(JsAnalyzer.routePath(e.getPath()));
+            }
+        }
+        return out;
     }
 
     private Map<FindingTaxonomy.Category, Integer> lastCategoryCounts;
@@ -268,7 +328,9 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
             String tip = switch (viewColumn) {
                 case COL_MATCH -> f.getRawMatch();
                 case COL_JS_FILE -> f.getLocationUrl();
-                case 5 -> f.getEvidence();
+                case COL_SEEN -> seen(f, seenPaths) == null ? null
+                        : "Y = answered in captured traffic, N = only referenced in JS (not yet requested)";
+                case COL_EVIDENCE -> f.getEvidence();
                 default -> null;
             };
             jc.setToolTipText(tip == null || tip.isBlank() ? null : tip);
@@ -293,18 +355,44 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
         addDeleteHostMenuItem(menu, store, f.getHost());
     }
 
-    /** Findings whose location is a known JS asset URL -- see the class javadoc. */
+    /** Findings whose location is a known JS asset URL -- see the class javadoc. Also refreshes the
+     * derived per-tick state (library URLs, file risk, seen routes) -- only when a source snapshot
+     * changed, so a quiet tick is O(1). */
     @Override
     protected List<Finding> supplyRows() {
-        return jsSourcedFindings(store);
+        List<JsAsset> assets = store.snapshotJsAssets();
+        List<Finding> findings = store.snapshotFindings();
+        if (assets != lastAssets || findings != lastFindings) {
+            jsRows = jsSourcedFindings(assets, findings);
+            Set<String> libs = new HashSet<>();
+            for (JsAsset a : assets) {
+                if (a.isLibrary() && a.getUrl() != null) {
+                    libs.add(a.getUrl());
+                }
+            }
+            libraryUrls = libs;
+            lastAssets = assets;
+            lastFindings = findings;
+        }
+        stats = riskMemo.get(findings);
+        List<Endpoint> endpoints = store.snapshotEndpoints();
+        if (endpoints != lastEndpoints) {
+            seenPaths = seenPaths(endpoints);
+            lastEndpoints = endpoints;
+        }
+        return jsRows;
     }
 
     /** The JS-sourced subset of findings (a finding whose {@code locationUrl} matches a {@link JsAsset}
      * URL). Package-private + static so it's headlessly testable without constructing the panel (which
      * builds a Montoya {@code MessageViewer} and can't run headless). */
     static List<Finding> jsSourcedFindings(DataStore store) {
+        return jsSourcedFindings(store.snapshotJsAssets(), store.snapshotFindings());
+    }
+
+    static List<Finding> jsSourcedFindings(List<JsAsset> assets, List<Finding> findings) {
         Set<String> jsUrls = new HashSet<>();
-        for (JsAsset a : store.snapshotJsAssets()) {
+        for (JsAsset a : assets) {
             if (a.getUrl() != null) {
                 jsUrls.add(a.getUrl());
             }
@@ -313,7 +401,7 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
             return List.of();
         }
         List<Finding> out = new ArrayList<>();
-        for (Finding f : store.snapshotFindings()) {
+        for (Finding f : findings) {
             if (jsUrls.contains(f.getLocationUrl())) {
                 out.add(f);
             }
@@ -324,7 +412,11 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
     @Override protected String[] columns() { return COLS; }
 
     @Override protected int[] columnWidths() {
-        return new int[]{80, 100, 200, 240, 240, 260};
+        return new int[]{80, 100, 220, 240, 45, 220, 65, 260};
+    }
+
+    @Override protected Class<?>[] columnClasses() {
+        return COLUMN_CLASSES;
     }
 
     @Override protected Object valueAt(Finding f, int c) {
@@ -333,8 +425,13 @@ public final class JsAnalysisPanel extends AbstractTablePanel<Finding> {
             case COL_CATEGORY -> FindingTaxonomy.labelOf(f.getType());
             case 2 -> f.getType();
             case COL_MATCH -> f.getRawMatch();
+            case COL_SEEN -> {
+                Boolean seen = seen(f, seenPaths);
+                yield seen == null ? "" : seen ? "Y" : "N";
+            }
             case COL_JS_FILE -> f.getLocationUrl();
-            case 5 -> f.getEvidence();
+            case COL_RISK -> JsRisk.of(stats, f.getLocationUrl()).score();
+            case COL_EVIDENCE -> f.getEvidence();
             default -> "";
         };
     }

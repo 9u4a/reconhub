@@ -54,11 +54,20 @@ public final class PatternRegistry {
         public final String name;
         public final Pattern pattern;
         public final String inject;   // how an analyst controls this source, for the test hint
+        /** Optional (0.55.0): the source only counts when this also appears somewhere in the same body
+         * -- e.g. {@code e.data} is only postMessage input when a {@code message} listener exists, not
+         * any {@code .data} property in React/axios code. Null = no requirement. */
+        public final Pattern anchor;
 
         JsSource(String name, Pattern pattern, String inject) {
+            this(name, pattern, inject, null);
+        }
+
+        JsSource(String name, Pattern pattern, String inject, Pattern anchor) {
             this.name = name;
             this.pattern = pattern;
             this.inject = inject;
+            this.anchor = anchor;
         }
     }
 
@@ -123,6 +132,8 @@ public final class PatternRegistry {
     private final List<JsSink> jsSinks = new ArrayList<>();
     private final List<JsPair> jsPairs = new ArrayList<>();
     private final List<JsLinkRule> jsLinkRules = new ArrayList<>();
+    // Sensitive-route rules (0.55.0), matched against each link JsAnalyzer extracts (not the body).
+    private final List<SecretRule> jsRouteRules = new ArrayList<>();
     private final List<TechRule> techRules = new ArrayList<>();
     private final List<String> securityHeaders = new ArrayList<>();
     private final List<String> loadErrors = new ArrayList<>();
@@ -135,6 +146,7 @@ public final class PatternRegistry {
     public List<JsSink> jsSinks() { return jsSinks; }
     public List<JsPair> jsPairs() { return jsPairs; }
     public List<JsLinkRule> jsLinkRules() { return jsLinkRules; }
+    public List<SecretRule> jsRouteRules() { return jsRouteRules; }
     public List<TechRule> techRules() { return techRules; }
     public List<String> securityHeaders() { return securityHeaders; }
     public List<String> loadErrors() { return loadErrors; }
@@ -150,6 +162,7 @@ public final class PatternRegistry {
         r.loadJsFlow(gson);
         r.loadJsPairs(gson);
         r.loadJsLinks(gson);
+        r.loadJsRoutes(gson);
         r.loadTech(gson);
         return r;
     }
@@ -175,7 +188,7 @@ public final class PatternRegistry {
     private static final class FlowFile {
         List<Source> sources;
         List<Sink> sinks;
-        static final class Source { String name; String regex; String inject; }
+        static final class Source { String name; String regex; String inject; String anchor; }
         static final class Sink { String name; String regex; String severity; String test; boolean always; }
     }
 
@@ -258,7 +271,8 @@ public final class PatternRegistry {
         if (f.sources != null) {
             for (FlowFile.Source s : f.sources) {
                 try {
-                    jsSources.add(new JsSource(s.name, Pattern.compile(s.regex), s.inject));
+                    jsSources.add(new JsSource(s.name, Pattern.compile(s.regex), s.inject,
+                            s.anchor == null ? null : Pattern.compile(s.anchor)));
                 } catch (PatternSyntaxException e) {
                     loadErrors.add("js-flow source[" + s.name + "]: " + e.getMessage());
                 }
@@ -301,6 +315,21 @@ public final class PatternRegistry {
                 jsLinkRules.add(new JsLinkRule(raw.name, Pattern.compile(raw.regex)));
             } catch (PatternSyntaxException e) {
                 loadErrors.add("js-endpoints[" + raw.name + "]: " + e.getMessage());
+            }
+        }
+    }
+
+    private void loadJsRoutes(Gson gson) {
+        SecretsFile f = read(gson, "/patterns/js-routes.json", SecretsFile.class);
+        if (f == null || f.patterns == null) {
+            return;
+        }
+        for (SecretsFile.Raw raw : f.patterns) {
+            try {
+                jsRouteRules.add(new SecretRule(raw.name, parseSeverity(raw.severity),
+                        Pattern.compile(raw.regex, Pattern.CASE_INSENSITIVE), raw.note));
+            } catch (PatternSyntaxException e) {
+                loadErrors.add("js-routes[" + raw.name + "]: " + e.getMessage());
             }
         }
     }
