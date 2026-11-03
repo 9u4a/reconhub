@@ -4,6 +4,8 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.HttpService;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import burp.api.montoya.http.message.requests.HttpRequest;
+import burp.api.montoya.http.message.responses.HttpResponse;
+import com.reconhub.core.BodyDecoder;
 import com.reconhub.core.ScopeFilter;
 import com.reconhub.core.Settings;
 
@@ -63,6 +65,8 @@ public final class MatchReplaceEngine {
         return t;
     });
     private final List<MatchReplaceJob> jobs = new CopyOnWriteArrayList<>();
+    // Session presets (0.57.0) -- memory only, lives as long as the engine (see SessionProfiles).
+    private final SessionProfiles sessions = new SessionProfiles();
     private volatile Listener listener = new Listener() {
         @Override public void onProgress(MatchReplaceJob j) {}
         @Override public void onDone(MatchReplaceJob j) {}
@@ -76,6 +80,7 @@ public final class MatchReplaceEngine {
 
     public void setListener(Listener l) { this.listener = l == null ? this.listener : l; }
     public List<MatchReplaceJob> jobs() { return jobs; }
+    public SessionProfiles sessions() { return sessions; }
 
     /**
      * Starts a run against {@code targets} with {@code rules} applied to each, in order. Refuses
@@ -167,7 +172,8 @@ public final class MatchReplaceEngine {
         pace();
         try {
             HttpRequestResponse rr = api.http().sendRequest(modified);
-            job.recordResult(MatchReplaceResult.sent(target.host(), target.path(), target.method(), rr));
+            job.recordResult(MatchReplaceResult.sent(target.host(), target.path(), target.method(), rr,
+                    compareWithOriginal(original, rr), original));
         } catch (RuntimeException e) {
             api.logging().logToError("ReconHub match&replace: send failed for " + baseReq.url() + ": " + e);
             job.recordResult(MatchReplaceResult.failed(target.host(), target.path(),
@@ -201,7 +207,26 @@ public final class MatchReplaceEngine {
         return current;
     }
 
+    /** Verdict of the resend against the captured original (0.57.0); never throws. */
+    static ResponseCompare.Result compareWithOriginal(HttpRequestResponse original, HttpRequestResponse sent) {
+        try {
+            HttpResponse o = original == null ? null : original.response();
+            HttpResponse n = sent == null ? null : sent.response();
+            return ResponseCompare.compare(
+                    o == null ? 0 : o.statusCode(), o == null ? null : BodyDecoder.decode(o),
+                    o == null ? 0 : o.toByteArray().length(),
+                    n == null ? 0 : n.statusCode(), n == null ? null : BodyDecoder.decode(n),
+                    n == null ? 0 : n.toByteArray().length(), n == null ? null : n.headerValue("Location"));
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
     private static HttpRequest applyOne(HttpRequest original, MatchReplaceRule rule) {
+        if (rule.mode() == MatchReplaceRule.Mode.REMOVE_HEADER) {
+            // 0.57.0: a header that isn't there is already "removed" -- pass through, not a failure.
+            return original.hasHeader(rule.headerName()) ? original.withRemovedHeader(rule.headerName()) : original;
+        }
         if (rule.mode() == MatchReplaceRule.Mode.HEADER) {
             String name = rule.headerName();
             boolean has = original.hasHeader(name);

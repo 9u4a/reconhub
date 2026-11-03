@@ -19,6 +19,9 @@ import com.reconhub.analysis.MisconfigInspector;
 import com.reconhub.analysis.ParameterExtractor;
 import com.reconhub.analysis.PiiScanner;
 import com.reconhub.analysis.AccessLeads;
+import com.reconhub.analysis.BodyLeads;
+import com.reconhub.analysis.JwtInspector;
+import com.reconhub.analysis.RequestLeads;
 import com.reconhub.analysis.PatternRegistry;
 import com.reconhub.analysis.RequestInspector;
 import com.reconhub.analysis.SecretScanner;
@@ -26,8 +29,11 @@ import com.reconhub.analysis.SourceMapDetector;
 import com.reconhub.analysis.TechFingerprinter;
 import com.reconhub.analysis.UserRuleStore;
 
+import burp.api.montoya.http.message.HttpHeader;
+import burp.api.montoya.http.message.params.HttpParameterType;
 import burp.api.montoya.http.message.params.ParsedHttpParameter;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -66,6 +72,8 @@ public final class TrafficIngestor implements HttpHandler {
     private final ApiSpecAnalyzer apiSpecAnalyzer;
     private final PiiScanner piiScanner;
     private final RequestInspector requestInspector;
+    private final PatternRegistry.LeadRules leadRules;   // leads.json (0.57.0)
+    private final JwtInspector jwtInspector;
 
     private final ExecutorService executor =
             Executors.newSingleThreadExecutor(r -> {
@@ -119,6 +127,8 @@ public final class TrafficIngestor implements HttpHandler {
         this.apiSpecAnalyzer = new ApiSpecAnalyzer(store);
         this.piiScanner = new PiiScanner(store);
         this.requestInspector = new RequestInspector(store);
+        this.leadRules = patterns.leadRules();
+        this.jwtInspector = new JwtInspector(store, leadRules);
     }
 
     // ---- Bulk sweep of the existing site map ----------------------------
@@ -339,9 +349,17 @@ public final class TrafficIngestor implements HttpHandler {
             // 0.56.0: an anonymous 2xx from an API / sensitive route is an access-control lead.
             com.reconhub.model.Finding lead = AccessLeads.lead(authed, status, ep.method(), ep.path(), ep.normalizedUrl(),
                     contentType, routeRules);
-            if (lead != null) {
-                lead.setMessages(stored);
-                store.recordFinding(lead);
+            recordLead(lead, stored);
+            // 0.57.0: request-shape leads (CSRF / upload / auth flow) from what was already parsed.
+            String reqCt = request.headerValue("Content-Type");
+            recordLead(RequestLeads.authFlow(ep.method(), ep.path(), ep.normalizedUrl(), status,
+                    headerNames(response == null ? null : response.headers()), leadRules), stored);
+            recordLead(RequestLeads.csrf(ep.method(), ep.path(), ep.normalizedUrl(), status,
+                    request.headerValue("Cookie") != null, request.headerValue("Authorization") != null,
+                    headerNames(request.headers()), nonCookieParamNames(params), reqCt, leadRules), stored);
+            if (reqCt != null && reqCt.toLowerCase(Locale.ROOT).contains("multipart/")) {
+                recordLead(RequestLeads.upload(ep.method(), ep.normalizedUrl(), reqCt, BodyDecoder.decode(request)),
+                        stored);
             }
         }
         store.countRequest(ep.host(), status, contentType);
@@ -374,12 +392,65 @@ public final class TrafficIngestor implements HttpHandler {
                 authzScanner.scan(responseBody, url, stored);
                 piiScanner.scan(responseBody, url, stored);
                 requestInspector.inspect(request, response, params, url, contentType, responseBody, stored);
+                // 0.57.0: JSON-body leads (mass assignment / sensitive fields) and JWT weaknesses.
+                String reqCt = request.headerValue("Content-Type");
+                if (BodyLeads.isJson(contentType)) {
+                    String reqBody = BodyLeads.isJson(reqCt) ? BodyDecoder.decode(request) : null;
+                    for (com.reconhub.model.Finding f : BodyLeads.scan(ep.method(), ep.normalizedUrl(), status,
+                            reqCt, reqBody, contentType, responseBody, leadRules)) {
+                        recordLead(f, stored);
+                    }
+                }
+                jwtInspector.inspect(ep.host(), url, jwtTexts(request, response, responseBody), stored);
                 misconfigInspector.inspect(ep.host(), request, response, url, stored);
                 if (isHtml(contentType)) {
                     commentExtractor.extractHtml(responseBody, url, stored);
                 }
             }
         }
+    }
+
+    private void recordLead(com.reconhub.model.Finding f, HttpRequestResponse stored) {
+        if (f != null) {
+            f.setMessages(stored);
+            store.recordFinding(f);
+        }
+    }
+
+    private static List<String> headerNames(List<HttpHeader> headers) {
+        List<String> out = new ArrayList<>();
+        if (headers != null) {
+            for (HttpHeader h : headers) {
+                out.add(h.name());
+            }
+        }
+        return out;
+    }
+
+    private static List<String> nonCookieParamNames(List<ParsedHttpParameter> params) {
+        List<String> out = new ArrayList<>();
+        for (ParsedHttpParameter p : params) {
+            if (p.type() != HttpParameterType.COOKIE && p.name() != null) {
+                out.add(p.name());
+            }
+        }
+        return out;
+    }
+
+    /** Where captured JWTs live: Authorization / Cookie request headers, Set-Cookie, the response body. */
+    private static List<String> jwtTexts(HttpRequest request, HttpResponse response, String responseBody) {
+        List<String> out = new ArrayList<>(4);
+        out.add(request.headerValue("Authorization"));
+        out.add(request.headerValue("Cookie"));
+        if (response != null) {
+            for (HttpHeader h : response.headers()) {
+                if (h.name().equalsIgnoreCase("Set-Cookie")) {
+                    out.add(h.value());
+                }
+            }
+        }
+        out.add(responseBody);
+        return out;
     }
 
     private static boolean isHtml(String contentType) {

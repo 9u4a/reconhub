@@ -20,9 +20,20 @@ public final class MatchReplaceResult {
     private final long timestamp;
     private final String error;        // null on a normal send
     private final HttpRequestResponse messages;   // null when never sent
+    // 0.57.0: the verdict against the originally captured response, and that original (for the viewer).
+    private final ResponseCompare.Result compare;   // null when never sent
+    private final HttpRequestResponse original;     // null when never sent
 
     public MatchReplaceResult(String host, String path, String method, int status, int lengthBytes,
                               long timestamp, String error, HttpRequestResponse messages) {
+        this(host, path, method, status, lengthBytes, timestamp, error, messages, null, null);
+    }
+
+    public MatchReplaceResult(String host, String path, String method, int status, int lengthBytes,
+                              long timestamp, String error, HttpRequestResponse messages,
+                              ResponseCompare.Result compare, HttpRequestResponse original) {
+        this.compare = compare;
+        this.original = original;
         this.host = host;
         this.path = path;
         this.method = method;
@@ -43,12 +54,19 @@ public final class MatchReplaceResult {
      * connection-refused send still counts as "sent", just with no response to show). */
     public static MatchReplaceResult sent(String host, String path, String method,
                                           HttpRequestResponse messages) {
+        return sent(host, path, method, messages, null, null);
+    }
+
+    /** As above, carrying the comparison with the originally captured exchange (0.57.0). */
+    public static MatchReplaceResult sent(String host, String path, String method,
+                                          HttpRequestResponse messages, ResponseCompare.Result compare,
+                                          HttpRequestResponse original) {
         int status = messages != null && messages.response() != null
                 ? messages.response().statusCode() : 0;
         int length = messages != null && messages.response() != null
                 ? messages.response().toByteArray().length() : 0;
         return new MatchReplaceResult(host, path, method, status, length,
-                System.currentTimeMillis(), null, messages);
+                System.currentTimeMillis(), null, messages, compare, original);
     }
 
     public String getHost() { return host; }
@@ -59,6 +77,8 @@ public final class MatchReplaceResult {
     public long getTimestamp() { return timestamp; }
     public String getError() { return error; }
     public HttpRequestResponse getMessages() { return messages; }
+    public ResponseCompare.Result getCompare() { return compare; }
+    public HttpRequestResponse getOriginal() { return original; }
 
     /** Stable identity for {@code AbstractTablePanel}'s selection-preserving refresh -- results are
      * append-only within one job, so host+path+timestamp is unique enough (two results for the same

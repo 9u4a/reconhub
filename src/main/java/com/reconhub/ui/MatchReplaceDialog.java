@@ -6,6 +6,7 @@ import com.reconhub.active.MatchReplaceEngine;
 import com.reconhub.active.MatchReplaceJob;
 import com.reconhub.active.MatchReplaceRule;
 import com.reconhub.active.MatchReplaceTarget;
+import com.reconhub.active.SessionProfiles;
 import com.reconhub.core.Settings;
 
 import javax.swing.BorderFactory;
@@ -14,6 +15,7 @@ import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -29,6 +31,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.GridLayout;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -47,6 +50,9 @@ import java.util.List;
 final class MatchReplaceDialog {
 
     private static final int PREVIEW_MAX = 2000;
+    private static final String PRESET_NONE = "— choose a preset —";
+    private static final String PRESET_REMOVE_AUTH = "Remove auth (Cookie + Authorization)";
+    private static final String PRESET_SESSION = "Use session: ";
 
     private MatchReplaceDialog() {}
 
@@ -56,20 +62,37 @@ final class MatchReplaceDialog {
         final JPanel panel = new JPanel();
         final JRadioButton headerMode = new JRadioButton("Header / Cookie value", true);
         final JRadioButton rawMode = new JRadioButton("Raw request text");
+        final JRadioButton removeMode = new JRadioButton("Remove header");   // 0.57.0
         final JTextField headerName = new JTextField("Cookie", 18);
         final JCheckBox addIfMissing = new JCheckBox("Add header if missing", true);
         final JTextField matchField = new JTextField(22);
         final JTextField replaceField = new JTextField(22);
         final JCheckBox useRegex = new JCheckBox("Use regex");
         final JButton remove = new JButton("Remove");
+        Runnable applyEnablement = () -> { };
 
         MatchReplaceRule toRule() {
-            boolean h = headerMode.isSelected();
-            return new MatchReplaceRule(
-                    h ? MatchReplaceRule.Mode.HEADER : MatchReplaceRule.Mode.RAW,
-                    h ? headerName.getText().trim() : null,
+            MatchReplaceRule.Mode mode = removeMode.isSelected() ? MatchReplaceRule.Mode.REMOVE_HEADER
+                    : headerMode.isSelected() ? MatchReplaceRule.Mode.HEADER : MatchReplaceRule.Mode.RAW;
+            return new MatchReplaceRule(mode,
+                    mode == MatchReplaceRule.Mode.RAW ? null : headerName.getText().trim(),
                     matchField.getText(), useRegex.isSelected(), replaceField.getText(),
                     addIfMissing.isSelected());
+        }
+
+        /** Loads a preset rule into this row's fields (0.57.0). */
+        void fill(MatchReplaceRule r) {
+            switch (r.mode()) {
+                case HEADER -> headerMode.setSelected(true);
+                case RAW -> rawMode.setSelected(true);
+                case REMOVE_HEADER -> removeMode.setSelected(true);
+            }
+            headerName.setText(r.headerName() == null ? "" : r.headerName());
+            matchField.setText(r.matchText() == null ? "" : r.matchText());
+            replaceField.setText(r.replacement() == null ? "" : r.replacement());
+            useRegex.setSelected(r.useRegex());
+            addIfMissing.setSelected(r.addHeaderIfMissing());
+            applyEnablement.run();
         }
     }
 
@@ -152,11 +175,81 @@ final class MatchReplaceDialog {
         rulesContainer.add(first.panel);
         updatePreview.run();
 
+        // Session presets (0.57.0): replace the whole rule chain with "no credentials" or a saved identity --
+        // the Autorize-style authz replay. Profiles are memory-only (SessionProfiles).
+        SessionProfiles sessions = engine.sessions();
+        JComboBox<String> presets = new JComboBox<>();
+        Runnable reloadPresets = () -> {
+            presets.removeAllItems();
+            presets.addItem(PRESET_NONE);
+            presets.addItem(PRESET_REMOVE_AUTH);
+            for (SessionProfiles.Profile p : sessions.list()) {
+                presets.addItem(PRESET_SESSION + p.name());
+            }
+        };
+        reloadPresets.run();
+        presets.addActionListener(e -> {
+            Object sel = presets.getSelectedItem();
+            List<MatchReplaceRule> preset = null;
+            if (PRESET_REMOVE_AUTH.equals(sel)) {
+                preset = SessionProfiles.removeAuthRules();
+            } else if (sel instanceof String str && str.startsWith(PRESET_SESSION)) {
+                SessionProfiles.Profile p = sessions.get(str.substring(PRESET_SESSION.length()));
+                preset = p == null ? null : SessionProfiles.rulesFor(p);
+            }
+            if (preset == null) {
+                return;
+            }
+            ruleRows.clear();
+            rulesContainer.removeAll();
+            for (MatchReplaceRule r : preset) {
+                RuleRow row = newRuleRow(ruleRows, rulesContainer, updatePreview);
+                row.fill(r);
+                ruleRows.add(row);
+                rulesContainer.add(row.panel);
+            }
+            rulesContainer.revalidate();
+            rulesContainer.repaint();
+            updatePreview.run();
+        });
+        JButton saveSession = new JButton("Save session…");
+        saveSession.setToolTipText("Save another account's Cookie / Authorization as a preset "
+                + "(kept in memory only -- never written to disk or exports)");
+        saveSession.addActionListener(e -> {
+            JTextField name = new JTextField("user B", 24);
+            JTextField cookie = new JTextField(previewReq == null ? "" : nz(previewReq.headerValue("Cookie")), 40);
+            JTextField auth = new JTextField(previewReq == null ? "" : nz(previewReq.headerValue("Authorization")),
+                    40);
+            JPanel form = new JPanel(new GridLayout(0, 1, 2, 2));
+            form.add(new JLabel("Name:"));
+            form.add(name);
+            form.add(new JLabel("Cookie (blank = remove the header):"));
+            form.add(cookie);
+            form.add(new JLabel("Authorization (blank = remove the header):"));
+            form.add(auth);
+            form.add(new JLabel("Paste the other account's values (prefilled from the first selected request)."));
+            if (JOptionPane.showConfirmDialog(saveSession, form, "ReconHub — save session preset",
+                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION
+                    || name.getText().isBlank()) {
+                return;
+            }
+            sessions.put(new SessionProfiles.Profile(name.getText(), cookie.getText(), auth.getText()));
+            reloadPresets.run();
+            presets.setSelectedItem(PRESET_SESSION + name.getText().trim());
+        });
+        JPanel presetRow = row();
+        presetRow.add(new JLabel("Preset:"));
+        presetRow.add(presets);
+        presetRow.add(saveSession);
+
         JPanel root = new JPanel();
         root.setLayout(new BoxLayout(root, BoxLayout.Y_AXIS));
         root.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
 
         root.add(left(new JLabel(targets.size() + " row(s) selected.")));
+        root.add(presetRow);
+        root.add(left(new JLabel("Results get a Verdict vs. the captured response -- Same = the other identity "
+                + "got the same data (authz bypass?).")));
         root.add(Box.createVerticalStrut(8));
         root.add(rulesContainer);
         root.add(addRule);
@@ -222,10 +315,12 @@ final class MatchReplaceDialog {
         ButtonGroup modeGroup = new ButtonGroup();
         modeGroup.add(row.headerMode);
         modeGroup.add(row.rawMode);
+        modeGroup.add(row.removeMode);
 
         JPanel top = row();
         top.add(row.headerMode);
         top.add(row.rawMode);
+        top.add(row.removeMode);
         top.add(Box.createHorizontalStrut(20));
         top.add(row.remove);
         p.add(top);
@@ -254,11 +349,17 @@ final class MatchReplaceDialog {
         row.useRegex.addActionListener(e -> updatePreview.run());
         Runnable applyModeEnablement = () -> {
             boolean h = row.headerMode.isSelected();
-            row.headerName.setEnabled(h);
+            boolean rm = row.removeMode.isSelected();
+            row.headerName.setEnabled(h || rm);
             row.addIfMissing.setEnabled(h);
+            row.matchField.setEnabled(!rm);
+            row.replaceField.setEnabled(!rm);
+            row.useRegex.setEnabled(!rm);
         };
+        row.applyEnablement = applyModeEnablement;
         row.headerMode.addActionListener(e -> { applyModeEnablement.run(); updatePreview.run(); });
         row.rawMode.addActionListener(e -> { applyModeEnablement.run(); updatePreview.run(); });
+        row.removeMode.addActionListener(e -> { applyModeEnablement.run(); updatePreview.run(); });
         applyModeEnablement.run();
 
         row.remove.addActionListener(e -> {
@@ -273,6 +374,10 @@ final class MatchReplaceDialog {
         });
 
         return row;
+    }
+
+    private static String nz(String s) {
+        return s == null ? "" : s;
     }
 
     private static String truncate(String s) {

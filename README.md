@@ -20,11 +20,11 @@
 | **JS Assets** | JS 파일 수집·분석 (엔드포인트/탐지 추출), **라이브러리·서드파티·빈 청크 자동 숨김**, 파일별 **Risk** 순 정렬, **다중 선택 → Match & Replace 전송** |
 | **JS Analysis** | JS에서 나온 로직/API 탐지 결과(암복호화·권한·위험 싱크·설정·API 호출·**민감 경로**)를 번들 가로질러 모아 **위험한 파일 순**으로 표시, 민감 경로는 **실제 호출 여부(Seen)** 표시 |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 체크 |
-| **Match & Replace** ⚠**ACTIVE** | Endpoints/Parameters/Findings/JS Assets에서 선택한 행에 헤더/쿠키 값 또는 원문 전체 치환 규칙(**여러 개 체이닝 가능**) 적용해 재전송, 결과+상세 확인 |
+| **Match & Replace** ⚠**ACTIVE** | Endpoints/Parameters/Findings/JS Assets에서 선택한 행에 헤더/쿠키 값 또는 원문 전체 치환 규칙(**여러 개 체이닝 가능**) 적용해 재전송, 결과+상세 확인. **세션 프리셋**(인증 제거 / 저장한 다른 계정 세션)과 원본 응답 대비 **Verdict**(Same·Different·Blocked)로 권한 검증 |
 | **Snapshot Diff** | 저장해둔 State 파일을 불러와 현재 데이터와 비교, 새로 생긴/사라진 항목 표시 |
 | **Settings** | 스코프·규칙·Ingest·내보내기(**북마크만** 옵션 포함)·State 백업, **스코프 밖 호스트 일괄 삭제**, Match & Replace 켜기/스로틀 |
 
-**탐지 항목**: 시크릿(API 키/JWT/쿠키값 포함)·PII·오픈 리다이렉트·반사 XSS 후보·응답 시그니처(스택
+**탐지 항목**: 시크릿(API 키/JWT/쿠키값 포함)·PII·오픈 리다이렉트·반사 XSS 후보·**CSRF 후보·업로드/인증 흐름 엔드포인트·Mass assignment 후보·응답 내 민감 필드·JWT 약점**·응답 시그니처(스택
 트레이스/SQL 에러)·CORS/쿠키/CSP/캐시 미스컨피그·노출 파일(`.env`·`.git`)·OpenAPI/Swagger·GraphQL
 introspection·소스맵 노출·주석·누락 보안 헤더. **JS 심화 분석**(정적): 암복호화 로직(CryptoJS/Web
 Crypto/JSEncrypt·하드코딩 키/IV·약한 알고리즘·client-side JWT 서명), client-side 권한/인가 로직
@@ -136,6 +136,14 @@ selected with Match & Replace…**로 헤더/쿠키 값 치환(예: Cookie 값 �
 포함)가 필수 — "다시 묻지 않기" 없음. 스코프 밖 대상은 자동 제외. 결과는 **Match &
 Replace 탭**에서 호스트·상태·길이·에러 요약 + 행 선택 시 실제 전송된 request/response 상세 확인
 가능(세션 내 보관, State Export/Import 대상 아님).
+**권한 검증(세션 프리셋 + Verdict)**: 다이얼로그 상단 **Preset**에서 **Remove auth**(Cookie·Authorization
+헤더 삭제)나 **Save session…**으로 저장한 다른 계정(Cookie/Authorization 값)을 고르면 규칙 체인이 그
+신원으로 바뀜(없는 헤더는 삭제해 원래 사용자의 자격이 남지 않게 함). 저장한 세션은 **메모리에만**
+보관(설정·State·리포트에 저장 안 함, 확장 언로드 시 사라짐). 규칙 모드에 **Remove header**도 추가.
+결과 탭은 재전송 응답을 캡처된 원본과 비교해 **Verdict**(Same = 상태 코드 같고 본문 90% 이상 유사 →
+권한 우회 의심 / Blocked = 401·403·로그인 리다이렉트 / Different), **Orig**(원본 상태), **Sim%**,
+**ΔLen**을 보여주고, **Same only** 토글로 우회 의심만 추림. 행 우클릭 **Show original (captured)
+request/response**로 원본과 나란히 확인.
 
 ### Snapshot Diff
 **Settings → Backup / State**에서 내보낸 State 파일을 **Load comparison state file…** 버튼으로 불러와
@@ -164,7 +172,14 @@ actuator 등 민감 경로가 2xx로 응답 — "Unauthenticated access", 다른
 힌트 포함), **OpenAPI/Swagger 스펙**(JSON·**YAML 둘 다**)·**GraphQL
 introspection**(스키마를 실제로 파싱해 타입.필드를 엔드포인트/파라미터로 등록), **소스맵(.map) 노출**
 (JS 내 `sourceMappingURL` 참조 / 캡처된 `.map`의 원본 소스 목록), 주석, 누락된 보안 헤더. (화면에선
-원문 확인·복사 가능, 리포트에선 마스킹)
+원문 확인·복사 가능, 리포트에선 마스킹). **요청/응답 단서**: 쿠키로만 인증된 POST에 CSRF 토큰
+파라미터·헤더가 없으면 **CSRF candidate**(form/multipart/text-plain LOW, JSON INFO), 파일 파트가 있는
+multipart 요청은 **File upload endpoint**, 로그인·OTP·비밀번호 재설정·회원가입·토큰 갱신 경로의 POST는
+**Auth flow endpoint**(응답에 rate-limit 헤더가 없으면 표시), JSON 바디를 보낸 POST/PUT/PATCH의 응답에
+role·isAdmin·ownerId·price 같은 권한 필드가 있는데 요청엔 없으면 **Mass assignment candidate**, JSON 응답에
+password·hash·secret·OTP·주민번호류 필드 값이 있으면 **Sensitive field in response**(값은 기록 안 함),
+캡처된 JWT(Authorization·쿠키·응답 본문)에서 alg=none·HS 대칭키·exp 없음/장기 만료·kid/jku/x5u/jwk
+헤더·민감/권한 클레임이 있으면 **JWT weakness**(호스트·이슈당 1건) — 모두 `Try:` 힌트 포함
 
 ### 공통 기능 상세
 **Host focus**: 탭 위 `Host focus` 콤보에서 호스트를 고르거나, Dashboard 호스트 / Endpoints·Parameters·

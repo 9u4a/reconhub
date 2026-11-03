@@ -73,6 +73,23 @@ public final class JwtDecoder {
         return sb.toString();
     }
 
+    /** Decoded header + payload (either null when that segment isn't a JSON object). */
+    public record Parsed(JsonObject header, JsonObject payload) {
+    }
+
+    /** Parses a token's first two segments; null unless it has at least two segments (the signature may be
+     * empty, as with alg=none). Never verifies anything. */
+    public static Parsed parse(String token) {
+        if (token == null) {
+            return null;
+        }
+        String[] parts = token.split("\\.", -1);
+        if (parts.length < 2) {
+            return null;
+        }
+        return new Parsed(parseSegment(parts[0]), parseSegment(parts[1]));
+    }
+
     // ---- internals ------------------------------------------------------
 
     private static JsonObject parseSegment(String seg) {
@@ -143,7 +160,7 @@ public final class JwtDecoder {
         }
     }
 
-    private static String str(JsonObject o, String key) {
+    static String str(JsonObject o, String key) {
         try {
             return o.get(key).getAsString();
         } catch (RuntimeException e) {
@@ -151,7 +168,7 @@ public final class JwtDecoder {
         }
     }
 
-    private static long asLong(JsonObject o, String key) {
+    static long asLong(JsonObject o, String key) {
         try {
             return o.get(key).getAsLong();
         } catch (RuntimeException e) {

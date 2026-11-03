@@ -24,6 +24,17 @@ class FindingHintsTest {
     }
 
     @Test
+    void leadTypesGetTheirOwnHintNotAGenericOne() {
+        // 0.57.0: the label after the colon ("password", "kid header") must not reach a generic entry.
+        assertTrue(FindingHints.forType("CSRF candidate").contains("CSRF PoC"));
+        assertTrue(FindingHints.forType("Sensitive field in response: password").contains("never send"));
+        assertTrue(FindingHints.forType("JWT weakness: kid header").contains("jwt_tool"));
+        assertTrue(FindingHints.forType("Mass assignment candidate: role").contains("privileged value"));
+        assertTrue(FindingHints.forType("Auth flow endpoint: login").contains("enumeration"));
+        assertTrue(FindingHints.forType("File upload endpoint").contains("extension"));
+    }
+
+    @Test
     void specificEntriesWinOverGenericOnes() {
         assertTrue(FindingHints.forType("CORS reflected +creds").contains("credentials"));
         assertFalse(FindingHints.forType("CORS reflected +creds")

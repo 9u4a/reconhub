@@ -31,7 +31,8 @@ import java.util.regex.PatternSyntaxException;
 public record MatchReplaceRule(Mode mode, String headerName, String matchText, boolean useRegex,
                                String replacement, boolean addHeaderIfMissing) {
 
-    public enum Mode { HEADER, RAW }
+    /** REMOVE_HEADER (0.57.0) deletes {@code headerName}; match/replace fields are ignored. */
+    public enum Mode { HEADER, RAW, REMOVE_HEADER }
 
     // Shared across every rule instance, keyed by the regex text itself (0.43.9) -- a record has no
     // room for a per-instance lazy-compiled field (no extra instance fields allowed), and

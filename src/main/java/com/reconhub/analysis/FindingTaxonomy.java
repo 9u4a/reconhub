@@ -60,6 +60,18 @@ public final class FindingTaxonomy {
         if (t.startsWith("unauthenticated access:") || t.startsWith("hidden parameter in js:")) {
             return Category.AUTH;
         }
+        // Request/response leads (0.57.0), same reason: the label after the colon is a field / family / issue
+        // name ("password", "login", "kid header") that later branches would claim.
+        if (t.startsWith("csrf candidate") || t.startsWith("file upload endpoint")
+                || t.startsWith("auth flow endpoint:") || t.startsWith("mass assignment candidate:")) {
+            return Category.AUTH;
+        }
+        if (t.startsWith("sensitive field in response:")) {
+            return Category.PII;
+        }
+        if (t.startsWith("jwt weakness:")) {
+            return Category.SECRET;
+        }
 
         // JS deep-analysis families (0.47.0) checked first -- their names contain tokens ("cipher",
         // "cookie access", ...) that later branches (MISCONFIG's "cookie", SECRET's "key") would

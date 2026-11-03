@@ -1,0 +1,20 @@
+{
+  "comment": "Request/response leads (0.57.0): CSRF candidates, upload and auth-flow endpoints, mass assignment and sensitive response fields, JWT claims. Every *Names/*Fields/*Headers regex is matched against a WHOLE name, case-insensitive. authFlows are found (not matched) in the request path, case-insensitive; 'note' becomes the finding's Try hint. Keep every span bounded (ReDoS).",
+  "csrfTokenNames": "^(?:_?csrf[\\w-]{0,20}|_?xsrf[\\w-]{0,20}|csrf_?token|authenticity_token|__requestverificationtoken|requestverificationtoken|_wpnonce|nonce|form_?key|_?token|anti_?forgery[\\w-]{0,20}|struts\\.token\\.name|org\\.apache\\.struts\\.taglib\\.html\\.token)$",
+  "csrfHeaders": "^(?:x-csrf-?token|x-xsrf-?token|x-csrftoken|csrf-?token|x-csrf-header|anti-csrf-token|requestverificationtoken|x-requested-with)$",
+  "rateLimitHeaders": "^(?:x-rate-?limit[\\w-]{0,30}|rate-?limit[\\w-]{0,30}|retry-after)$",
+  "privilegedFields": "^(?:role|roles|user_?role|role_?id|is_?admin|admin|is_?staff|is_?super_?(?:user|admin)?|permissions?|privileges?|authorit(?:y|ies)|access_?level|auth_?level|user_?level|grade|member_?grade|user_?type|member_?type|owner_?id|tenant_?id|org_?id|group_?id|company_?id|balance|credit|points?|price|amount|discount|is_?verified|verified|email_?verified|phone_?verified|approved|is_?approved|is_?active|activated|plan|tier|subscription|is_?premium|premium)$",
+  "sensitiveFields": "^(?:password|passwd|pass_?word|pwd|user_?pw|user_?pwd|pw|password_?hash|pass_?hash|hashed_?password|pw_?hash|salt|password_?salt|secret|client_?secret|api_?secret|secret_?key|private_?key|otp|otp_?code|auth_?code|pin|pin_?code|ssn|social_?security_?(?:no|number)|jumin_?(?:no|number|num)?|resident_?(?:no|number|num)|rrn|card_?(?:no|number|num)|cvv|cvc|security_?answer|reset_?token|password_?reset_?token|verification_?code)$",
+  "authFlows": [
+    { "name": "login", "regex": "(?:^|/)(?:login|log-in|signin|sign-in|logon|authenticate|loginproc|login_?process|login_?action|login_?check|j_security_check|sso)(?:$|[/._;-])",
+      "note": "compare responses for a valid vs an invalid username (account enumeration), send the same request 20-30 times to see whether a lockout / rate limit / CAPTCHA kicks in, and try SQLi/NoSQLi in the credentials" },
+    { "name": "OTP / MFA", "regex": "(?:^|/)(?:otp|mfa|2fa|two-?factor|verify[-_]?(?:code|otp|sms|email)?|verification|sms[-_]?(?:code|auth|cert)|auth[-_]?code|cert[-_]?(?:no|num|code)|certification|identity[-_]?verif\\w{0,10})(?:$|[/._;-])",
+      "note": "check whether the code can be brute-forced (no attempt limit), reused, or skipped by calling the next step directly; flip a success flag in the response (false -> true) and see whether the client proceeds" },
+    { "name": "password reset", "regex": "(?:^|/)(?:(?:reset|forgot|find|change|recover|update)[-_/]?(?:password|passwd|pass|pw|pwd)|(?:password|passwd|pw|pwd)[-_/]?(?:reset|forgot|find|change|recover|update)|find[-_]?id)(?:$|[/._;-])",
+      "note": "change the target account (id/email) between steps, inject a Host / X-Forwarded-Host header to poison the reset link, and check whether reset tokens are predictable, reusable or leaked in the response" },
+    { "name": "signup", "regex": "(?:^|/)(?:signup|sign-up|register|registration|join|member[-_]?join|join[-_]?(?:proc|process|member)|create[-_]?account|new[-_]?account)(?:$|[/._;-])",
+      "note": "re-register an existing id/email with different case or trailing spaces, add role/isAdmin/grade fields to the body (mass assignment), and check whether verification steps can be skipped" },
+    { "name": "token refresh", "regex": "(?:^|/)(?:refresh|refresh[-_]?token|token[-_]?refresh|oauth2?/token|token|reissue)(?:$|[/._;-])",
+      "note": "replay an old / already-used refresh token, swap in another user's token, and check whether logging out actually invalidates it" }
+  ]
+}

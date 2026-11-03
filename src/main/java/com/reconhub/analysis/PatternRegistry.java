@@ -137,6 +137,8 @@ public final class PatternRegistry {
     // Hidden-parameter extractors (0.56.0): group 1 = a parameter name referenced in app JS.
     private final List<JsLinkRule> jsParamRules = new ArrayList<>();
     private Pattern jsParamInteresting;   // null when js-params.json is missing/invalid
+    // Request/response lead rules (0.57.0, leads.json). Never null; its patterns may be.
+    private final LeadRules leadRules = new LeadRules();
     private final List<TechRule> techRules = new ArrayList<>();
     private final List<String> securityHeaders = new ArrayList<>();
     private final List<String> loadErrors = new ArrayList<>();
@@ -152,6 +154,7 @@ public final class PatternRegistry {
     public List<SecretRule> jsRouteRules() { return jsRouteRules; }
     public List<JsLinkRule> jsParamRules() { return jsParamRules; }
     public Pattern jsParamInteresting() { return jsParamInteresting; }
+    public LeadRules leadRules() { return leadRules; }
     public List<TechRule> techRules() { return techRules; }
     public List<String> securityHeaders() { return securityHeaders; }
     public List<String> loadErrors() { return loadErrors; }
@@ -169,8 +172,39 @@ public final class PatternRegistry {
         r.loadJsLinks(gson);
         r.loadJsRoutes(gson);
         r.loadJsParams(gson);
+        r.loadLeads(gson);
         r.loadTech(gson);
         return r;
+    }
+
+    /** leads.json (0.57.0). Name patterns are whole-name, case-insensitive; a pattern is null when the file
+     * or that entry is missing/invalid (callers then skip that check). authFlows are found in the path. */
+    public static final class LeadRules {
+        public Pattern csrfTokenNames;
+        public Pattern csrfHeaders;
+        public Pattern rateLimitHeaders;
+        public Pattern privilegedFields;
+        public Pattern sensitiveFields;
+        public final List<SecretRule> authFlows = new ArrayList<>();
+
+        /** All compiled patterns, for the ReDoS test. */
+        public List<Pattern> patterns() {
+            List<Pattern> out = new ArrayList<>();
+            for (Pattern p : new Pattern[]{csrfTokenNames, csrfHeaders, rateLimitHeaders, privilegedFields,
+                    sensitiveFields}) {
+                if (p != null) {
+                    out.add(p);
+                }
+            }
+            for (SecretRule r : authFlows) {
+                out.add(r.pattern);
+            }
+            return out;
+        }
+
+        static boolean whole(Pattern p, String name) {
+            return p != null && name != null && p.matcher(name).matches();
+        }
     }
 
     // ---- JSON DTOs ------------------------------------------------------
@@ -188,6 +222,15 @@ public final class PatternRegistry {
     private static final class JsParamFile {
         String interesting;
         List<JsFile.Raw> patterns;
+    }
+
+    private static final class LeadsFile {
+        String csrfTokenNames;
+        String csrfHeaders;
+        String rateLimitHeaders;
+        String privilegedFields;
+        String sensitiveFields;
+        List<SecretsFile.Raw> authFlows;
     }
 
     private static final class TechFile {
@@ -366,6 +409,41 @@ public final class PatternRegistry {
             } catch (PatternSyntaxException e) {
                 loadErrors.add("js-params[" + raw.name + "]: " + e.getMessage());
             }
+        }
+    }
+
+    private void loadLeads(Gson gson) {
+        LeadsFile f = read(gson, "/patterns/leads.json", LeadsFile.class);
+        if (f == null) {
+            return;
+        }
+        leadRules.csrfTokenNames = leadPattern("csrfTokenNames", f.csrfTokenNames);
+        leadRules.csrfHeaders = leadPattern("csrfHeaders", f.csrfHeaders);
+        leadRules.rateLimitHeaders = leadPattern("rateLimitHeaders", f.rateLimitHeaders);
+        leadRules.privilegedFields = leadPattern("privilegedFields", f.privilegedFields);
+        leadRules.sensitiveFields = leadPattern("sensitiveFields", f.sensitiveFields);
+        if (f.authFlows == null) {
+            return;
+        }
+        for (SecretsFile.Raw raw : f.authFlows) {
+            try {
+                leadRules.authFlows.add(new SecretRule(raw.name, Finding.Severity.INFO,
+                        Pattern.compile(raw.regex, Pattern.CASE_INSENSITIVE), raw.note));
+            } catch (PatternSyntaxException e) {
+                loadErrors.add("leads[" + raw.name + "]: " + e.getMessage());
+            }
+        }
+    }
+
+    private Pattern leadPattern(String name, String regex) {
+        if (regex == null) {
+            return null;
+        }
+        try {
+            return Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
+        } catch (PatternSyntaxException e) {
+            loadErrors.add("leads[" + name + "]: " + e.getMessage());
+            return null;
         }
     }
 

@@ -169,6 +169,11 @@ public final class DataStore {
     // ---- Findings --------------------------------------------------------
 
     /** @return true if this was a new (previously unseen) finding. */
+    /** Whether a finding with this {@link Finding#key()} is currently stored. */
+    public boolean hasFinding(String key) {
+        return key != null && findings.containsKey(key);
+    }
+
     public boolean recordFinding(Finding f) {
         Finding existing = findings.putIfAbsent(f.key(), f);
         if (existing != null) {

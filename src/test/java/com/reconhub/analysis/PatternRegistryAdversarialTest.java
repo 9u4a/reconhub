@@ -279,6 +279,8 @@ class PatternRegistryAdversarialTest {
                 {"append-run", ".append(\"a".repeat(30_000)},
                 {"email-ish", "a@" + "b.".repeat(60_000)},
                 {"slash-run", "/".repeat(150_000)},
+                {"jwt-ish", "eyJ" + "a".repeat(5000) + ".eyJ" + "b.".repeat(60_000)},
+                {"disposition-run", "content-disposition:".repeat(20_000)},
         };
         List<Pattern> pats = new ArrayList<>();
         List<String> names = new ArrayList<>();
@@ -287,6 +289,12 @@ class PatternRegistryAdversarialTest {
         pats.add(REGISTRY.jsParamInteresting()); names.add("param:interesting");
         List<Pattern> kinds = ValueKind.patterns();
         for (int i = 0; i < kinds.size(); i++) { pats.add(kinds.get(i)); names.add("valueKind#" + i); }
+        // 0.57.0: leads.json names/paths, the JWT token finder and the multipart file-part matcher.
+        List<Pattern> leads = REGISTRY.leadRules().patterns();
+        assertTrue(leads.size() >= 10, "leads.json failed to load: " + REGISTRY.loadErrors());
+        for (int i = 0; i < leads.size(); i++) { pats.add(leads.get(i)); names.add("leads#" + i); }
+        pats.add(JwtInspector.TOKEN); names.add("jwt:token");
+        pats.add(RequestLeads.FILE_PART); names.add("upload:file-part");
         for (String[] sample : adversarial) {
             for (int i = 0; i < pats.size(); i++) {
                 String nm = names.get(i);

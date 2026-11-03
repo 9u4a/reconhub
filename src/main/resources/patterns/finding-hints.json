@@ -1,6 +1,12 @@
 {
   "comment": "How-to-test hints for findings whose evidence carries no 'Try:' of its own (0.56.0). FindingHints returns the hint of the FIRST entry whose 'match' is a case-insensitive substring of the finding type -- order specific entries before generic ones. Shown at display/export time only; never written into evidence or state. Plain substrings, no regex.",
   "hints": [
+    { "match": "csrf candidate", "hint": "generate a CSRF PoC (Burp Engagement tools) and submit it from another origin with the victim's session; check SameSite on the session cookie" },
+    { "match": "file upload endpoint", "hint": "try double / mixed-case extensions, a spoofed Content-Type and magic bytes, SVG/HTML for stored XSS, and ../ in the filename; then locate where the file is served" },
+    { "match": "auth flow endpoint", "hint": "test account enumeration (valid vs invalid user responses), brute force / rate limiting, and skipping or replaying steps of the flow" },
+    { "match": "mass assignment candidate", "hint": "add the field to the request body with a privileged value and re-read the object to see whether it stuck" },
+    { "match": "sensitive field in response", "hint": "the API returns a secret it should never send -- check other users' records too (IDOR)" },
+    { "match": "jwt weakness", "hint": "decode it in the JWT tab, then test with jwt_tool (alg=none, weak secret, kid/jku injection, claim tampering)" },
     { "match": "cors reflected +creds", "hint": "send Origin: https://attacker.example with your session -- if ACAO echoes it with credentials, a cross-site page can read this response (PoC with fetch(..., {credentials:'include'}))" },
     { "match": "cors wildcard +creds", "hint": "browsers block * with credentials, but check whether a specific Origin is reflected instead when you send one" },
     { "match": "cors reflected without vary", "hint": "request with two different Origin values through any cache/CDN -- a cached reflected ACAO can be served to another origin" },
