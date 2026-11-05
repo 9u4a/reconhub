@@ -30,3 +30,6 @@ collected-js/
 # patterns/*.json — the curated result goes in the tracked JSON, the raw corpus doesn't
 # (may carry third-party domains from a public fuzzing list; not part of the extension).
 src/main/resources/patterns/*.txt
+
+# Agent-skills config (local-only, like CLAUDE.md)
+docs/agents/
