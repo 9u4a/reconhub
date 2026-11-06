@@ -1,8 +1,9 @@
 # ReconHub — Burp Suite 진단 정보 정리 확장
 
-[![release](https://img.shields.io/badge/release-download_JAR-blue)](https://github.com/9u4a/reconhub/releases/latest)
 [![test](https://github.com/9u4a/reconhub/actions/workflows/test.yml/badge.svg)](https://github.com/9u4a/reconhub/actions/workflows/test.yml)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+**[⬇ 최신 JAR 다운로드 (Releases)](https://github.com/9u4a/reconhub/releases/latest)**
 
 ## 개요
 
