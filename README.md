@@ -11,6 +11,9 @@
 오류, JS 분석 결과를 정리하고 **JSON/HTML/Markdown/SARIF 리포트**로 내보내는 Burp Suite 확장입니다
 (Montoya API, Java 17). 기본은 이미 캡처된 트래픽만 분석하며, 대상 서버에 새 요청을 보내지 않습니다.
 
+![Parameters 탭: 파라미터별 취약점 후보 Class와 값 모양 분류](https://github.com/9u4a/reconhub/releases/download/reconhub-v0.57.0/reconhub-parameters.png)
+<sub>로컬 OWASP Juice Shop을 대상으로 캡처, 호스트 정보는 모자이크 처리</sub>
+
 | 진단하며 겪은 문제 | 만든 기능 |
 |---|---|
 | Proxy History의 엔드포인트·파라미터를 손으로 정리 | 인벤토리 자동 정리, 값 모양(숫자 ID·UUID·URL)으로 IDOR·SSRF 후보 분류 |
@@ -43,6 +46,10 @@
 
 **공통**: 검색(정규식·AND·본문)·다중 컬럼 정렬·체크박스 필터·CSV 내보내기·우클릭 Copy/Repeater/Intruder/curl·
 JS Beautify·북마크/메모·키보드 단축키·다크테마 대응.
+
+| Findings: 탐지마다 "어떻게 테스트할지" Hint | JS Analysis: JS 탐지를 번들 가로질러 위험도 순으로 |
+|---|---|
+| ![Findings 탭](https://github.com/9u4a/reconhub/releases/download/reconhub-v0.57.0/reconhub-findings.png) | ![JS Analysis 탭](https://github.com/9u4a/reconhub/releases/download/reconhub-v0.57.0/reconhub-js-analysis.png) |
 
 탭별 상세 동작과 탐지 항목 전체 목록은 **[docs/FEATURES.md](docs/FEATURES.md)** 참고.
 
