@@ -1,0 +1,163 @@
+# ReconHub 기능 상세
+
+[README](../README.md)의 기능 표를 탭별로 자세히 설명합니다.
+
+## Dashboard
+카운트·심각도 요약, **호스트 스코어카드**(선택 시 심각도별·누락 보안헤더 상세), Top findings·주목
+엔드포인트·파라미터 클래스. 우클릭으로 다른 탭에서 필터링해 보기. 호스트 우클릭 **Delete all data for
+this host…**로 그 호스트의 엔드포인트/파라미터/파인딩/JS/Tech 데이터를 전부 삭제(삭제 전 건수 미리보기,
+확인 필수, Burp 자체 Proxy History/Site Map은 건드리지 않음) — **Ctrl/Shift로 여러 호스트 다중 선택 후
+한 번에 삭제**도 가능. Endpoints/Parameters/Findings/Tech 탭에서도 동일(단일 호스트) 삭제 메뉴 제공.
+
+## Endpoints
+method+정규화 URL로 dedup한 인벤토리(인증 관찰 Auth 컬럼 포함), 행 선택 시 원문 Request/Response.
+**XML/SOAP** Content-Type이면 우클릭 **View payload cheatsheet (XXE)…** 제공. 검색창 옆 **Method/
+Status/Type 필터 버튼**으로 값을 체크박스로 골라 필터링(Burp History 필터처럼, 여러 개 동시 선택 가능).
+
+## Parameters
+엔드포인트별 파라미터(query/body/JSON/cookie) + 취약점 후보 **Class** 자동 분류(IDOR·Redirect/SSRF·
+File/Path·SQLi/Sort·Command·**SSTI**). 이름뿐 아니라 **예시 값의 모양**도 봄 — **Value kind** 컬럼에
+numeric-id·uuid·email·url·path·jwt·serialized·base64를 표시하고, `?no=884213`·UUID 값은 IDOR, URL 값은
+Redirect/SSRF, 경로 값은 File/Path, 직렬화 값은 Deserialization 클래스로 이름과 무관하게 추가. 우클릭 **Payload cheatsheet ▸**로 자동 제안 클래스는 원클릭,
+**전체 클래스도 항상 수동으로 직접 선택 가능**(Basic/Bypass·우회 페이로드, Intruder에 클래스당 2세트
+등록). **JSON 파라미터**는 Prototype Pollution, **직렬화 값처럼 보이는 파라미터**(Java/PHP
+serialize·ViewState)는 Deserialization이 이름과 무관하게 자동 제안. **Location/Class 필터 버튼**으로
+체크박스 다중값 필터링.
+
+## Findings
+시크릿·PII·미스컨피그 등을 심각도·**카테고리**로 집계(필터·트리아지·JWT 디코드, 행 선택 시 원문).
+**Hint** 컬럼이 모든 탐지에 "어떻게 테스트할지"를 보여줌(CORS·CSP·쿠키·노출 파일·OpenAPI·GraphQL·소스맵·
+시크릿 검증 등; 탐지 자체에 `Try:`가 있으면 그것을 우선) — HTML/Markdown 리포트의 Hint 열, SARIF의 rule
+help에도 포함.
+우클릭 **Payload cheatsheet ▸**로 반사 XSS·오픈 리다이렉트는 자동 제안, **전체 클래스도 수동 선택
+가능**. 검색창 옆 **Host 필터 버튼**으로 여러 호스트를 체크박스로 골라 필터링(심각도/카테고리 필터와
+동시 적용).
+
+## JS Assets
+JS 수집(SHA-256 dedup·옵션 저장) + 내부 엔드포인트·탐지 추출. 컬럼: URL · **Kind**(라이브러리/벤더 청크/
+서드파티 구분) · Size(KB) · Endpoints · **Findings**(이 JS에서 나온 탐지 수) · **Risk**(심각도 가중 점수,
+기본 내림차순 정렬) · Preview(감지된 엔드포인트 샘플, 없으면 코드 스니펫).
+
+**라이브러리/서드파티 정리**: jQuery·React·Vue 등 라이브러리, `vendors~`/`chunk-vendors`/`framework-`
+같은 벤더·런타임 청크, GTM/GA·CDN·채팅/결제 위젯 등 서드파티 스크립트를 URL·파일명·배너로 자동 판별해
+**Kind**에 표시하고, 툴바 **Hide libraries & empty chunks**(기본 켜짐)로 이들과 내용 없는 작은 청크를
+숨김(보기만 숨기고 데이터는 유지). 라이브러리는 기본적으로 시크릿 스캔만 하고 엔드포인트 추출·심화 분석은
+건너뜀(**Settings → JavaScript collection → Analyze library / vendor / 3rd-party JS too**로 켤 수 있음).
+행 선택 시 **Info 탭**은 탐지(심각도순, `Try:` 힌트 포함) → 엔드포인트 → 파일 정보 순으로 보여주고,
+**Response 탭**에서 캡처된 응답 원문 확인(임포트된 파일은 없음). 트래픽에 안 잡힌 파일은 **Import JS
+file(s)…**로 로컬에서 불러와 동일 분석.
+
+## JS Analysis
+JS에서 나온 탐지 결과만 번들을 가로질러 한 곳에 모아 보는 탭 — 암복호화·권한/인가·위험 싱크/DOM·민감
+설정·API 호출 방식(+JS 내 시크릿·주석). Findings 탭에도 들어가지만 여기서는 **JS 소스만** 추려
+Severity/Category/Type/JS 파일/Evidence 컬럼으로 보여주고, **Category 콤보·Severity 토글·Host 체크박스
+필터**로 좁힐 수 있음(예: "전체 번들의 Crypto 사용만"). 행 선택 시 해당 JS 응답 원문이 뷰어에 열리며
+**매치된 코드 위치로 자동 하이라이트/점프**. **JS file 필터**로 특정 번들만 추릴 수 있고, 툴바 요약
+라인이 현재 보이는 범위의 "파일 수 · 카테고리별 카운트"를 보여줌(한 파일로 좁히면 그 번들의 분포),
+기본 정렬은 **File Risk**(그 JS 파일의 위험 점수) 내림차순 → JS 파일이라 가장 위험한 번들의 탐지가 맨
+위에 묶여 보임. **Hide library JS**(기본 켜짐)로 라이브러리 코드에서 나온 탐지를 숨김.
+**민감 경로**: JS에서 추출한 경로 중 admin·actuator/진단·internal/debug·업로드·export·ID 기반 객체
+(`/users/123`)·config·GraphQL 경로를 "어떻게 테스트할지" 힌트와 함께 탐지하고, **Seen** 컬럼에 그 경로가
+캡처된 트래픽에서 실제 응답한 적 있는지(Y/N) 표시. **숨은 파라미터**: JS에서 쓰는 파라미터 이름
+(`URLSearchParams`/`FormData`/쿼리 문자열/axios `params` 등)을 모으고, 그중 debug·isAdmin·role·redirect·
+callback·userId 같은 의미 있는 이름은 "Hidden parameter in JS" 탐지로 표시 — **Seen**은 그 이름이 캡처된
+요청 파라미터로 나온 적 있는지(Y/N). **Untested only**로 아직 한 번도 요청하지 않은(N) 경로·파라미터만
+모아 바로 테스트 대상으로 볼 수 있음. JS에서 모은 파라미터 이름은 전부 **워드리스트(Param names)** 내보내기에도
+포함돼 Param Miner/Arjun 같은 파라미터 마이닝에 바로 쓸 수 있음. **Match 컬럼**에 실제 매치된 코드를 바로 표시하고,
+행 우클릭 **Open this JS file in JS Assets**로 해당 파일을 JS Assets 탭에서 열 수 있음. 판정 기준:
+finding의 `locationUrl`이 알려진 JS 파일 URL과 일치하면 JS 소스로 간주(모델 변경 없음).
+
+## Tech
+호스트별 기술 식별 + 보안 헤더 누락 체크(Findings에도 동일 항목이 LOW로 집계). 검색창 옆 **Host 필터
+버튼**으로 여러 호스트를 체크박스로 골라 필터링.
+
+## Match & Replace ⚠ACTIVE
+**Endpoints/Parameters/Findings/JS Assets** 탭에서 Ctrl/Shift로 여러 행을 고른 뒤 우클릭 **Send N
+selected with Match & Replace…**로 헤더/쿠키 값 치환(예: Cookie 값 통째로 교체) 또는 요청 원문 전체
+문자열/정규식 치환(Burp Match and Replace와 동일 개념, `$1` 등 정규식 백레퍼런스 지원)을 적용해 일괄
+재전송. **규칙을 여러 개 추가해 순서대로 체이닝 가능**(예: 헤더 교체 후 원문 치환까지 한 번에) —
+미리보기는 항상 전체 체인을 적용한 최종 결과를 보여줌. **Settings에서 먼저 켜야**(기본 꺼짐) 메뉴가
+동작하고, 켜져 있어도 **실행마다 확인 다이얼로그**(첫 번째 선택 요청에 규칙 적용한 전/후 미리보기
+포함)가 필수 — "다시 묻지 않기" 없음. 스코프 밖 대상은 자동 제외. 결과는 **Match &
+Replace 탭**에서 호스트·상태·길이·에러 요약 + 행 선택 시 실제 전송된 request/response 상세 확인
+가능(세션 내 보관, State Export/Import 대상 아님).
+**권한 검증(세션 프리셋 + Verdict)**: 다이얼로그 상단 **Preset**에서 **Remove auth**(Cookie·Authorization
+헤더 삭제)나 **Save session…**으로 저장한 다른 계정(Cookie/Authorization 값)을 고르면 규칙 체인이 그
+신원으로 바뀜(없는 헤더는 삭제해 원래 사용자의 자격이 남지 않게 함). 저장한 세션은 **메모리에만**
+보관(설정·State·리포트에 저장 안 함, 확장 언로드 시 사라짐). 규칙 모드에 **Remove header**도 추가.
+결과 탭은 재전송 응답을 캡처된 원본과 비교해 **Verdict**(Same = 상태 코드 같고 본문 90% 이상 유사 →
+권한 우회 의심 / Blocked = 401·403·로그인 리다이렉트 / Different), **Orig**(원본 상태), **Sim%**,
+**ΔLen**을 보여주고, **Same only** 토글로 우회 의심만 추림. 행 우클릭 **Show original (captured)
+request/response**로 원본과 나란히 확인.
+
+## Snapshot Diff
+**Settings → Backup / State**에서 내보낸 State 파일을 **Load comparison state file…** 버튼으로 불러와
+현재 라이브 데이터와 비교 — Endpoints/Parameters/Findings/JS Assets/Tech 5개 카테고리별로 새로 생긴
+(+)/사라진(−)/**내용이 바뀐(~)** 항목을 표로 보여줌(상태 코드·파라미터·기술스택 변화 등). 다른 탭과
+달리 상시 갱신되지 않고, 파일을 불러올 때만 그 시점 기준으로 1회 비교(라이브 데이터는 건드리지 않음).
+JS Assets는 내용 해시로 식별하므로 내용이 바뀌면 +/−로 표시됨.
+
+## Settings
+스코프·패시브 토글·커스텀 탐지 규칙·Ingest·내보내기·State 백업. 모든 설정은 **Burp 재시작 후에도
+유지**(extension preferences에 저장). **Remove out-of-scope hosts…**로 현재 스코프(Burp Scope +
+include/exclude 정규식) 밖의 호스트를 한 번에 찾아서 일괄 삭제 — 사이트맵 전체를 ingest한 뒤 불필요한
+호스트가 섞여 들어왔을 때 유용(Scope Mode가 "All"이면 스코프 밖이 없으므로 항상 "없음"으로 나옴).
+내보내기(HTML/Markdown/JSON/SARIF) 옆 **Confirmed only / Exclude false positives / Bookmarked only**
+체크박스로 리포트 범위를 좁힐 수 있음 — **Bookmarked only는 Findings뿐 아니라 Endpoints/Parameters/
+JS/Tech 전 섹션에 적용**. **Match & Replace bulk send** 섹션에서 기능 켜기(기본 꺼짐) + 요청 간
+지연·동시성 스로틀 조절.
+
+## 탐지 항목 상세
+API 키/토큰·JWT·인증 헤더·스토리지 URL 등 **시크릿**(응답 본문뿐 아니라 **쿠키 값**도 스캔 — 쿠키로
+오는 JWT 등도 잡힘), **PII**(주민번호·카드·휴대폰), URL 노출 시크릿·오픈 리다이렉트·반사 XSS 후보,
+스택트레이스/SQL 에러 등 응답 시그니처, CORS(와일드카드·크리덴셜·Origin 미검증·Allow-Methods/Headers
+와일드카드)·쿠키·CSP·캐시·혼합 콘텐츠 **미스컨피그**, 노출 파일(`.env`·`.git` 등)·백업, 디버그/진단
+경로, 권한 단서, **비인증 접근 후보**(Authorization·Cookie 없이 보낸 요청에 JSON/XML API나 admin·
+actuator 등 민감 경로가 2xx로 응답 — "Unauthenticated access", 다른 계정/무세션으로 재전송해 비교하라는
+힌트 포함), **OpenAPI/Swagger 스펙**(JSON·**YAML 둘 다**)·**GraphQL
+introspection**(스키마를 실제로 파싱해 타입.필드를 엔드포인트/파라미터로 등록), **소스맵(.map) 노출**
+(JS 내 `sourceMappingURL` 참조 / 캡처된 `.map`의 원본 소스 목록), 주석, 누락된 보안 헤더. (화면에선
+원문 확인·복사 가능, 리포트에선 마스킹). **요청/응답 단서**: 쿠키로만 인증된 POST에 CSRF 토큰
+파라미터·헤더가 없으면 **CSRF candidate**(form/multipart/text-plain LOW, JSON INFO), 파일 파트가 있는
+multipart 요청은 **File upload endpoint**, 로그인·OTP·비밀번호 재설정·회원가입·토큰 갱신 경로의 POST는
+**Auth flow endpoint**(응답에 rate-limit 헤더가 없으면 표시), JSON 바디를 보낸 POST/PUT/PATCH의 응답에
+role·isAdmin·ownerId·price 같은 권한 필드가 있는데 요청엔 없으면 **Mass assignment candidate**, JSON 응답에
+password·hash·secret·OTP·주민번호류 필드 값이 있으면 **Sensitive field in response**(값은 기록 안 함),
+캡처된 JWT(Authorization·쿠키·응답 본문)에서 alg=none·HS 대칭키·exp 없음/장기 만료·kid/jku/x5u/jwk
+헤더·민감/권한 클레임이 있으면 **JWT weakness**(호스트·이슈당 1건) — 모두 `Try:` 힌트 포함
+
+## 공통 기능 상세
+**Host focus**: 탭 위 `Host focus` 콤보에서 호스트를 고르거나, Dashboard 호스트 / Endpoints·Parameters·
+Findings 행 우클릭 **Show only this host** → 세 탭이 그 호스트 행만 보여줌(행 수·체크박스 필터·카테고리
+개수·검색·CSV도 그 호스트 기준). 검색창과 달리 정확히 같은 호스트만 매칭(`a.com` 선택 시
+`a.com.evil.net`은 제외). `Show all`로 해제. 세션 동안만 유지되고 Export/리포트에는 영향 없음.
+
+한/영·본문 검색(정규식·다중 AND·제외·컬럼 지정), 정렬 3단계(오름 → 내림 → 기본), CSV 내보내기, 행
+우클릭 Copy/Open/Repeater/Intruder/curl. Request/Response 뷰어가 있는 탭(Endpoints·Parameters·
+Findings·JS Assets)에서 JS 응답이면 **Beautify JS** 토글로 한 줄로 압축된 minified 본문을 줄바꿈·
+들여쓰기해서 열람(화면 표시만 바꿈 — 캡처된 응답 자체나 탐지 로직에는 영향 없음).
+
+**정렬**: 컬럼 헤더 클릭 시 그 컬럼만으로 정렬(오름차순 → 내림차순 → 정렬 해제로 순환, 다른 컬럼의
+기존 정렬은 대체됨). **`Shift`+클릭**하면 다중 컬럼 정렬 — 클릭한 컬럼이 1순위가 되고 이전 정렬은
+2·3순위로 유지됨(예: Host 클릭 후 `Shift`+Status 클릭 → Host 안에서 Status로 정렬), 헤더에 "2"·"3"
+같은 작은 숫자로 순위 표시.
+
+**체크박스 다중값 필터**(Endpoints/Parameters의 Method·Status·Type·Location·Class, Findings/Tech의
+Host): 검색창 옆 필터 버튼을 누르면 그 컬럼에 현재 존재하는 모든 값이 체크박스로 나열됨 — 체크 해제한
+값만 숨김(여러 개를 연달아 체크/해제 가능, 팝업이 자동으로 안 닫힘). 데이터가 갱신되면 목록도 자동으로
+최신화.
+
+인벤토리 탭(Endpoints·Parameters·Findings·JS Assets·Tech)은 행 우클릭 **★ Bookmark / Edit note…**
+(또는 `Ctrl+B`)로 북마크·메모 가능 — Burp 재시작 후에도 유지, `★ only` 체크박스로 북마크된 행만
+필터, State Export/Import에도 보존.
+
+**키보드 단축키**: `Ctrl+1`~`Ctrl+9` 탭 전환(마지막 Settings 탭은 제외), `Ctrl+F` 현재 탭 검색창
+포커스, **`Ctrl+Shift+F` 글로벌 검색**(Endpoints/Parameters/Findings/JS Assets/Tech 5개 탭을 한 번에
+검색해 결과 목록에서 바로 해당 탭·행으로 이동), 검색창에서 `Esc`로
+검색어 지우기.
+
+**다크테마**: Burp의 라이트/다크 테마를 따라감(실시간 전환 반영, 최대 1초 지연).
+
+**줄무늬 배경**: Dashboard를 포함한 모든 표가 한 줄씩 배경을 살짝 다르게 표시해 행을
+눈으로 따라가기 쉽게 함. Endpoints의 **Status** 컬럼은 2xx(녹색)·5xx(주황) 등 상태 코드별로도 색상
+구분.

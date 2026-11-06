@@ -33,3 +33,7 @@ src/main/resources/patterns/*.txt
 
 # Agent-skills config (local-only, like CLAUDE.md)
 docs/agents/
+
+# Domain docs (local-only, like CLAUDE.md)
+GLOSSARY.md
+docs/adr/
