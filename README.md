@@ -12,7 +12,7 @@
 (Montoya API, Java 17). 기본은 이미 캡처된 트래픽만 분석하며, 대상 서버에 새 요청을 보내지 않습니다.
 
 ![Parameters 탭: 파라미터별 취약점 후보 Class와 값 모양 분류](https://github.com/9u4a/reconhub/releases/download/reconhub-v0.57.0/reconhub-parameters.png)
-<sub>로컬 OWASP Juice Shop을 대상으로 캡처, 호스트 정보는 모자이크 처리</sub>
+<sub>호스트 정보는 모자이크 처리</sub>
 
 | 진단하며 겪은 문제 | 만든 기능 |
 |---|---|
