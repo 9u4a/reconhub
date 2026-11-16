@@ -223,6 +223,33 @@ public final class MatchReplaceEngine {
     }
 
     private static HttpRequest applyOne(HttpRequest original, MatchReplaceRule rule) {
+        if (rule.mode() == MatchReplaceRule.Mode.COOKIE || rule.mode() == MatchReplaceRule.Mode.REMOVE_COOKIE) {
+            boolean has = original.hasHeader("Cookie");
+            String next = rule.computeCookieHeader(has ? original.headerValue("Cookie") : null);
+            if (next == null) {
+                return original;   // removing a cookie from a request without one: nothing to do
+            }
+            if (next.isEmpty()) {
+                return has ? original.withRemovedHeader("Cookie") : original;
+            }
+            return has ? original.withUpdatedHeader("Cookie", next) : original.withAddedHeader("Cookie", next);
+        }
+        if (rule.mode() == MatchReplaceRule.Mode.STRIP_AUTH) {
+            java.util.List<String[]> headers = new java.util.ArrayList<>();
+            for (burp.api.montoya.http.message.HttpHeader h : original.headers()) {
+                headers.add(new String[]{h.name(), h.value()});
+            }
+            java.util.Set<String>[] keep = rule.keepSpec();
+            java.util.List<String>[] plan = AuthDetector.stripPlan(headers, keep[0], keep[1]);
+            HttpRequest current = original;
+            for (String h : plan[0]) {
+                current = current.withRemovedHeader(h);
+            }
+            for (String c : plan[1]) {
+                current = applyOne(current, MatchReplaceRule.removeCookie(c));
+            }
+            return current;
+        }
         if (rule.mode() == MatchReplaceRule.Mode.REMOVE_HEADER) {
             // 0.57.0: a header that isn't there is already "removed" -- pass through, not a failure.
             return original.hasHeader(rule.headerName()) ? original.withRemovedHeader(rule.headerName()) : original;

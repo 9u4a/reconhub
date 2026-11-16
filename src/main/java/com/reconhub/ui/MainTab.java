@@ -106,7 +106,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         addRefreshableTab("JS Analysis", jsAnalysis);
         addRefreshableTab("Client Flows", clientFlows);
         addRefreshableTab("Tech", tech);
-        addRefreshableTab("Match & Replace", matchReplacePanel);
+        addRefreshableTab("Match & Replace", new MatchReplaceTab(matchReplacePanel, matchReplace, store));
         addRefreshableTab("Snapshot Diff", snapshotDiff);
         // Settings is a tall stack of sections — scroll it so lower sections stay reachable at
         // any window height / half width.

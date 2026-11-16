@@ -31,8 +31,61 @@ import java.util.regex.PatternSyntaxException;
 public record MatchReplaceRule(Mode mode, String headerName, String matchText, boolean useRegex,
                                String replacement, boolean addHeaderIfMissing) {
 
-    /** REMOVE_HEADER (0.57.0) deletes {@code headerName}; match/replace fields are ignored. */
-    public enum Mode { HEADER, RAW, REMOVE_HEADER }
+    /**
+     * REMOVE_HEADER (0.57.0) deletes {@code headerName}; match/replace fields are ignored.
+     * COOKIE (0.60.0) sets cookie {@code headerName} to {@code replacement} inside the Cookie header (added
+     * if missing), leaving every other cookie as captured; REMOVE_COOKIE drops just that cookie.
+     * STRIP_AUTH (0.60.0) removes every auth header / session cookie {@link AuthDetector} confirms on the
+     * request except those named in {@code matchText} ({@link #keepSpec}) -- so a session swap can't keep
+     * the original user's other credential.
+     */
+    public enum Mode { HEADER, RAW, REMOVE_HEADER, COOKIE, REMOVE_COOKIE, STRIP_AUTH }
+
+    public static MatchReplaceRule cookie(String name, String value) {
+        return new MatchReplaceRule(Mode.COOKIE, name, "", false, value, true);
+    }
+
+    public static MatchReplaceRule removeCookie(String name) {
+        return new MatchReplaceRule(Mode.REMOVE_COOKIE, name, "", false, "", false);
+    }
+
+    /** STRIP_AUTH keeping the given header / cookie names (case-insensitive). */
+    public static MatchReplaceRule stripAuthExcept(java.util.Collection<String> keepHeaders,
+                                                   java.util.Collection<String> keepCookies) {
+        StringBuilder sb = new StringBuilder();
+        for (String h : keepHeaders) sb.append(sb.length() == 0 ? "" : ",").append("h:").append(h);
+        for (String c : keepCookies) sb.append(sb.length() == 0 ? "" : ",").append("c:").append(c);
+        return new MatchReplaceRule(Mode.STRIP_AUTH, null, sb.toString(), false, "", false);
+    }
+
+    /** For STRIP_AUTH: {lowercased header names to keep, cookie names to keep}. */
+    public java.util.Set<String>[] keepSpec() {
+        @SuppressWarnings("unchecked")
+        java.util.Set<String>[] out = new java.util.Set[]{new java.util.HashSet<String>(), new java.util.HashSet<String>()};
+        if (matchText != null) {
+            for (String part : matchText.split(",")) {
+                if (part.startsWith("h:")) out[0].add(part.substring(2).trim().toLowerCase(java.util.Locale.ROOT));
+                else if (part.startsWith("c:")) out[1].add(part.substring(2).trim());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * COOKIE / REMOVE_COOKIE: the new Cookie header value given the current one ({@code null} = no Cookie
+     * header). Returns {@code null} for "leave the request as is" (removing a cookie from a request that
+     * has no Cookie header) and {@code ""} for "remove the Cookie header" (its last cookie was removed).
+     */
+    public String computeCookieHeader(String currentOrNull) {
+        java.util.LinkedHashMap<String, String> jar = AuthDetector.parseCookies(currentOrNull);
+        if (mode == Mode.REMOVE_COOKIE) {
+            if (currentOrNull == null) return null;
+            jar.remove(headerName);
+        } else {
+            jar.put(headerName, replacement == null ? "" : replacement);
+        }
+        return AuthDetector.joinCookies(jar);
+    }
 
     // Shared across every rule instance, keyed by the regex text itself (0.43.9) -- a record has no
     // room for a per-instance lazy-compiled field (no extra instance fields allowed), and

@@ -147,6 +147,17 @@ public final class EndpointsPanel extends AbstractTablePanel<Endpoint> {
             addMenuItem(menu, "Send " + targets.size() + " selected with Match & Replace… (active)", true,
                     () -> MatchReplaceDialog.show(this, matchReplace, settings, targets));
         }
+        if (matchReplace != null && e.getMessages() != null && e.getMessages().request() != null) {
+            // 0.60.0: save this request's credentials (auto-detected) as a Match & Replace session
+            addMenuItem(menu, "Save this request's credentials as a session…", true, () -> {
+                List<String[]> headers = new java.util.ArrayList<>();
+                for (burp.api.montoya.http.message.HttpHeader h : e.getMessages().request().headers()) {
+                    headers.add(new String[]{h.name(), h.value()});
+                }
+                SessionEditorDialog.open(this, matchReplace.sessions(), null,
+                        com.reconhub.active.AuthDetector.detect(headers), "request " + e.getHost());
+            });
+        }
     }
 
     @Override

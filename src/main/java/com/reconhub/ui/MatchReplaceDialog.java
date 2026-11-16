@@ -183,7 +183,7 @@ final class MatchReplaceDialog {
             presets.removeAllItems();
             presets.addItem(PRESET_NONE);
             presets.addItem(PRESET_REMOVE_AUTH);
-            for (SessionProfiles.Profile p : sessions.list()) {
+            for (SessionProfiles.Identity p : sessions.list()) {
                 presets.addItem(PRESET_SESSION + p.name());
             }
         };
@@ -194,7 +194,7 @@ final class MatchReplaceDialog {
             if (PRESET_REMOVE_AUTH.equals(sel)) {
                 preset = SessionProfiles.removeAuthRules();
             } else if (sel instanceof String str && str.startsWith(PRESET_SESSION)) {
-                SessionProfiles.Profile p = sessions.get(str.substring(PRESET_SESSION.length()));
+                SessionProfiles.Identity p = sessions.get(str.substring(PRESET_SESSION.length()));
                 preset = p == null ? null : SessionProfiles.rulesFor(p);
             }
             if (preset == null) {
@@ -213,29 +213,14 @@ final class MatchReplaceDialog {
             updatePreview.run();
         });
         JButton saveSession = new JButton("Save session…");
-        saveSession.setToolTipText("Save another account's Cookie / Authorization as a preset "
-                + "(kept in memory only -- never written to disk or exports)");
+        saveSession.setToolTipText("Save another account's credentials as a session (paste its request or "
+                + "headers to detect them; kept in memory only -- never written to disk or exports)");
         saveSession.addActionListener(e -> {
-            JTextField name = new JTextField("user B", 24);
-            JTextField cookie = new JTextField(previewReq == null ? "" : nz(previewReq.headerValue("Cookie")), 40);
-            JTextField auth = new JTextField(previewReq == null ? "" : nz(previewReq.headerValue("Authorization")),
-                    40);
-            JPanel form = new JPanel(new GridLayout(0, 1, 2, 2));
-            form.add(new JLabel("Name:"));
-            form.add(name);
-            form.add(new JLabel("Cookie (blank = remove the header):"));
-            form.add(cookie);
-            form.add(new JLabel("Authorization (blank = remove the header):"));
-            form.add(auth);
-            form.add(new JLabel("Paste the other account's values (prefilled from the first selected request)."));
-            if (JOptionPane.showConfirmDialog(saveSession, form, "ReconHub — save session preset",
-                    JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION
-                    || name.getText().isBlank()) {
-                return;
+            SessionProfiles.Identity saved = SessionEditorDialog.open(saveSession, sessions, null, null, "manual");
+            if (saved != null) {
+                reloadPresets.run();
+                presets.setSelectedItem(PRESET_SESSION + saved.name());
             }
-            sessions.put(new SessionProfiles.Profile(name.getText(), cookie.getText(), auth.getText()));
-            reloadPresets.run();
-            presets.setSelectedItem(PRESET_SESSION + name.getText().trim());
         });
         JPanel presetRow = row();
         presetRow.add(new JLabel("Preset:"));

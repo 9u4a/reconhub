@@ -57,21 +57,23 @@ class ResponseCompareTest {
     }
 
     @Test
-    void sessionPresetsReplaceOrRemoveBothCredentialHeaders() {
+    void sessionPresetsStripOrSwapCredentials() {
+        // 0.60.0: No auth = drop Cookie + Authorization + any other confirmed auth header
         List<MatchReplaceRule> off = SessionProfiles.removeAuthRules();
-        assertEquals(2, off.size());
-        assertTrue(off.stream().allMatch(r -> r.mode() == MatchReplaceRule.Mode.REMOVE_HEADER));
+        assertEquals(3, off.size());
+        assertEquals(MatchReplaceRule.Mode.STRIP_AUTH, off.get(2).mode());
         assertNull(off.get(0).regexError());
 
         SessionProfiles s = new SessionProfiles();
-        s.put(new SessionProfiles.Profile(" user B ", "sid=bbb", "  "));
-        s.put(new SessionProfiles.Profile("", "x", "y"));   // ignored
+        s.put(new SessionProfiles.Identity(" user B ", java.util.Map.of(), java.util.Map.of("sid", "bbb"), "t", 0));
+        s.put(new SessionProfiles.Identity("", java.util.Map.of(), java.util.Map.of("x", "y"), "t", 0));   // ignored
+        s.put(new SessionProfiles.Identity("Original", java.util.Map.of(), java.util.Map.of("x", "y"), "t", 0));   // reserved
         assertEquals(1, s.list().size());
         List<MatchReplaceRule> b = SessionProfiles.rulesFor(s.get("user B"));
-        assertEquals(MatchReplaceRule.Mode.HEADER, b.get(0).mode());
-        assertEquals("Cookie", b.get(0).headerName());
-        assertEquals("sid=bbb", b.get(0).computeHeaderValue("sid=aaa"));
-        assertEquals("sid=bbb", b.get(0).computeHeaderValue(null));   // added if missing
-        assertEquals(MatchReplaceRule.Mode.REMOVE_HEADER, b.get(1).mode());   // blank Authorization -> removed
+        assertEquals(MatchReplaceRule.Mode.STRIP_AUTH, b.get(0).mode());          // strip the others first
+        assertTrue(b.get(0).keepSpec()[1].contains("sid"));
+        assertEquals(MatchReplaceRule.Mode.COOKIE, b.get(1).mode());              // then set B's cookie only
+        assertEquals("sid=bbb; theme=dark", b.get(1).computeCookieHeader("sid=aaa; theme=dark"));
+        assertEquals("sid=bbb", b.get(1).computeCookieHeader(null));             // added if missing
     }
 }

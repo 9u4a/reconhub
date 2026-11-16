@@ -65,7 +65,14 @@ public final class ReconHubExtension implements BurpExtension {
         MatchReplaceEngine matchReplace = new MatchReplaceEngine(api, settings, new ScopeFilter(api, settings));
 
         api.http().registerHttpHandler(ingestor);
-        api.userInterface().registerContextMenuItemsProvider(new SendToReconHubMenu(ingestor));
+        api.userInterface().registerContextMenuItemsProvider(new SendToReconHubMenu(ingestor, matchReplace.sessions(),
+                () -> {
+                    try {
+                        return api.userInterface().swingUtils().suiteFrame();
+                    } catch (RuntimeException e) {
+                        return null;
+                    }
+                }));
 
         MainTab mainTab = buildUi(api, store, settings, ingestor, cheatsheet, matchReplace, bookmarks);
         api.userInterface().registerSuiteTab("ReconHub", mainTab.component());

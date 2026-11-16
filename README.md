@@ -42,7 +42,7 @@
 | **JS Analysis** | 구조 분석으로 **확증된 Lead만** 표시(같은 함수·같은 변수로 이어진 DOM XSS source → sink, 권한 체크가 보호하는 경로, 암호화 호출에 들어가는 키·IV, 민감 경로·숨은 파라미터), 번들을 가로질러 위험한 파일 순, 실제 호출 여부(**Seen**)와 **Untested only** |
 | **Client Flows** | JS에서 화면 기능 → API 요청 지도 추출: fetch·axios·XHR·jQuery 호출(앱 공통 래퍼 포함)마다 메서드·경로 템플릿·body/query 키·인증 헤더 출처·호출 함수·트리거(라우트·이벤트 핸들러), 실제 호출 여부(**Seen**)와 **Untested only**, IDOR·무인증 Hint, **Send template to Repeater**(전송 안 함) |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 체크 |
-| **Match & Replace** ⚠**ACTIVE** | 선택한 행에 치환 규칙(체이닝 가능)을 적용해 재전송. 세션 프리셋(인증 제거 / 다른 계정)과 원본 대비 **Verdict**(Same·Different·Blocked)로 권한 검증 |
+| **Match & Replace** ⚠**ACTIVE** | 선택한 행에 치환 규칙(체이닝 가능)을 적용해 재전송. **Sessions** 패널: 수집된 트래픽에서 계정 자동 찾기, Burp 우클릭 **Save as ReconHub session**, 요청 붙여넣기로 인증 헤더·세션 쿠키 자동 식별(쿠키 단위 교체, JWT 만료 표시). 원본 대비 **Verdict**(Same·Different·Blocked)로 권한 검증 |
 | **Snapshot Diff** | 저장한 State 파일과 현재 데이터를 비교해 새로 생긴/사라진/바뀐 항목 표시 |
 | **Settings** | 스코프·규칙·Ingest·내보내기·State 백업, 스코프 밖 호스트 일괄 삭제, Match & Replace 켜기/스로틀 |
 
