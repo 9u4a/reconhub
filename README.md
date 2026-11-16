@@ -37,8 +37,8 @@
 | **Endpoints** | 엔드포인트 인벤토리 (dedup, Auth 관찰) |
 | **Parameters** | 파라미터 + 취약점 후보 Class 자동 분류(이름 + 값 모양: 숫자 ID·UUID→IDOR, URL→Redirect/SSRF 등) |
 | **Findings** | 탐지 결과 심각도/카테고리 집계 + 트리아지, 모든 탐지에 **Hint**(어떻게 테스트할지) |
-| **JS Assets** | JS 파일 수집·분석, 라이브러리·서드파티·빈 청크 자동 숨김, 파일별 Risk 순 정렬 |
-| **JS Analysis** | JS 탐지 결과(암복호화·권한·DOM XSS·설정·API 호출·민감 경로·숨은 파라미터)를 번들을 가로질러 위험한 파일 순으로 표시, 실제 호출 여부(**Seen**)와 **Untested only** |
+| **JS Assets** | JS 파일 수집·분석, 라이브러리·서드파티·빈 청크 자동 숨김, 파일별 Risk 순 정렬, 확증 못 한 매치는 파일별 **Notes**로 |
+| **JS Analysis** | 구조 분석으로 **확증된 Lead만** 표시(같은 함수·같은 변수로 이어진 DOM XSS source → sink, 권한 체크가 보호하는 경로, 암호화 호출에 들어가는 키·IV, 민감 경로·숨은 파라미터), 번들을 가로질러 위험한 파일 순, 실제 호출 여부(**Seen**)와 **Untested only** |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 체크 |
 | **Match & Replace** ⚠**ACTIVE** | 선택한 행에 치환 규칙(체이닝 가능)을 적용해 재전송. 세션 프리셋(인증 제거 / 다른 계정)과 원본 대비 **Verdict**(Same·Different·Blocked)로 권한 검증 |
 | **Snapshot Diff** | 저장한 State 파일과 현재 데이터를 비교해 새로 생긴/사라진/바뀐 항목 표시 |
