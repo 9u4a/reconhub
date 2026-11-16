@@ -38,7 +38,7 @@
 | **Endpoints** | 엔드포인트 인벤토리 (dedup, Auth 관찰) |
 | **Parameters** | 파라미터 + 취약점 후보 Class 자동 분류(이름 + 값 모양: 숫자 ID·UUID→IDOR, URL→Redirect/SSRF 등) |
 | **Findings** | 탐지 결과 심각도/카테고리 집계 + 트리아지, 모든 탐지에 **Hint**(어떻게 테스트할지) |
-| **JS Assets** | JS 파일 수집·분석, 라이브러리·서드파티·빈 청크 자동 숨김, 파일별 Risk 순 정렬, 확증 못 한 매치는 파일별 **Notes**로 |
+| **JS Assets** | JS 파일 수집·분석, 라이브러리·서드파티·빈 청크 자동 숨김, 파일별 Risk 순 정렬, 확증 못 한 매치는 파일별 **Notes**로, 상세는 Findings·Client Flows·Notes·Endpoints·File 탭별 정렬 표 |
 | **JS Analysis** | 구조 분석으로 **확증된 Lead만** 표시(같은 함수·같은 변수로 이어진 DOM XSS source → sink, 권한 체크가 보호하는 경로, 암호화 호출에 들어가는 키·IV, 민감 경로·숨은 파라미터), 번들을 가로질러 위험한 파일 순, 실제 호출 여부(**Seen**)와 **Untested only** |
 | **Client Flows** | JS에서 화면 기능 → API 요청 지도 추출: fetch·axios·XHR·jQuery 호출(앱 공통 래퍼 포함)마다 메서드·경로 템플릿·body/query 키·인증 헤더 출처·호출 함수·트리거(라우트·이벤트 핸들러), 실제 호출 여부(**Seen**)와 **Untested only**, IDOR·무인증 Hint, **Send template to Repeater**(전송 안 함) |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 체크 |

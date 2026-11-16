@@ -4,7 +4,6 @@ import burp.api.montoya.MontoyaApi;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.active.MatchReplaceEngine;
 import com.reconhub.active.MatchReplaceTarget;
-import com.reconhub.analysis.FindingHints;
 import com.reconhub.analysis.JsRisk;
 import com.reconhub.core.Bookmarks;
 import com.reconhub.core.DataStore;
@@ -20,26 +19,18 @@ import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
-import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
-import javax.swing.JScrollPane;
-import javax.swing.JTabbedPane;
-import javax.swing.JTextArea;
 import javax.swing.ListSelectionModel;
 import javax.swing.RowSorter;
 import javax.swing.SortOrder;
 import javax.swing.SwingWorker;
 import javax.swing.filechooser.FileNameExtensionFilter;
-import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Desktop;
-import java.awt.FlowLayout;
-import java.awt.Font;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -55,7 +46,7 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
     private static final int COL_URL = 0;
     private static final int COL_RISK = 5;
     private static final int COL_PREVIEW = 6;
-    private static final int RESPONSE_TAB = 1;
+    private static final int RESPONSE_TAB = JsInfoPanel.FILE + 1;   // after the info tabs (0.63.0)
     /** Below this size, a JS file with no endpoints and no findings is an empty chunk (webpack runtime,
      * manifest, ...) -- hidden with the libraries. */
     static final int EMPTY_CHUNK_MAX_CHARS = 2048;
@@ -63,8 +54,8 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
     private final DataStore store;
     private final TrafficIngestor ingestor;
     private final MessageViewer viewer;
-    private final JTabbedPane detailTabs = new JTabbedPane();
-    private final JTextArea detail = new JTextArea();
+    // 0.63.0: header + Findings / Client Flows / Notes / Endpoints / File tables (+ Response tab)
+    private final JsInfoPanel detail = new JsInfoPanel();
     private final JButton openFile = new JButton("Open saved file");
     private final JButton importJs = new JButton("Import JS file(s)…");
     private final JLabel importStatus = new JLabel(" ");
@@ -83,26 +74,17 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
         this.ingestor = ingestor;
         this.viewer = new MessageViewer(api);
 
-        detail.setEditable(false);
-        detail.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         openFile.setEnabled(false);
         openFile.addActionListener(e -> openSavedFile());
         importJs.setToolTipText("Analyze local .js file(s) not seen in captured traffic "
                 + "(passive: reads the file from disk, sends nothing to any target)");
         importJs.addActionListener(e -> importJsFiles());
 
-        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
-        top.add(openFile);
-        top.add(importJs);
-        top.add(importStatus);
-
-        JPanel infoPanel = new JPanel(new BorderLayout());
-        infoPanel.add(top, BorderLayout.NORTH);
-        infoPanel.add(new JScrollPane(detail), BorderLayout.CENTER);
-
-        detailTabs.addTab("Info", infoPanel);
-        detailTabs.addTab("Response", viewer);
-        installDetail(detailTabs, viewer);
+        detail.addAction(importStatus);
+        detail.addAction(openFile);
+        detail.addAction(importJs);
+        detail.tabs().addTab("Response", viewer);
+        installDetail(detail, viewer);
 
         hideNoise.setToolTipText("Hide JS recognized as a library / vendor chunk / third-party script, and "
                 + "tiny files with no endpoints or findings (view only -- nothing is deleted)");
@@ -280,12 +262,12 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
     @Override
     protected void onRowSelected(JsAsset a) {
         if (a == null) {
-            detail.setText("");
+            detail.clear();
             currentSavedPath = "";
             openFile.setEnabled(false);
             viewer.show(null);
             viewer.setInfo(" ");
-            detailTabs.setTitleAt(RESPONSE_TAB, "Response");
+            detail.tabs().setTitleAt(RESPONSE_TAB, "Response");
             return;
         }
         currentSavedPath = a.getSavedPath();
@@ -293,64 +275,18 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
 
         viewer.show(a.getMessages());
         viewer.setInfo(a.getUrl() + "   |   " + a.getSizeBytes() + " chars   |   " + a.getSha256());
-        detailTabs.setTitleAt(RESPONSE_TAB, a.getMessages() != null ? "Response ✓" : "Response");
+        detail.tabs().setTitleAt(RESPONSE_TAB, a.getMessages() != null ? "Response ✓" : "Response");
 
-        // 0.55.0: actionable first -- findings (severity order, each with its "Try:" hint), then the
-        // endpoints this JS references, then file metadata.
-        StringBuilder sb = new StringBuilder();
-        sb.append(a.getUrl()).append('\n');
-        if (a.isLibrary()) {
-            sb.append(a.getKind()).append(" -- deep analysis skipped unless enabled in Settings > JavaScript\n");
-        }
-        sb.append('\n');
-
-        List<Finding> fs = store.snapshotFindings().stream()
-                .filter(f -> a.getUrl().equals(f.getLocationUrl()))
-                .sorted(Comparator.comparing(Finding::getSeverity))
-                .toList();
-        sb.append("Findings in this JS (").append(fs.size()).append("):\n");
-        for (Finding f : fs) {
-            sb.append("  [").append(f.getSeverity().name()).append("] ").append(f.getType());
-            if (!f.getMasked().isEmpty()) {
-                sb.append(" = ").append(f.getMasked());
-            }
-            sb.append('\n');
-            // own "Try:" hint, else the type's generic one (0.56.0, e.g. secrets carry no note)
-            String hint = FindingHints.of(f);
-            if (!hint.isEmpty()) {
-                sb.append("        Try: ").append(hint).append('\n');
-            }
-        }
-
-        // 0.58.0: matches the structural pass could not prove (unlinked source/sink, anchor/target, flat
-        // locator rules) -- reference for manual review, deliberately not Findings.
-        List<String> notes = a.getNotes();
-        if (!notes.isEmpty()) {
-            sb.append("\nNotes -- not Leads, for manual review (").append(notes.size()).append("):\n");
-            for (String n : notes) {
-                sb.append("  - ").append(n).append('\n');
-            }
-        }
-        sb.append('\n');
-
-        // hasOrigin (0.43.9), not getOrigins().contains(...) -- this runs over every endpoint in the
-        // store on every row selection/arrow-key move, and hasOrigin is an O(1) lookup against the raw
-        // set instead of materializing each endpoint's sorted TreeSet snapshot just to test membership.
-        List<Endpoint> eps = store.snapshotEndpoints().stream()
-                .filter(e -> e.hasOrigin(a.getUrl())).toList();
-        sb.append("Endpoints found in this JS (").append(eps.size()).append("):\n");
-        for (Endpoint e : eps) {
-            sb.append("  ").append(e.getNormalizedUrl()).append('\n');
-        }
-
-        sb.append("\nSHA-256   : ").append(a.getSha256()).append('\n');
-        sb.append("Size      : ").append(a.getSizeBytes()).append(" chars\n");
-        sb.append("Preview   : ").append(a.getPreview().isEmpty() ? "(none)" : a.getPreview()).append('\n');
-        sb.append("Saved     : ").append(a.getSavedPath().isEmpty() ? "(not saved)" : a.getSavedPath())
-                .append('\n');
-
-        detail.setText(sb.toString());
-        detail.setCaretPosition(0);
+        // 0.63.0: structured, colored Info view -- findings with hints, client flows, grouped notes,
+        // endpoints, file metadata (content built by the headless-tested JsInfoContent).
+        String url = a.getUrl();
+        List<Finding> fs = store.snapshotFindings().stream().filter(f -> url.equals(f.getLocationUrl())).toList();
+        List<com.reconhub.model.ClientFlow> flows = store.snapshotClientFlows().stream()
+                .filter(f -> f.getJsUrls().contains(url)).toList();
+        // hasOrigin (0.43.9): O(1) per endpoint, runs on every row selection / arrow-key move.
+        List<Endpoint> eps = store.snapshotEndpoints().stream().filter(e -> e.hasOrigin(url)).toList();
+        int risk = JsRisk.of(stats, url).score();
+        detail.show(JsInfoContent.build(new JsInfoContent.Input(a, fs, flows, eps, risk)));
     }
 
     private void openSavedFile() {
