@@ -19,6 +19,7 @@
 | Proxy History의 엔드포인트·파라미터를 손으로 정리 | 인벤토리 자동 정리, 값 모양(숫자 ID·UUID·URL)으로 IDOR·SSRF 후보 분류 |
 | 진단이 길어지면 이미 본 곳을 다시 확인 | 북마크·메모, Snapshot Diff, 요청해 보지 않은 경로만 보는 Untested only |
 | JS 안의 키 같은 민감정보를 찾는 데 오래 걸림 | JS 정적 분석: 시크릿·암호화 키·IV 탐지, DOM XSS source → sink |
+| 어떤 화면 기능이 어떤 API를 부르는지 JS를 읽어 추적 | Client Flows: 기능별 API 요청(메서드·경로·파라미터·인증) 지도, 권한·IDOR 테스트 대상 표시 |
 
 **안전 설계**
 - **PASSIVE 기본**: 캡처된 트래픽만 분석합니다.
@@ -39,6 +40,7 @@
 | **Findings** | 탐지 결과 심각도/카테고리 집계 + 트리아지, 모든 탐지에 **Hint**(어떻게 테스트할지) |
 | **JS Assets** | JS 파일 수집·분석, 라이브러리·서드파티·빈 청크 자동 숨김, 파일별 Risk 순 정렬, 확증 못 한 매치는 파일별 **Notes**로 |
 | **JS Analysis** | 구조 분석으로 **확증된 Lead만** 표시(같은 함수·같은 변수로 이어진 DOM XSS source → sink, 권한 체크가 보호하는 경로, 암호화 호출에 들어가는 키·IV, 민감 경로·숨은 파라미터), 번들을 가로질러 위험한 파일 순, 실제 호출 여부(**Seen**)와 **Untested only** |
+| **Client Flows** | JS에서 화면 기능 → API 요청 지도 추출: fetch·axios·XHR·jQuery 호출(앱 공통 래퍼 포함)마다 메서드·경로 템플릿·body/query 키·인증 헤더 출처·호출 함수·트리거(라우트·이벤트 핸들러), 실제 호출 여부(**Seen**)와 **Untested only**, IDOR·무인증 Hint, **Send template to Repeater**(전송 안 함) |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 체크 |
 | **Match & Replace** ⚠**ACTIVE** | 선택한 행에 치환 규칙(체이닝 가능)을 적용해 재전송. 세션 프리셋(인증 제거 / 다른 계정)과 원본 대비 **Verdict**(Same·Different·Blocked)로 권한 검증 |
 | **Snapshot Diff** | 저장한 State 파일과 현재 데이터를 비교해 새로 생긴/사라진/바뀐 항목 표시 |
