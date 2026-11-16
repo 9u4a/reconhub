@@ -124,6 +124,10 @@ public final class SessionProfiles {
         if (r != null) listeners.add(r);
     }
 
+    public void removeListener(Runnable r) {
+        listeners.remove(r);
+    }
+
     private void fire() {
         for (Runnable r : listeners) {
             try {

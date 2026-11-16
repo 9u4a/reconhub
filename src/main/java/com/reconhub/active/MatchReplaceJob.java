@@ -11,13 +11,36 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class MatchReplaceJob {
 
     private final int total;
+    private final int id;                                  // 0.61.0: run number (#1, #2, ...)
+    private final List<MatchReplaceTarget> targets;        // kept for "Re-run"
+    private final List<RunIdentity> identities;
+    private final long startedAt = System.currentTimeMillis();
     private final AtomicInteger sent = new AtomicInteger();
     private final List<MatchReplaceResult> results = new CopyOnWriteArrayList<>();
     private final AtomicBoolean cancelled = new AtomicBoolean();
     private volatile boolean done;
 
     public MatchReplaceJob(int total) {
+        this(0, List.of(), List.of(), total);
+    }
+
+    public MatchReplaceJob(int id, List<MatchReplaceTarget> targets, List<RunIdentity> identities, int total) {
+        this.id = id;
+        this.targets = List.copyOf(targets);
+        this.identities = List.copyOf(identities);
         this.total = total;
+    }
+
+    public int getId() { return id; }
+    public List<MatchReplaceTarget> getTargets() { return targets; }
+    public List<RunIdentity> getIdentities() { return identities; }
+    public long getStartedAt() { return startedAt; }
+
+    /** "#3 · 12 targets × 3 sessions". */
+    public String label() {
+        int t = targets.isEmpty() ? total : targets.size();
+        int s = Math.max(1, identities.size());
+        return "#" + id + " · " + t + (t == 1 ? " target" : " targets") + " × " + s + (s == 1 ? " session" : " sessions");
     }
 
     public void recordResult(MatchReplaceResult r) {

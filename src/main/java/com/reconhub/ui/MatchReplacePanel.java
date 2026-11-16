@@ -37,9 +37,10 @@ public final class MatchReplacePanel extends AbstractTablePanel<MatchReplaceResu
         implements MatchReplaceEngine.Listener {
 
     // Verdict / Orig / Sim% / ΔLen (0.57.0): the resend compared with the originally captured response.
+    // 0.61.0: + Run / Session (which identity the resend used).
     private static final String[] COLS =
-            {"Host", "Path", "Method", "Status", "Verdict", "Orig", "Sim%", "ΔLen", "Length", "Time", "Error"};
-    private static final int COL_VERDICT = 4;
+            {"Run", "Session", "Host", "Path", "Method", "Status", "Verdict", "Orig", "Sim%", "ΔLen", "Length", "Time", "Error"};
+    private static final int COL_VERDICT = 6;
     private static final DateTimeFormatter TS =
             DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
 
@@ -155,15 +156,15 @@ public final class MatchReplacePanel extends AbstractTablePanel<MatchReplaceResu
     @Override protected String[] columns() { return COLS; }
 
     @Override protected int[] columnWidths() {
-        return new int[]{160, 260, 60, 60, 80, 55, 55, 70, 70, 80, 200};
+        return new int[]{45, 110, 160, 260, 60, 60, 80, 55, 55, 70, 70, 80, 200};
     }
 
     // Status/Length are numeric -- see AbstractTablePanel.java's CLAUDE.md note on why this is required
     // for the sorter to compare them as numbers instead of lexicographically. Static constant (0.43.8)
     // -- see EndpointsPanel's identical note.
     private static final Class<?>[] COLUMN_CLASSES =
-            {null, null, null, Integer.class, null, Integer.class, Integer.class, Integer.class, Integer.class,
-             null, null};
+            {Integer.class, null, null, null, null, Integer.class, null, Integer.class, Integer.class, Integer.class,
+             Integer.class, null, null};
 
     @Override protected Class<?>[] columnClasses() {
         return COLUMN_CLASSES;
@@ -172,19 +173,21 @@ public final class MatchReplacePanel extends AbstractTablePanel<MatchReplaceResu
     @Override
     protected Object valueAt(MatchReplaceResult r, int c) {
         return switch (c) {
-            case 0 -> r.getHost();
-            case 1 -> r.getPath();
-            case 2 -> r.getMethod();
-            case 3 -> r.getStatus() == 0 ? null : r.getStatus();
-            case 4 -> r.getCompare() == null ? "" : r.getCompare().verdict().label();
-            case 5 -> r.getCompare() == null || r.getCompare().origStatus() == 0 ? null : r.getCompare().origStatus();
-            case 6 -> r.getCompare() == null || r.getCompare().similarity() < 0 ? null
+            case 0 -> r.getRunId() == 0 ? null : r.getRunId();
+            case 1 -> r.getIdentity();
+            case 2 -> r.getHost();
+            case 3 -> r.getPath();
+            case 4 -> r.getMethod();
+            case 5 -> r.getStatus() == 0 ? null : r.getStatus();
+            case 6 -> r.getCompare() == null ? "" : r.getCompare().verdict().label();
+            case 7 -> r.getCompare() == null || r.getCompare().origStatus() == 0 ? null : r.getCompare().origStatus();
+            case 8 -> r.getCompare() == null || r.getCompare().similarity() < 0 ? null
                     : (int) Math.round(r.getCompare().similarity() * 100);
-            case 7 -> r.getCompare() == null || r.getCompare().verdict() == ResponseCompare.Verdict.NA ? null
+            case 9 -> r.getCompare() == null || r.getCompare().verdict() == ResponseCompare.Verdict.NA ? null
                     : r.getCompare().lengthDelta();
-            case 8 -> r.getLengthBytes() == 0 && r.getMessages() == null ? null : r.getLengthBytes();
-            case 9 -> TS.format(Instant.ofEpochMilli(r.getTimestamp()));
-            case 10 -> r.getError() == null ? "" : r.getError();
+            case 10 -> r.getLengthBytes() == 0 && r.getMessages() == null ? null : r.getLengthBytes();
+            case 11 -> TS.format(Instant.ofEpochMilli(r.getTimestamp()));
+            case 12 -> r.getError() == null ? "" : r.getError();
             default -> "";
         };
     }
@@ -209,6 +212,11 @@ public final class MatchReplacePanel extends AbstractTablePanel<MatchReplaceResu
                         : "") + ")";
         viewer.setInfo(r.getError() != null ? "Error: " + r.getError()
                 : r.getMethod() + " " + r.getHost() + r.getPath() + cmp);
+    }
+
+    /** Called after a send: shows that run's rows (search box filtered to the run). */
+    public void showRun(MatchReplaceJob job) {
+        refreshData();
     }
 
     @Override public void onProgress(MatchReplaceJob job) {

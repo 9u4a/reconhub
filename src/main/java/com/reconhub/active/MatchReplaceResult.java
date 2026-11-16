@@ -23,6 +23,9 @@ public final class MatchReplaceResult {
     // 0.57.0: the verdict against the originally captured response, and that original (for the viewer).
     private final ResponseCompare.Result compare;   // null when never sent
     private final HttpRequestResponse original;     // null when never sent
+    // 0.61.0: which identity this send used, and which run it belongs to (0 = legacy single-rule run).
+    private volatile String identity = "";
+    private volatile int runId;
 
     public MatchReplaceResult(String host, String path, String method, int status, int lengthBytes,
                               long timestamp, String error, HttpRequestResponse messages) {
@@ -83,6 +86,21 @@ public final class MatchReplaceResult {
     /** Stable identity for {@code AbstractTablePanel}'s selection-preserving refresh -- results are
      * append-only within one job, so host+path+timestamp is unique enough (two results for the same
      * endpoint in the same run always differ in timestamp). */
+    public String getIdentity() { return identity; }
+    public int getRunId() { return runId; }
+
+    /** Tags this result with the identity it was sent as and its run (set once by the engine). */
+    public MatchReplaceResult tag(String identityName, int run) {
+        this.identity = identityName == null ? "" : identityName;
+        this.runId = run;
+        return this;
+    }
+
+    /** Row key for the matrix: method + host + path. */
+    public String targetKey() {
+        return method + " " + host + path;
+    }
+
     public String key() {
         return host + "|" + path + "|" + timestamp;
     }

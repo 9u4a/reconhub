@@ -65,6 +65,7 @@ public final class MatchReplaceEngine {
         return t;
     });
     private final List<MatchReplaceJob> jobs = new CopyOnWriteArrayList<>();
+    private final AtomicInteger runSeq = new AtomicInteger();
     // Session presets (0.57.0) -- memory only, lives as long as the engine (see SessionProfiles).
     private final SessionProfiles sessions = new SessionProfiles();
     private volatile Listener listener = new Listener() {
@@ -89,29 +90,71 @@ public final class MatchReplaceEngine {
      * dialog naming exactly how many rows and what rule(s) before calling this.
      */
     public MatchReplaceJob submit(List<MatchReplaceTarget> targets, List<MatchReplaceRule> rules) {
+        if (rules == null || rules.isEmpty()) {
+            return null;
+        }
+        return submitAs(targets, List.of(new RunIdentity("Custom", rules)));
+    }
+
+    /**
+     * 0.61.0: sends every target once per identity (target-major order, so a matrix row fills in together).
+     * Same pacing, concurrency, scope check and cancel flow as a single-identity run. Null when Match &amp;
+     * Replace is off or there is nothing to send.
+     */
+    public MatchReplaceJob submitAs(List<MatchReplaceTarget> targets, List<RunIdentity> identities) {
         if (!settings.isMatchReplaceEnabled() || targets == null || targets.isEmpty()
-                || rules == null || rules.isEmpty()) {
+                || identities == null || identities.isEmpty()) {
             return null;
         }
         List<MatchReplaceTarget> snapshot = new ArrayList<>(targets);
-        List<MatchReplaceRule> ruleSnapshot = new ArrayList<>(rules);
-        MatchReplaceJob job = new MatchReplaceJob(snapshot.size());
+        List<RunIdentity> ids = new ArrayList<>(identities);
+        MatchReplaceJob job = new MatchReplaceJob(runSeq.incrementAndGet(), snapshot, ids, snapshot.size() * ids.size());
         jobs.add(job);
-        dispatcher.submit(() -> run(job, snapshot, ruleSnapshot));
+        dispatcher.submit(() -> run(job, snapshot, ids));
         return job;
     }
 
-    private void run(MatchReplaceJob job, List<MatchReplaceTarget> targets, List<MatchReplaceRule> rules) {
+    /** Sends a finished (or cancelled) run again with the same targets and identities. */
+    public MatchReplaceJob rerun(MatchReplaceJob job) {
+        return job == null ? null : submitAs(job.getTargets(), job.getIdentities());
+    }
+
+    /** Removes a run from the list; a running one is cancelled first. */
+    public void remove(MatchReplaceJob job) {
+        if (job != null) {
+            job.cancel();
+            jobs.remove(job);
+        }
+    }
+
+    /** Whether a target would pass the scope check (dialog pre-check); never throws. */
+    public boolean inScope(MatchReplaceTarget t) {
+        try {
+            HttpRequest r = t.messages() == null ? null : t.messages().request();
+            return r != null && scopeFilter.inScope(r.url());
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /** Lower bound of a run's duration: sends are paced globally, so concurrency can't beat the delay. */
+    public static long estimateSeconds(int requests, int delayMs) {
+        return Math.round(Math.max(0, requests - 1) * (double) Math.max(0, delayMs) / 1000.0);
+    }
+
+    private void run(MatchReplaceJob job, List<MatchReplaceTarget> targets, List<RunIdentity> identities) {
         try {
             int par = Math.max(1, settings.getMatchReplaceConcurrency());
+            int total = targets.size() * identities.size();
             AtomicInteger cursor = new AtomicInteger();
             Runnable worker = () -> {
                 int i;
-                while ((i = cursor.getAndIncrement()) < targets.size()) {
+                while ((i = cursor.getAndIncrement()) < total) {
                     if (job.isCancelled()) {
                         return;
                     }
-                    processOne(job, targets.get(i), rules);
+                    RunIdentity id = identities.get(i % identities.size());
+                    processOne(new Recorder(job, id.name()), targets.get(i / identities.size()), id.rules());
                     listener.onProgress(job);
                 }
             };
@@ -149,7 +192,22 @@ public final class MatchReplaceEngine {
         }
     }
 
-    private void processOne(MatchReplaceJob job, MatchReplaceTarget target, List<MatchReplaceRule> rules) {
+    /** Wraps a job so every result it records is tagged with the identity and run id. */
+    private static final class Recorder {
+        final MatchReplaceJob job;
+        final String identity;
+
+        Recorder(MatchReplaceJob job, String identity) {
+            this.job = job;
+            this.identity = identity;
+        }
+
+        void recordResult(MatchReplaceResult r) {
+            job.recordResult(r.tag(identity, job.getId()));
+        }
+    }
+
+    private void processOne(Recorder job, MatchReplaceTarget target, List<MatchReplaceRule> rules) {
         HttpRequestResponse original = target.messages();
         HttpRequest baseReq = original == null ? null : original.request();
         if (baseReq == null) {
