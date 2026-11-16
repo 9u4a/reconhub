@@ -42,9 +42,9 @@
 | **JS Analysis** | 구조 분석으로 **확증된 Lead만** 표시(같은 함수·같은 변수로 이어진 DOM XSS source → sink, 권한 체크가 보호하는 경로, 암호화 호출에 들어가는 키·IV, 민감 경로·숨은 파라미터), 번들을 가로질러 위험한 파일 순, 실제 호출 여부(**Seen**)와 **Untested only** |
 | **Client Flows** | JS에서 화면 기능 → API 요청 지도 추출: fetch·axios·XHR·jQuery 호출(앱 공통 래퍼 포함)마다 메서드·경로 템플릿·body/query 키·인증 헤더 출처·호출 함수·트리거(라우트·이벤트 핸들러), 실제 호출 여부(**Seen**)와 **Untested only**, IDOR·무인증 Hint, **Send template to Repeater**(전송 안 함) |
 | **Tech** | 호스트별 기술 식별 + 보안 헤더 체크 |
-| **Match & Replace** ⚠**ACTIVE** | 선택한 행을 **여러 세션으로 한 번에** 재전송(Original·No auth·저장한 계정 체크), 대상×세션 아무 조합이나 전·후 **diff 미리보기**, 스코프 밖·규칙 미적용·토큰 만료 사전 검사, 요청 수·예상 시간 표시, 추가 치환 규칙(체이닝). **Sessions** 패널: 수집된 트래픽에서 계정 자동 찾기, Burp 우클릭 **Save as ReconHub session**, 요청 붙여넣기로 인증 헤더·세션 쿠키 자동 식별(쿠키 단위 교체, JWT 만료 표시). 결과는 **실행 목록**(진행률·취소·재실행)과 **엔드포인트×세션 매트릭스**(⚠Same = 권한 우회 의심, Blocked·Different·Error 칩 필터), 원본·재전송 응답 좌우 비교 |
+| **Match & Replace** ⚠**ACTIVE** | 선택한 행을 **여러 세션으로 한 번에** 재전송(Original·No auth·저장한 계정 체크), 대상×세션 아무 조합이나 전·후 **diff 미리보기**, 스코프 밖·규칙 미적용·토큰 만료 사전 검사, 요청 수·예상 시간 표시, 추가 치환 규칙(체이닝). **Sessions** 패널: 수집된 트래픽에서 계정 자동 찾기, Burp 우클릭 **Save as ReconHub session**, 요청 붙여넣기로 인증 헤더·세션 쿠키 자동 식별(쿠키 단위 교체, JWT 만료 표시), 앱 공용 API 키(X-Api-Key 등)는 유지 선택. 결과는 **실행 목록**(진행률·취소·재실행)과 **엔드포인트×세션 매트릭스**(⚠Same = 권한 우회 의심, Blocked·Different·Error 칩 필터), 원본·재전송 응답 좌우 비교 |
 | **Snapshot Diff** | 저장한 State 파일과 현재 데이터를 비교해 새로 생긴/사라진/바뀐 항목 표시 |
-| **Settings** | 스코프·규칙·Ingest·내보내기·State 백업, 스코프 밖 호스트 일괄 삭제, Match & Replace 켜기/스로틀 |
+| **Settings** | 상단 Ingest 바 + General(스코프·수집·분석·메모리) / JavaScript / Findings(필터·사용자 규칙) / Match & Replace(켜기·스로틀) / Export & Data(리포트·워드리스트·State 백업·데이터 삭제) 탭 |
 
 **공통**: 검색(정규식·AND·본문)·다중 컬럼 정렬·체크박스 필터·CSV 내보내기·우클릭 Copy/Repeater/Intruder/curl·
 JS Beautify·북마크/메모·키보드 단축키·다크테마 대응.
@@ -68,9 +68,9 @@ JS Beautify·북마크/메모·키보드 단축키·다크테마 대응.
 산출물 `build/libs/reconhub-<version>-all.jar`을 Burp **Extensions → Add → Java**로 로드
 ([Releases](https://github.com/9u4a/reconhub/releases)에서 빌드된 JAR 직접 다운로드도 가능).
 
-**기본 흐름**: Target → Scope 등록 → **Settings → Ingest Site Map**(또는 Auto-ingest·Live capture)로
+**기본 흐름**: Target → Scope 등록 → **Settings 상단 Ingest Site Map**(또는 Auto-ingest·Live capture)로
 분석 → 각 탭에서 확인(행 선택 시 하단 원문 Request/Response) → **Findings** 우클릭으로 트리아지 →
-Settings에서 **JSON/HTML/Markdown/SARIF** 리포트·워드리스트·**State Export/Import** 내보내기.
+**Settings → Export & Data**에서 **JSON/HTML/Markdown/SARIF** 리포트·워드리스트·**State Export/Import**.
 특정 요청만 취합하려면 다른 Burp 탭에서 우클릭 **Send to ReconHub**.
 
 ## 변경 이력

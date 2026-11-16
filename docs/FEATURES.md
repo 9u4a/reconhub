@@ -42,9 +42,12 @@ JS 수집(SHA-256 dedup·옵션 저장) + 내부 엔드포인트·탐지 추출.
 같은 벤더·런타임 청크, GTM/GA·CDN·채팅/결제 위젯 등 서드파티 스크립트를 URL·파일명·배너로 자동 판별해
 **Kind**에 표시하고, 툴바 **Hide libraries & empty chunks**(기본 켜짐)로 이들과 내용 없는 작은 청크를
 숨김(보기만 숨기고 데이터는 유지). 라이브러리는 기본적으로 시크릿 스캔만 하고 엔드포인트 추출·심화 분석은
-건너뜀(**Settings → JavaScript collection → Analyze library / vendor / 3rd-party JS too**로 켤 수 있음).
-행 선택 시 **Info 탭**은 탐지(심각도순, `Try:` 힌트 포함) → 엔드포인트 → 파일 정보 순으로 보여주고,
-**Response 탭**에서 캡처된 응답 원문 확인(임포트된 파일은 없음). 트래픽에 안 잡힌 파일은 **Import JS
+건너뜀(**Settings → JavaScript → Analyze library / vendor / third-party JS too**로 켤 수 있음).
+행 선택 시 상세 영역 머리말에 파일 이름·URL·크기/Risk/라이브러리 배지와 버튼이 나오고, 아래 탭은 모두 정렬 가능한
+표: **Findings**(심각도순, 값·`Try:` 힌트) · **Client Flows**(메서드·경로·Body 키·인증·트리거·함수) ·
+**Notes**(구조 분석으로 확증하지 못한 매치: Possible flow / Possible pair / 패턴 이름 · 내용 · Try) · **Endpoints** ·
+**File**(URL·SHA-256·크기·종류·미리보기·저장 경로) · **Response**(캡처된 응답 원문, 임포트된 파일은 없음).
+탭 제목에 건수가 표시되고, 긴 칸은 마우스를 올리면 전체 내용, Ctrl+C로 행 복사. 트래픽에 안 잡힌 파일은 **Import JS
 file(s)…**로 로컬에서 불러와 동일 분석.
 
 ## JS Analysis
@@ -72,6 +75,8 @@ finding의 `locationUrl`이 알려진 JS 파일 URL과 일치하면 JS 소스로
 버튼**으로 여러 호스트를 체크박스로 골라 필터링.
 
 ## Match & Replace ⚠ACTIVE
+> 0.60.0~0.64.0에서 다중 세션 실행·매트릭스로 바뀌었습니다. 아래 첫 문단은 기본 개념, **세션·매트릭스** 문단이 현재 화면입니다.
+
 **Endpoints/Parameters/Findings/JS Assets** 탭에서 Ctrl/Shift로 여러 행을 고른 뒤 우클릭 **Send N
 selected with Match & Replace…**로 헤더/쿠키 값 치환(예: Cookie 값 통째로 교체) 또는 요청 원문 전체
 문자열/정규식 치환(Burp Match and Replace와 동일 개념, `$1` 등 정규식 백레퍼런스 지원)을 적용해 일괄
@@ -81,31 +86,36 @@ selected with Match & Replace…**로 헤더/쿠키 값 치환(예: Cookie 값 �
 포함)가 필수 — "다시 묻지 않기" 없음. 스코프 밖 대상은 자동 제외. 결과는 **Match &
 Replace 탭**에서 호스트·상태·길이·에러 요약 + 행 선택 시 실제 전송된 request/response 상세 확인
 가능(세션 내 보관, State Export/Import 대상 아님).
-**권한 검증(세션 프리셋 + Verdict)**: 다이얼로그 상단 **Preset**에서 **Remove auth**(Cookie·Authorization
-헤더 삭제)나 **Save session…**으로 저장한 다른 계정(Cookie/Authorization 값)을 고르면 규칙 체인이 그
-신원으로 바뀜(없는 헤더는 삭제해 원래 사용자의 자격이 남지 않게 함). 저장한 세션은 **메모리에만**
-보관(설정·State·리포트에 저장 안 함, 확장 언로드 시 사라짐). 규칙 모드에 **Remove header**도 추가.
-결과 탭은 재전송 응답을 캡처된 원본과 비교해 **Verdict**(Same = 상태 코드 같고 본문 90% 이상 유사 →
-권한 우회 의심 / Blocked = 401·403·로그인 리다이렉트 / Different), **Orig**(원본 상태), **Sim%**,
-**ΔLen**을 보여주고, **Same only** 토글로 우회 의심만 추림. 행 우클릭 **Show original (captured)
-request/response**로 원본과 나란히 확인.
+**세션 (Sessions 패널)**: 탭 왼쪽에서 다른 계정 세션을 관리. **Find in captured traffic**으로 수집된 요청에서
+인증 헤더·세션 쿠키 조합별 계정 후보를 찾아 저장(CSRF 토큰은 묶음 기준에서 제외), Burp 어디서나 우클릭
+**Save as ReconHub session…**, 요청을 붙여 넣으면 인증 부분 자동 식별(확정/추정 2단계, 분석 쿠키 제외).
+JWT면 계정·만료 표시. 내장 세션 **Original**(기준, 규칙 없음)·**No auth**(인증 전부 제거). 세션으로 보낼 때
+다른 계정의 자격이 남지 않도록 확정된 인증 헤더·세션 쿠키를 지우고(쿠키 단위 교체, 분석 쿠키는 유지),
+**Keep app API keys**(기본 켜짐)면 X-Api-Key 같은 앱 공용 키는 남김. 세션은 **메모리에만** 보관(설정·State·리포트에 저장 안 함).
+**실행 다이얼로그**: 세션 여러 개 체크 → 대상×세션 조합 전·후 **diff 미리보기**, 스코프 밖·규칙 미적용·토큰 만료 사전 검사,
+지연·동시성 조절, "N개 요청 보내기 (ACTIVE)" 버튼. 보내면 Match & Replace 탭으로 이동.
+**결과**: 위쪽 **실행 목록**(진행률·취소·재실행·삭제), 아래 **Matrix**(행 = 엔드포인트, 열 = 세션, 셀 = 상태 코드 +
+Verdict 색: Same = 원본과 같은 응답 → 권한 우회 의심 / Blocked = 401·403·로그인 리다이렉트 / Different / Error)와
+**List**(기존 표 + 세션·실행 열), Verdict 칩으로 필터, 원본·재전송 응답 좌우 비교. 셀 우클릭으로 Repeater 전송·
+그 엔드포인트만 재실행. **Ctrl+F**는 List 화면 검색창으로 이동.
 
 ## Snapshot Diff
-**Settings → Backup / State**에서 내보낸 State 파일을 **Load comparison state file…** 버튼으로 불러와
+**Settings → Export & Data → Backup**에서 내보낸 State 파일을 **Load comparison state file…** 버튼으로 불러와
 현재 라이브 데이터와 비교 — Endpoints/Parameters/Findings/JS Assets/Tech 5개 카테고리별로 새로 생긴
 (+)/사라진(−)/**내용이 바뀐(~)** 항목을 표로 보여줌(상태 코드·파라미터·기술스택 변화 등). 다른 탭과
 달리 상시 갱신되지 않고, 파일을 불러올 때만 그 시점 기준으로 1회 비교(라이브 데이터는 건드리지 않음).
 JS Assets는 내용 해시로 식별하므로 내용이 바뀌면 +/−로 표시됨.
 
 ## Settings
-스코프·패시브 토글·커스텀 탐지 규칙·Ingest·내보내기·State 백업. 모든 설정은 **Burp 재시작 후에도
-유지**(extension preferences에 저장). **Remove out-of-scope hosts…**로 현재 스코프(Burp Scope +
+상단 고정 바(**Ingest Site Map**·진행률·상태) 아래 탭 5개: **General**(스코프·수집·분석·메모리 상한) ·
+**JavaScript**(JS 저장·폴더·라이브러리 분석) · **Findings**(표시 필터·카테고리 숨김·사용자 탐지 규칙) ·
+**Match & Replace**(ACTIVE 켜기·지연·동시 요청 수) · **Export & Data**(리포트·워드리스트·State 백업·데이터 삭제).
+설명은 각 항목 툴팁에 있음. 모든 설정은 **Burp 재시작 후에도 유지**(extension preferences에 저장). **Remove out-of-scope hosts…**로 현재 스코프(Burp Scope +
 include/exclude 정규식) 밖의 호스트를 한 번에 찾아서 일괄 삭제 — 사이트맵 전체를 ingest한 뒤 불필요한
 호스트가 섞여 들어왔을 때 유용(Scope Mode가 "All"이면 스코프 밖이 없으므로 항상 "없음"으로 나옴).
 내보내기(HTML/Markdown/JSON/SARIF) 옆 **Confirmed only / Exclude false positives / Bookmarked only**
 체크박스로 리포트 범위를 좁힐 수 있음 — **Bookmarked only는 Findings뿐 아니라 Endpoints/Parameters/
-JS/Tech 전 섹션에 적용**. **Match & Replace bulk send** 섹션에서 기능 켜기(기본 꺼짐) + 요청 간
-지연·동시성 스로틀 조절.
+JS/Tech 전 섹션에 적용**.
 
 ## 탐지 항목 상세
 API 키/토큰·JWT·인증 헤더·스토리지 URL 등 **시크릿**(응답 본문뿐 아니라 **쿠키 값**도 스캔 — 쿠키로
@@ -152,7 +162,7 @@ Host): 검색창 옆 필터 버튼을 누르면 그 컬럼에 현재 존재하�
 필터, State Export/Import에도 보존.
 
 **키보드 단축키**: `Ctrl+1`~`Ctrl+9` 탭 전환(마지막 Settings 탭은 제외), `Ctrl+F` 현재 탭 검색창
-포커스, **`Ctrl+Shift+F` 글로벌 검색**(Endpoints/Parameters/Findings/JS Assets/Tech 5개 탭을 한 번에
+포커스(Match & Replace는 List 화면 검색창), **`Ctrl+Shift+F` 글로벌 검색**(Endpoints/Parameters/Findings/JS Assets/Tech 5개 탭을 한 번에
 검색해 결과 목록에서 바로 해당 탭·행으로 이동), 검색창에서 `Esc`로
 검색어 지우기.
 
