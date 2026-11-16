@@ -297,12 +297,15 @@ public final class JsClientFlows {
 
     // ---- wrappers ---------------------------------------------------------------------------
 
-    /** Records a wrapper when a direct call's path uses a parameter of the function it sits in. */
-    private void maybeWrapper(int callSig, int[] pathRange, String method, String auth, String via, String template) {
+    /**
+     * Records a wrapper when a direct call's path uses a parameter of the named function it sits in.
+     * Returns the path parameter's name for such a call, else null.
+     */
+    private String maybeWrapper(int callSig, int[] pathRange, String method, String auth, String via, String template) {
         int scopeId = st.scope[callSig];
-        if (scopeId == 0) return;
+        if (scopeId == 0) return null;
         JsStructure.Scope sc = st.scopes.get(scopeId);
-        if (sc.name.isEmpty() || sc.params.isEmpty() || wrappers.containsKey(sc.name)) return;
+        if (sc.name.isEmpty() || sc.params.isEmpty()) return null;
         List<String> params = new ArrayList<>(sc.params);
         int pathParam = -1;
         String paramName = null;
@@ -313,7 +316,8 @@ public final class JsClientFlows {
                 break;
             }
         }
-        if (pathParam < 0) return;
+        if (pathParam < 0) return null;
+        if (wrappers.containsKey(sc.name)) return paramName;
         String methodParam = null;
         int optionsParam = -1;
         if (method == null) {
@@ -331,6 +335,14 @@ public final class JsClientFlows {
         }
         wrappers.put(sc.name, new Wrapper(sc.name, scopeId, pathParam, template, paramName, method, methodParam,
                 optionsParam, auth, via));
+        return paramName;
+    }
+
+    /** True when the parameter supplies the path itself ('/api' + path, `${base}${path}`), not just one
+     * segment ('/users/' + id) -- such a call is the wrapper's plumbing, not a Client Flow of its own. */
+    static boolean paramIsPathBase(String tpl, String param) {
+        int i = tpl.indexOf("{" + param + "}");
+        return i == 0 || (i > 0 && tpl.charAt(i - 1) != '/');
     }
 
     private void wrapperCalls() {
@@ -392,8 +404,8 @@ public final class JsClientFlows {
         if (tpl == null) return;
         boolean literal = hasLiteralPath(tpl);
         // a direct call whose path comes from the enclosing function's parameter makes it a wrapper
-        maybeWrapper(at, pathRange, method, auth, via, tpl);
-        if (!literal) return;
+        String wrapperParam = maybeWrapper(at, pathRange, method, auth, via, tpl);
+        if (!literal || (wrapperParam != null && paramIsPathBase(tpl, wrapperParam))) return;
         add(at, tpl, method == null ? "GET" : method, body, extraQuery == null ? List.of() : extraQuery, auth, via, snippetAt(at, pathRange[1]));
     }
 

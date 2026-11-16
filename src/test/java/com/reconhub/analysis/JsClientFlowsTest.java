@@ -124,6 +124,8 @@ class JsClientFlowsTest {
                 + " function request(path, opts) { return fetch(BASE + path, opts); }"
                 + " function del(id){ return request('/users/' + id, {method: 'DELETE'}); }"
                 + " function create(){ return request('/users', {method: 'POST', body: JSON.stringify({email: e})}); }");
+        assertTrue(f.stream().noneMatch(h -> h.path().contains("{path}")),
+                "the wrapper's own inner call is not a flow: " + f);
         JsClientFlows.Hit d = find(f, "DELETE", "/api/users/{id}");
         assertTrue(d.via().startsWith("wrapper request()"), d.via());
         assertEquals("del", d.function());
