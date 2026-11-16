@@ -55,46 +55,79 @@ public final class MatchReplacePanel extends AbstractTablePanel<MatchReplaceResu
     // the session's total result count). MatchReplaceJob has no equals()/hashCode() override, so a
     // plain HashMap already keys by identity here, same as the model row classes (see the 0.32.1 note).
     private final Map<MatchReplaceJob, Integer> consumed = new HashMap<>();
-    private final JToggleButton sameOnly = new JToggleButton("Same only");
+    // 0.62.0: run / outcome filter owned by MatchReplaceResultsView; original vs resend side by side.
+    private volatile java.util.function.Predicate<MatchReplaceResult> extraFilter = r -> true;
+    private final MessageViewer originalViewer;
+    private Runnable onResultsChanged = () -> { };
+    private int lastCount = -1;
 
     public MatchReplacePanel(MontoyaApi api, MatchReplaceEngine engine) {
         super(api, null);   // no Bookmarks -- a send result isn't user-authored data worth bookmarking
         this.engine = engine;
         this.viewer = new MessageViewer(api);
-        installDetail(viewer);
+        this.originalViewer = new MessageViewer(api);
+        javax.swing.JSplitPane detail = new javax.swing.JSplitPane(javax.swing.JSplitPane.HORIZONTAL_SPLIT,
+                titled("Captured (original)", originalViewer), titled("Resend", viewer));
+        detail.setResizeWeight(0.5);
+        installDetail(detail);
         engine.setListener(this);
+    }
 
-        JButton clear = new JButton("Clear results");
-        clear.addActionListener(e -> {
-            int choice = JOptionPane.showConfirmDialog(this, "Clear all Match & Replace results?",
-                    "ReconHub", JOptionPane.OK_CANCEL_OPTION);
-            if (choice == JOptionPane.OK_OPTION) {
-                synchronized (results) {
-                    results.clear();
-                    // Cursors reset too (0.43.9) -- preserves the pre-existing behavior of the old
-                    // results.contains(r) dedup scan this replaced: clearing `results` alone made
-                    // every already-recorded result look "new" again on the very next refreshData(),
-                    // so everything reappeared on the next tick. Resetting `consumed` reproduces that
-                    // same "full repopulate on next tick" behavior with the cursor approach.
-                    consumed.clear();
-                }
-                refreshData();
-            }
-        });
-        addToToolbar(clear);
+    static javax.swing.JComponent titled(String title, MessageViewer v) {
+        javax.swing.JPanel p = new javax.swing.JPanel(new java.awt.BorderLayout());
+        javax.swing.JLabel l = new javax.swing.JLabel("  " + title);
+        l.setForeground(SwingColors.MUTED);
+        p.add(l, java.awt.BorderLayout.NORTH);
+        p.add(v, java.awt.BorderLayout.CENTER);
+        return p;
+    }
 
-        sameOnly.setToolTipText("Show only resends whose response matched the captured one (status + ~same "
-                + "body) -- with another account's or no session, that is a likely authorization bypass");
-        sameOnly.addActionListener(e -> reapplyFilter());
-        addToToolbar(sameOnly);
+    /** Filter applied on top of the search box (run + outcome chips). */
+    void setExtraFilter(java.util.function.Predicate<MatchReplaceResult> f) {
+        extraFilter = f == null ? r -> true : f;
+        reapplyFilter();
+    }
+
+    /** Runs after new results are absorbed (and after clear / remove). */
+    void setOnResultsChanged(Runnable r) {
+        onResultsChanged = r == null ? () -> { } : r;
+    }
+
+    /** Snapshot of every absorbed result, oldest first. */
+    List<MatchReplaceResult> allResults() {
+        synchronized (results) {
+            return new ArrayList<>(results);
+        }
+    }
+
+    /** Drops one run's rows (the engine forgets the run too). */
+    void removeRun(MatchReplaceJob job) {
+        engine.remove(job);
+        synchronized (results) {
+            results.removeIf(r -> r.getRunId() == job.getId());
+            consumed.remove(job);
+        }
+        refreshData();
+    }
+
+    /** Clears every result and finished run. */
+    void clearAll() {
+        for (MatchReplaceJob j : new ArrayList<>(engine.jobs())) {
+            if (j.isDone()) engine.remove(j);
+        }
+        synchronized (results) {
+            results.clear();
+            consumed.clear();
+        }
+        refreshData();
     }
 
     @Override protected boolean rowIncluded(MatchReplaceResult r) {
-        return !sameOnly.isSelected() || verdictOf(r) == ResponseCompare.Verdict.SAME;
+        return r == null || extraFilter.test(r);
     }
 
     @Override protected boolean hasRowFilter() {
-        return sameOnly.isSelected();
+        return true;
     }
 
     private static ResponseCompare.Verdict verdictOf(MatchReplaceResult r) {
@@ -119,12 +152,9 @@ public final class MatchReplacePanel extends AbstractTablePanel<MatchReplaceResu
     @Override
     protected void extraMenuItems(JPopupMenu menu, MatchReplaceResult r) {
         menu.addSeparator();
-        addMenuItem(menu, "Show original (captured) request/response", r != null && r.getOriginal() != null,
-                () -> {
-                    viewer.show(r.getOriginal());
-                    viewer.setInfo("ORIGINAL captured exchange -- " + r.getMethod() + " " + r.getHost() + r.getPath()
-                            + "  (select the row again to go back to the resend)");
-                });
+        addMenuItem(menu, "Send this resend to Repeater", r != null && r.getMessages() != null,
+                () -> api.repeater().sendToRepeater(r.getMessages().request(),
+                        "RH " + (r.getIdentity().isEmpty() ? "" : r.getIdentity() + " ") + r.getPath()));
     }
 
     @Override
@@ -145,6 +175,14 @@ public final class MatchReplacePanel extends AbstractTablePanel<MatchReplaceResu
             }
         }
         super.refreshData();
+        int n;
+        synchronized (results) {
+            n = results.size();
+        }
+        if (n != lastCount || engine.jobs().stream().anyMatch(j -> !j.isDone())) {
+            lastCount = n;
+            onResultsChanged.run();
+        }
     }
 
     @Override protected List<MatchReplaceResult> supplyRows() {
@@ -201,8 +239,12 @@ public final class MatchReplacePanel extends AbstractTablePanel<MatchReplaceResu
         if (r == null) {
             viewer.show(null);
             viewer.setInfo(" ");
+            originalViewer.show(null);
+            originalViewer.setInfo(" ");
             return;
         }
+        originalViewer.show(r.getOriginal());
+        originalViewer.setInfo(r.getOriginal() == null ? "(no captured exchange)" : "As captured");
         viewer.show(r.getMessages());
         ResponseCompare.Result c = r.getCompare();
         String cmp = c == null || c.verdict() == ResponseCompare.Verdict.NA ? ""
@@ -211,12 +253,8 @@ public final class MatchReplacePanel extends AbstractTablePanel<MatchReplaceResu
                         + (c.verdict() == ResponseCompare.Verdict.SAME ? " -- same data for this identity: authz bypass?"
                         : "") + ")";
         viewer.setInfo(r.getError() != null ? "Error: " + r.getError()
-                : r.getMethod() + " " + r.getHost() + r.getPath() + cmp);
-    }
-
-    /** Called after a send: shows that run's rows (search box filtered to the run). */
-    public void showRun(MatchReplaceJob job) {
-        refreshData();
+                : (r.getIdentity().isEmpty() ? "" : "[" + r.getIdentity() + "] ") + r.getMethod() + " " + r.getHost()
+                        + r.getPath() + cmp);
     }
 
     @Override public void onProgress(MatchReplaceJob job) {
