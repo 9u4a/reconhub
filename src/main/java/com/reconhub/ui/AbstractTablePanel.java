@@ -68,7 +68,7 @@ import java.util.Set;
  * driven by the {@link #rowUrl}/{@link #rowMessages} hooks, and highlights the current search term
  * inside the message viewer when one is installed.
  */
-public abstract class AbstractTablePanel<T> extends JPanel implements Refreshable {
+public abstract class AbstractTablePanel<T> extends JPanel implements Refreshable, SearchFocusable {
 
     protected final MontoyaApi api;
     /** Bookmarks/notes store, shared across every tab; null-tolerant (bookmark UI just doesn't show). */

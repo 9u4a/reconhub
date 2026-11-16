@@ -64,6 +64,13 @@ final class SessionsPanel extends JPanel {
         buttons.add(find);
         buttons.add(add);
         top.add(buttons);
+        javax.swing.JCheckBox keepKeys = new javax.swing.JCheckBox("Keep app API keys", sessions.isKeepAppKeys());
+        keepKeys.setToolTipText("X-Api-Key / apikey / X-*-Api-Key headers are the app's key, shared by every user: "
+                + "keep them when switching session or removing auth (off = strip them too)");
+        keepKeys.addActionListener(e -> sessions.setKeepAppKeys(keepKeys.isSelected()));
+        JPanel opts = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        opts.add(keepKeys);
+        top.add(opts);
         add(top, BorderLayout.NORTH);
 
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);

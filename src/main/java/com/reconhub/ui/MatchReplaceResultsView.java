@@ -53,6 +53,7 @@ final class MatchReplaceResultsView extends JPanel {
     private final MontoyaApi api;
     private final MatchReplaceEngine engine;
     private final MatchReplacePanel list;
+    private final JToggleButton listBtn = new JToggleButton("List");
     private final RunsModel runsModel = new RunsModel();
     private final JTable runs = new JTable(runsModel);
     private final JButton cancel = new JButton("Cancel");
@@ -146,7 +147,6 @@ final class MatchReplaceResultsView extends JPanel {
         // ---- chips + view switch ----
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
         JToggleButton matrixBtn = new JToggleButton("Matrix", true);
-        JToggleButton listBtn = new JToggleButton("List");
         ButtonGroup g = new ButtonGroup();
         g.add(matrixBtn);
         g.add(listBtn);
@@ -207,6 +207,12 @@ final class MatchReplaceResultsView extends JPanel {
             if (!refreshTimer.isRunning()) refreshTimer.start();
         }));
         refresh();
+    }
+
+    /** Ctrl+F (0.64.0): the List card owns the search box, so switch to it and focus the field. */
+    void focusSearch() {
+        if (!listBtn.isSelected()) listBtn.doClick();
+        list.focusSearch();
     }
 
     /** Selects a run (e.g. one just submitted). */

@@ -312,7 +312,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
                 // Burp's own Request/Response editor embedded in the viewer. Without this check, Ctrl+F
                 // there silently stole focus to the table's search field instead of whatever (if
                 // anything) that editor does with Ctrl+F itself -- see isFocusInsideViewer()'s javadoc.
-                if (tabs.getSelectedComponent() instanceof AbstractTablePanel<?> p
+                if (tabs.getSelectedComponent() instanceof SearchFocusable p
                         && !p.isFocusInsideViewer()) {
                     p.focusSearch();
                 }

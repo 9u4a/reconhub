@@ -81,110 +81,161 @@ public final class SettingsPanel extends JPanel {
         this.ingestor = ingestor;
         this.bookmarks = bookmarks;
 
-        setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-        setBorder(BorderFactory.createEmptyBorder(14, 14, 14, 14));
+        // 0.64.0: a fixed top bar (ingest + progress + status) over tabs, one per area. Explanations moved
+        // into tooltips; every control and its behavior is unchanged.
+        setLayout(new java.awt.BorderLayout());
+        setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
 
-        add(section("Scope"));
-        add(scopeRow());
-        add(scopeRegexRow());
-        add(gap());
+        JPanel bar = leftFlow();
+        bar.add(ingestButton);
+        bar.add(progressRow());   // progress + cancel, hidden until an ingest runs
+        status.setForeground(SwingColors.MUTED);
+        bar.add(status);
+        ingestButton.setToolTipText("Re-read Burp's Site Map into ReconHub (passive -- no traffic)");
+        ingestButton.addActionListener(e -> doIngest());
 
-        add(section("Analysis"));
-        JCheckBox scan = leftCheck("Scan responses for secrets",
-                settings.isScanResponsesForSecrets());
-        scan.addActionListener(e -> settings.setScanResponsesForSecrets(scan.isSelected()));
-        add(scan);
-        JCheckBox passive = leftCheck(
-                "Run passive checks (interesting responses, misconfig, comments)",
-                settings.isRunPassiveChecks());
-        passive.addActionListener(e -> settings.setRunPassiveChecks(passive.isSelected()));
-        add(passive);
+        javax.swing.JTabbedPane tabs = new javax.swing.JTabbedPane();
+        tabs.addTab("General", pinTop(generalTab()));
+        tabs.addTab("JavaScript", pinTop(jsTab()));
+        tabs.addTab("Findings", pinTop(findingsTab()));
+        tabs.addTab("Match & Replace", pinTop(matchReplaceTab()));
+        tabs.addTab("Export & Data", pinTop(exportTab()));
+        add(bar, java.awt.BorderLayout.NORTH);
+        add(tabs, java.awt.BorderLayout.CENTER);
+
+        rulesModel.reload();
+    }
+
+    // ---- tabs -------------------------------------------------------------
+
+    private JPanel generalTab() {
+        JPanel t = tabBody();
+        t.add(section("Scope"));
+        t.add(scopeRow());
+        t.add(scopeRegexRow());
+        t.add(gap());
+
+        t.add(section("Capture"));
         JCheckBox live = leftCheck("Capture new traffic live", settings.isLiveCaptureEnabled());
         live.addActionListener(e -> settings.setLiveCaptureEnabled(live.isSelected()));
-        add(live);
-        JCheckBox ignoreStatic = leftCheck("Ignore static assets (img/css/font/media)",
-                settings.isIgnoreStaticAssets());
-        ignoreStatic.addActionListener(e -> settings.setIgnoreStaticAssets(ignoreStatic.isSelected()));
-        add(ignoreStatic);
-        JCheckBox autoIngest = leftCheck("Auto-ingest site map on load", settings.isAutoIngestOnLoad());
+        t.add(live);
+        JCheckBox autoIngest = leftCheck("Ingest the site map when the extension loads", settings.isAutoIngestOnLoad());
         autoIngest.addActionListener(e -> settings.setAutoIngestOnLoad(autoIngest.isSelected()));
-        add(autoIngest);
-        add(gap());
+        t.add(autoIngest);
+        JCheckBox ignoreStatic = leftCheck("Skip images, CSS, fonts and media", settings.isIgnoreStaticAssets());
+        ignoreStatic.addActionListener(e -> settings.setIgnoreStaticAssets(ignoreStatic.isSelected()));
+        t.add(ignoreStatic);
+        t.add(gap());
 
-        add(section("Findings display (noise control)"));
-        add(new JLabel("View-only filter for the Findings tab — hides rows, never drops collected data."));
-        add(minSeverityRow());
-        add(categoryMuteRow());
-        add(gap());
+        t.add(section("Analysis"));
+        JCheckBox scan = leftCheck("Scan responses for secrets", settings.isScanResponsesForSecrets());
+        scan.addActionListener(e -> settings.setScanResponsesForSecrets(scan.isSelected()));
+        t.add(scan);
+        JCheckBox passive = leftCheck("Passive checks", settings.isRunPassiveChecks());
+        passive.setToolTipText("Interesting responses, misconfigurations, comments, request/response leads, JWT checks");
+        passive.addActionListener(e -> settings.setRunPassiveChecks(passive.isSelected()));
+        t.add(passive);
+        t.add(gap());
 
-        add(section("JavaScript collection"));
-        JCheckBox saveJs = leftCheck("Save collected JS to disk", settings.isSaveJsToDisk());
-        saveJs.addActionListener(e -> settings.setSaveJsToDisk(saveJs.isSelected()));
-        add(saveJs);
-        JCheckBox libJs = leftCheck("Analyze library / vendor / 3rd-party JS too (slower, noisier)",
-                settings.isAnalyzeLibraryJs());
-        libJs.setToolTipText("Off: JS recognized as a library, vendor chunk or third-party script is still "
-                + "collected and secret-scanned, but skips endpoint extraction and deep JS analysis. "
-                + "Applies to JS ingested after the change.");
-        libJs.addActionListener(e -> settings.setAnalyzeLibraryJs(libJs.isSelected()));
-        add(libJs);
-        add(jsDirRow());
-        add(gap());
-
-        add(section("Custom detection rules"));
-        add(new JLabel("User regex rules run alongside the built-in secret scan "
-                + "(apply to new traffic and the next ingest). Saved across restarts."));
-        add(rulesTable());
-        add(addRuleRow());
-        add(gap());
-
-        add(section("Actions"));
-        add(actionsRow());
-        add(progressRow());
-        add(gap());
-
-        add(section("Wordlists (for ffuf / Intruder)"));
-        add(wordlistRow());
-        add(gap());
-
-        add(section("Match & Replace bulk send (active)"));
-        add(new JLabel("Replays selected Endpoints rows with a header/cookie value or raw-request "
-                + "match/replace applied. Off by default — a flag here plus a per-run confirmation "
-                + "dialog (this is ReconHub's only traffic-generating feature)."));
-        JCheckBox matchReplaceEnabled = leftCheck("Enable Match & Replace",
-                settings.isMatchReplaceEnabled());
-        matchReplaceEnabled.addActionListener(
-                e -> settings.setMatchReplaceEnabled(matchReplaceEnabled.isSelected()));
-        add(matchReplaceEnabled);
-        add(spinnerRow("Delay between requests (ms):", settings.getMatchReplaceDelayMs(),
-                0, 60000, 25, settings::setMatchReplaceDelayMs));
-        add(spinnerRow("Concurrency (requests sent in parallel):",
-                settings.getMatchReplaceConcurrency(), 1, 10, 1, settings::setMatchReplaceConcurrency));
-        add(gap());
-
-        add(section("Memory"));
-        add(new JLabel("Captured request/response bodies are kept off the JVM heap (in Burp's own "
-                + "temp store) automatically — this keeps memory low over long engagements with no setup."));
-        add(new JLabel("Optional cap on how many rows each table keeps; 0 = unlimited. Above the cap the "
-                + "oldest rows are dropped from ReconHub's model (Burp's own history is untouched)."));
-        add(spinnerRow("Max retained items per table (0 = unlimited):", settings.getMaxRetainedItems(),
+        t.add(section("Memory"));
+        JPanel cap = spinnerRow("Max rows per table (0 = unlimited):", settings.getMaxRetainedItems(),
                 0, 1_000_000, 1000, n -> {
                     settings.setMaxRetainedItems(n);
                     store.setMaxRetained(settings.getMaxRetainedItems());   // read back the clamped value
-                }));
-        add(gap());
+                });
+        cap.setToolTipText("Bodies are already kept off the JVM heap. Above the cap the oldest rows leave "
+                + "ReconHub's tables (Burp's own history is untouched).");
+        t.add(cap);
+        return t;
+    }
 
-        add(section("Backup / State"));
+    private JPanel jsTab() {
+        JPanel t = tabBody();
+        t.add(section("Collected JavaScript"));
+        JCheckBox saveJs = leftCheck("Save collected JS to disk", settings.isSaveJsToDisk());
+        saveJs.addActionListener(e -> settings.setSaveJsToDisk(saveJs.isSelected()));
+        t.add(saveJs);
+        t.add(jsDirRow());
+        JCheckBox libJs = leftCheck("Analyze library / vendor / third-party JS too (slower, noisier)",
+                settings.isAnalyzeLibraryJs());
+        libJs.setToolTipText("Off: library JS is still collected and secret-scanned, but skips endpoint "
+                + "extraction and deep analysis. Applies to JS ingested after the change.");
+        libJs.addActionListener(e -> settings.setAnalyzeLibraryJs(libJs.isSelected()));
+        t.add(libJs);
+        return t;
+    }
+
+    private JPanel findingsTab() {
+        JPanel t = tabBody();
+        JLabel display = section("Findings tab filter");
+        display.setToolTipText("View-only: hides rows in the Findings tab, never drops collected data");
+        t.add(display);
+        t.add(minSeverityRow());
+        t.add(categoryMuteRow());
+        t.add(gap());
+
+        JLabel custom = section("Custom detection rules");
+        custom.setToolTipText("Your regex rules run with the built-in secret scan on new traffic and the next "
+                + "ingest. Saved across restarts.");
+        t.add(custom);
+        t.add(rulesTable());
+        t.add(addRuleRow());
+        return t;
+    }
+
+    private JPanel matchReplaceTab() {
+        JPanel t = tabBody();
+        JLabel title = section("Match & Replace -- ACTIVE (sends requests)");
+        title.setForeground(SwingColors.WARN);
+        t.add(title);
+        JCheckBox enabled = leftCheck("Enable Match & Replace", settings.isMatchReplaceEnabled());
+        enabled.setToolTipText("ReconHub's only traffic-generating feature. Off by default; every run still asks "
+                + "for confirmation.");
+        enabled.addActionListener(e -> settings.setMatchReplaceEnabled(enabled.isSelected()));
+        t.add(enabled);
+        t.add(spinnerRow("Delay between requests (ms):", settings.getMatchReplaceDelayMs(),
+                0, 60000, 25, settings::setMatchReplaceDelayMs));
+        t.add(spinnerRow("Parallel requests:", settings.getMatchReplaceConcurrency(), 1, 10, 1,
+                settings::setMatchReplaceConcurrency));
+        return t;
+    }
+
+    private JPanel exportTab() {
+        JPanel t = tabBody();
+        t.add(section("Reports"));
+        t.add(reportRow());
+        t.add(reportOptionsRow());
+        t.add(gap());
+
+        t.add(section("Wordlists (ffuf / Intruder)"));
+        t.add(wordlistRow());
+        t.add(gap());
+
+        t.add(section("Backup"));
+        includeMessages.setText("Include raw requests/responses");
+        includeMessages.setToolTipText("Larger file; keeps the viewer and body search working after import");
         includeMessages.setAlignmentX(Component.LEFT_ALIGNMENT);
-        add(includeMessages);
-        add(stateRow());
-        add(gap());
+        t.add(includeMessages);
+        t.add(stateRow());
+        t.add(gap());
 
-        status.setForeground(new java.awt.Color(0x9aa4b2));
-        status.setAlignmentX(Component.LEFT_ALIGNMENT);
-        add(status);
+        t.add(section("Data"));
+        t.add(dataRow());
+        return t;
+    }
 
-        rulesModel.reload();
+    /** Keeps a tab's rows at their natural height at the top; spare space stays below them. */
+    private static JPanel pinTop(JPanel body) {
+        JPanel holder = new JPanel(new java.awt.BorderLayout());
+        holder.add(body, java.awt.BorderLayout.NORTH);
+        return holder;
+    }
+
+    private static JPanel tabBody() {
+        JPanel t = new JPanel();
+        t.setLayout(new BoxLayout(t, BoxLayout.Y_AXIS));
+        t.setBorder(BorderFactory.createEmptyBorder(6, 8, 8, 8));
+        return t;
     }
 
     private JPanel scopeRow() {
@@ -249,42 +300,47 @@ public final class SettingsPanel extends JPanel {
         return p;
     }
 
-    private JPanel actionsRow() {
+    private JPanel reportRow() {
         JPanel p = leftFlow();
-        ingestButton.addActionListener(e -> doIngest());
-        JButton clear = new JButton("Clear data");
-        clear.addActionListener(e -> doClear());
-        JButton removeOutOfScope = new JButton("Remove out-of-scope hosts…");
-        removeOutOfScope.setToolTipText("Delete all data for every known host that Burp's scope "
-                + "(and any include/exclude regex above) would reject -- only meaningful when Scope "
-                + "Mode is \"Burp Scope\" or a regex is set; with Scope Mode \"All\" nothing is ever "
-                + "out of scope");
-        removeOutOfScope.addActionListener(e -> doRemoveOutOfScope());
-        JButton json = new JButton("Export JSON…");
+        JButton json = new JButton("JSON…");
         json.addActionListener(e -> exportJson());
-        JButton html = new JButton("Export HTML…");
+        JButton html = new JButton("HTML…");
         html.addActionListener(e -> exportHtml());
-        JButton md = new JButton("Export Markdown…");
+        JButton md = new JButton("Markdown…");
         md.addActionListener(e -> exportMarkdown());
-        JButton sarif = new JButton("Export SARIF…");
-        sarif.setToolTipText("SARIF 2.1.0 for CI / code-scanning (respects the scope options)");
+        JButton sarif = new JButton("SARIF…");
+        sarif.setToolTipText("SARIF 2.1.0 for CI / code scanning");
         sarif.addActionListener(e -> exportSarif());
-        reportConfirmedOnly.setToolTipText("HTML/Markdown/JSON/SARIF export: include only Confirmed findings");
-        reportExcludeFp.setToolTipText("HTML/Markdown/JSON/SARIF export: drop findings marked False positive");
-        reportBookmarkedOnly.setToolTipText("HTML/Markdown/JSON/SARIF export: include only bookmarked (★) "
-                + "rows -- applies to every section (Endpoints/Parameters/Findings/JS/Tech), not just Findings");
-        p.add(ingestButton);
-        p.add(clear);
-        p.add(removeOutOfScope);
-        p.add(Box.createHorizontalStrut(16));
         p.add(json);
         p.add(html);
         p.add(md);
         p.add(sarif);
-        p.add(Box.createHorizontalStrut(10));
+        return p;
+    }
+
+    private JPanel reportOptionsRow() {
+        JPanel p = leftFlow();
+        reportConfirmedOnly.setToolTipText("Include only Confirmed findings");
+        reportExcludeFp.setToolTipText("Drop findings marked False positive");
+        reportBookmarkedOnly.setToolTipText("Include only bookmarked rows, in every section");
+        p.add(new JLabel("Include:"));
         p.add(reportConfirmedOnly);
         p.add(reportExcludeFp);
         p.add(reportBookmarkedOnly);
+        return p;
+    }
+
+    private JPanel dataRow() {
+        JPanel p = leftFlow();
+        JButton clear = new JButton("Clear data");
+        clear.setToolTipText("Empty ReconHub's tables (Burp's own history is untouched)");
+        clear.addActionListener(e -> doClear());
+        JButton removeOutOfScope = new JButton("Remove out-of-scope hosts…");
+        removeOutOfScope.setToolTipText("Delete data for every host the current scope rejects "
+                + "(nothing is out of scope with \"All traffic\")");
+        removeOutOfScope.addActionListener(e -> doRemoveOutOfScope());
+        p.add(clear);
+        p.add(removeOutOfScope);
         return p;
     }
 
@@ -308,16 +364,24 @@ public final class SettingsPanel extends JPanel {
     }
 
     private JPanel categoryMuteRow() {
-        JPanel p = leftFlow();
-        p.add(new JLabel("Mute categories:"));
+        JPanel p = new JPanel(new java.awt.BorderLayout(8, 0));
+        p.setAlignmentX(Component.LEFT_ALIGNMENT);
+        p.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
+        JLabel l = new JLabel("Hide categories:");
+        l.setVerticalAlignment(JLabel.TOP);
+        p.add(l, java.awt.BorderLayout.WEST);
+        JPanel grid = new JPanel(new java.awt.GridLayout(0, 4, 12, 0));
+        p.add(grid, java.awt.BorderLayout.CENTER);
         for (FindingTaxonomy.Category c : FindingTaxonomy.Category.values()) {
             JCheckBox b = new JCheckBox(c.label(), settings.isCategoryMuted(c));
             b.addActionListener(e -> {
                 settings.setCategoryMuted(c, b.isSelected());
                 store.fireChanged();
             });
-            p.add(b);
+            grid.add(b);
         }
+        // Natural size only: an unbounded maximum let the BoxLayout stretch the grid cells far apart.
+        p.setMaximumSize(p.getPreferredSize());
         return p;
     }
 

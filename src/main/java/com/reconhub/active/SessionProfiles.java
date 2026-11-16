@@ -55,6 +55,18 @@ public final class SessionProfiles {
 
     private final Map<String, Identity> byName = new LinkedHashMap<>();
     private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
+    // 0.64.0: app API key headers (X-Api-Key, ...) belong to the app, not the user -- keep them when switching
+    // identity / removing auth unless the user turns this off. Memory only, like the identities.
+    private volatile boolean keepAppKeys = true;
+
+    public boolean isKeepAppKeys() {
+        return keepAppKeys;
+    }
+
+    public void setKeepAppKeys(boolean keep) {
+        keepAppKeys = keep;
+        fire();
+    }
 
     /** Adds or replaces (same name) an identity; a blank or built-in name is ignored. */
     public void put(Identity id) {
@@ -145,8 +157,13 @@ public final class SessionProfiles {
      * credential, then set each of its headers (added if missing) and cookies.
      */
     public static List<MatchReplaceRule> rulesFor(Identity id) {
+        return rulesFor(id, false);
+    }
+
+    /** {@code keepAppKeys}: leave app API key headers the identity doesn't set itself (0.64.0). */
+    public static List<MatchReplaceRule> rulesFor(Identity id, boolean keepAppKeys) {
         List<MatchReplaceRule> out = new ArrayList<>();
-        out.add(MatchReplaceRule.stripAuthExcept(id.headers().keySet(), id.cookies().keySet()));
+        out.add(MatchReplaceRule.stripAuthExcept(keepList(id.headers().keySet(), keepAppKeys), id.cookies().keySet()));
         for (Map.Entry<String, String> h : id.headers().entrySet()) {
             out.add(new MatchReplaceRule(MatchReplaceRule.Mode.HEADER, h.getKey(), "", false, h.getValue(), true));
         }
@@ -159,18 +176,28 @@ public final class SessionProfiles {
     /** Strip every credential the request carries (the "No auth" identity): the whole Cookie header,
      * Authorization, and any other confirmed auth header. */
     public static List<MatchReplaceRule> removeAuthRules() {
+        return removeAuthRules(false);
+    }
+
+    public static List<MatchReplaceRule> removeAuthRules(boolean keepAppKeys) {
         List<MatchReplaceRule> out = new ArrayList<>();
         out.add(new MatchReplaceRule(MatchReplaceRule.Mode.REMOVE_HEADER, "Cookie", "", false, "", false));
         out.add(new MatchReplaceRule(MatchReplaceRule.Mode.REMOVE_HEADER, "Authorization", "", false, "", false));
-        out.add(MatchReplaceRule.stripAuthExcept(List.of(), List.of()));
+        out.add(MatchReplaceRule.stripAuthExcept(keepList(List.of(), keepAppKeys), List.of()));
         return out;
+    }
+
+    private static List<String> keepList(java.util.Collection<String> headers, boolean keepAppKeys) {
+        List<String> keep = new ArrayList<>(headers);
+        if (keepAppKeys) keep.add(AuthDetector.KEEP_APP_KEYS);
+        return keep;
     }
 
     /** Rules for an identity by name: built-ins included (Original = no rules). Null when unknown. */
     public List<MatchReplaceRule> rulesForName(String name) {
         if (ORIGINAL.equalsIgnoreCase(name)) return List.of();
-        if (NO_AUTH.equalsIgnoreCase(name)) return removeAuthRules();
+        if (NO_AUTH.equalsIgnoreCase(name)) return removeAuthRules(keepAppKeys);
         Identity id = get(name);
-        return id == null ? null : rulesFor(id);
+        return id == null ? null : rulesFor(id, keepAppKeys);
     }
 }

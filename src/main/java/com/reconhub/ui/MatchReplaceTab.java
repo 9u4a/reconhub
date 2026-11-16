@@ -13,7 +13,7 @@ import java.awt.BorderLayout;
  * The Match &amp; Replace tab: {@link SessionsPanel} on the left (0.60.0), {@link MatchReplaceResultsView} --
  * runs, outcome chips, matrix / list -- on the right (0.62.0).
  */
-final class MatchReplaceTab extends JPanel implements Refreshable {
+final class MatchReplaceTab extends JPanel implements Refreshable, SearchFocusable {
 
     private final MatchReplacePanel results;
     private final MatchReplaceResultsView view;
@@ -35,6 +35,19 @@ final class MatchReplaceTab extends JPanel implements Refreshable {
     void showRun(MatchReplaceJob job) {
         results.refreshData();
         view.showRun(job);
+    }
+
+    @Override
+    public void focusSearch() {
+        view.focusSearch();
+    }
+
+    /** True when focus sits in any embedded Request/Response editor (matrix cell or list detail). */
+    @Override
+    public boolean isFocusInsideViewer() {
+        java.awt.Component f = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+        if (f == null || !javax.swing.SwingUtilities.isDescendingFrom(f, this)) return false;
+        return javax.swing.SwingUtilities.getAncestorOfClass(MessageViewer.class, f) != null;
     }
 
     @Override

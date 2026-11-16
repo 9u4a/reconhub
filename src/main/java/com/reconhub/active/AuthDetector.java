@@ -51,6 +51,10 @@ public final class AuthDetector {
                     + "|mp_.{0,60}|optimizely.{0,40}|_clck|_clsk|_uetsid|_uetvid|_ttp|_tt_.{0,40}|wcs_bt|nid"
                     + "|cookieconsent.{0,40}|cookie_consent.{0,40}|optanon.{0,40}|_dc_gtm.{0,40}|__utm.{0,10}|_pk_.{0,40}"
                     + "|intercom-.{0,60}|ch-veil-id|ch-session-.{0,40}|_lfa|_ce\\..{0,20}|_dd_s|lang|locale|language|theme)$");
+    /** An application / client API key header (shared by every user, not the identity) -- 0.64.0. */
+    private static final Pattern APP_KEY_HEADER = Pattern.compile("(?i)^[a-z0-9-]{0,40}api-?key$");
+    /** Keep-list token meaning "keep app API key headers" in a STRIP_AUTH plan. */
+    public static final String KEEP_APP_KEYS = "*appkeys";
     private static final Pattern TOKEN_CHARS = Pattern.compile("[A-Za-z0-9+/=_.%~-]{24,4096}");
 
     private AuthDetector() {}
@@ -146,6 +150,9 @@ public final class AuthDetector {
         List<String>[] out = new List[]{new ArrayList<String>(), new ArrayList<String>()};
         for (Part p : detect(headers)) {
             if (p.confidence() != Confidence.CONFIRMED) continue;
+            if (p.kind() == Kind.HEADER && keepHeadersLower.contains(KEEP_APP_KEYS) && isAppKeyHeader(p.name())) {
+                continue;
+            }
             if (p.kind() == Kind.HEADER && !keepHeadersLower.contains(p.name().toLowerCase(Locale.ROOT))) {
                 out[0].add(p.name());
             } else if (p.kind() == Kind.COOKIE && !keepCookies.contains(p.name())) {
@@ -153,6 +160,11 @@ public final class AuthDetector {
             }
         }
         return out;
+    }
+
+    /** X-Api-Key, apikey, X-Goog-Api-Key, ... -- an app key shared by all users. */
+    public static boolean isAppKeyHeader(String name) {
+        return name != null && APP_KEY_HEADER.matcher(name.trim()).matches();
     }
 
     // ---- JWT summary -----------------------------------------------------------------------

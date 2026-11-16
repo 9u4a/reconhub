@@ -118,6 +118,24 @@ class SessionDetectionTest {
     }
 
     @Test
+    void appApiKeysAreKeptWhenAsked() {
+        List<String[]> h = headers("Authorization", "Bearer A", "X-Api-Key", "k", "X-Goog-Api-Key", "g");
+        List<String>[] plan = AuthDetector.stripPlan(h, Set.of(AuthDetector.KEEP_APP_KEYS), Set.of());
+        assertEquals(List.of("Authorization"), plan[0]);
+        assertTrue(AuthDetector.isAppKeyHeader("apikey"));
+        assertFalse(AuthDetector.isAppKeyHeader("X-Auth-Token"));
+        // the rule chain carries the token through keepSpec (which lowercases header names)
+        MatchReplaceRule strip = SessionProfiles.removeAuthRules(true).get(2);
+        assertEquals(List.of("Authorization"),
+                AuthDetector.stripPlan(h, strip.keepSpec()[0], strip.keepSpec()[1])[0]);
+        SessionProfiles s = new SessionProfiles();
+        assertTrue(s.isKeepAppKeys(), "on by default");
+        s.setKeepAppKeys(false);
+        MatchReplaceRule off = s.rulesForName(SessionProfiles.NO_AUTH).get(2);
+        assertEquals(3, AuthDetector.stripPlan(h, off.keepSpec()[0], off.keepSpec()[1])[0].size());
+    }
+
+    @Test
     void storeNamesListenersAndBuiltIns() {
         SessionProfiles s = new SessionProfiles();
         int[] fired = {0};
