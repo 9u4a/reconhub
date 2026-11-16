@@ -62,13 +62,15 @@ final class MatchReplaceResultsView extends JPanel {
     private final Set<MatrixModel.Outcome> activeOutcomes = EnumSet.noneOf(MatrixModel.Outcome.class);
     private final CardLayout cards = new CardLayout();
     private final JPanel cardPanel = new JPanel(cards);
+    // Declared before matrixModel / matrix: new JTable(...) queries the table model (column count) during
+    // construction, so these must already be initialized (field initializers run in declaration order).
+    private MatrixModel model = MatrixModel.of(List.of(), List.of());
+    private List<MatrixModel.Row> visibleRows = List.of();
     private final MatrixTableModel matrixModel = new MatrixTableModel();
     private final JTable matrix = new JTable(matrixModel);
     private final MessageViewer cellOriginal;
     private final MessageViewer cellResend;
     private final JLabel empty = new JLabel(" ");
-    private MatrixModel model = MatrixModel.of(List.of(), List.of());
-    private List<MatrixModel.Row> visibleRows = List.of();
     private boolean rebuilding;
     private List<String> lastColumns = List.of();
     // Coalesces result-driven refreshes: a fast run reports every send, the view rebuilds at most ~4x/s.
