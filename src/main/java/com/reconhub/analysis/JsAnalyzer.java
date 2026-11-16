@@ -50,26 +50,26 @@ public final class JsAnalyzer {
     private final DataStore store;
     private final PatternRegistry patterns;
     private final SecretScanner secretScanner;
-    private final SecretScanner jsFindingScanner;   // crypto/authz/config/api-auth locators (0.47.0)
-    private final JsFlowAnalyzer flowAnalyzer;       // actionable source→sink flow findings (0.52.0)
-    private final JsPairAnalyzer pairAnalyzer;        // actionable anchor→target pairings (0.53.0)
+    // Flat JS rules whose matches are Leads (lead=true: key/IV value, internal host, bucket, API base);
+    // the rest become per-file notes via JsStructuralAnalyzer (0.58.0).
+    private final SecretScanner jsLeadScanner;
+    private final JsStructuralAnalyzer.Rules structuralRules;
     private final CommentExtractor commentExtractor;
     private final SourceMapDetector sourceMapDetector;
     private final Settings settings;
     private final AtomicInteger saveFailures = new AtomicInteger();
 
     public JsAnalyzer(MontoyaApi api, DataStore store, PatternRegistry patterns,
-                      SecretScanner secretScanner, SecretScanner jsFindingScanner,
-                      JsFlowAnalyzer flowAnalyzer, JsPairAnalyzer pairAnalyzer,
+                      SecretScanner secretScanner, SecretScanner jsLeadScanner,
+                      JsStructuralAnalyzer.Rules structuralRules,
                       CommentExtractor commentExtractor,
                       SourceMapDetector sourceMapDetector, Settings settings) {
         this.api = api;
         this.store = store;
         this.patterns = patterns;
         this.secretScanner = secretScanner;
-        this.jsFindingScanner = jsFindingScanner;
-        this.flowAnalyzer = flowAnalyzer;
-        this.pairAnalyzer = pairAnalyzer;
+        this.jsLeadScanner = jsLeadScanner;
+        this.structuralRules = structuralRules;
         this.commentExtractor = commentExtractor;
         this.sourceMapDetector = sourceMapDetector;
         this.settings = settings;
@@ -113,25 +113,33 @@ public final class JsAnalyzer {
             return;
         }
 
-        // Deep JS analysis (0.47.0): crypto/authz/sink/config locators. Runs here (not only in
-        // TrafficIngestor.process) so a manually-imported JS file is analyzed too. Findings only --
-        // not counted into the "Secrets" column.
-        if (jsFindingScanner != null) {
-            jsFindingScanner.scan(body, url, messages);
+        // Deep JS analysis. Runs here (not only in TrafficIngestor.process) so a manually-imported JS
+        // file is analyzed too. Flat lead rules → Findings (not counted into the "Secrets" column).
+        if (jsLeadScanner != null) {
+            jsLeadScanner.scan(body, url, messages);
         }
         recordHiddenParams(url, body, messages);
-        // Actionable DOM-XSS-style flow findings (source→sink proximity + how-to-test hint, 0.52.0).
-        if (flowAnalyzer != null) {
-            flowAnalyzer.analyze(body, url, messages);
-        }
-        // Actionable anchor→target pairings (gated route, embedded key, 0.53.0).
-        if (pairAnalyzer != null) {
-            pairAnalyzer.analyze(body, url, messages);
-        }
+        // Structural pass (0.58.0): DOM XSS / pair Leads → Findings, everything unproven → file notes.
+        recordStructural(asset, body, url, messages);
 
         if (settings.isRunPassiveChecks()) {
             commentExtractor.extractJs(body, url, messages);
         }
+    }
+
+    /** Runs {@link JsStructuralAnalyzer} and records its output: Leads as Findings, the rest as notes on
+     * {@code asset}. Also used to rebuild notes/Leads from stored JS after a state import. */
+    public void recordStructural(JsAsset asset, String body, String url, HttpRequestResponse messages) {
+        if (structuralRules == null) {
+            return;
+        }
+        JsStructuralAnalyzer.Result r = JsStructuralAnalyzer.analyze(body, structuralRules);
+        for (JsStructuralAnalyzer.Lead l : r.leads()) {
+            Finding f = new Finding(l.type(), l.severity(), l.rawMatch(), url, l.evidence(), false);
+            f.setMessages(messages);
+            store.recordFinding(f);
+        }
+        asset.setNotes(r.notes());
     }
 
     /** Logs a "Save JS to disk" failure, rate-limited: an unwritable directory fails for *every* JS

@@ -1,8 +1,9 @@
 {
-  "comment": "Anchor->target proximity pairings (0.53.0). JsPairAnalyzer finds an 'anchor' (a piece of logic) and extracts a concrete 'target' appearing within a proximity window in the same JS body, emitting ONE actionable finding (anchor -> target, try X). Passive/static regex proximity, not taint/AST -- a lead to confirm by hand. Bounded regex (ReDoS). Reported non-sensitive.",
+  "comment": "Anchor->target pairings (0.53.0; structural since 0.58.0). JsStructuralAnalyzer finds an 'anchor' (a piece of logic) and a concrete 'target' structurally linked to it, emitting ONE Lead (anchor -> target, try X). link=guard: the target is used inside the code the anchor guards (if-branch, &&/?: operand, wrapped call, enclosing object literal). link=argument: the target literal is passed into the anchor's call directly or via a same-scope variable. A target merely nearby becomes a per-file note. Token-stream structure, not an AST. Bounded regex (ReDoS). Reported non-sensitive.",
   "pairs": [
     {
       "name": "Client-side authorization gate -> route",
+      "link": "guard",
       "severity": "MEDIUM",
       "anchor": "(?i)(?:is_?admin|has_?role|has_?permission|can_?access|requireRole|requireAuth|authGuard|roleGuard|canActivate|beforeEnter|PrivateRoute|ProtectedRoute|RequireAuth|withAuth)\\b",
       "target": "[\"'](/[A-Za-z0-9_./:-]{1,60})[\"']",
@@ -10,9 +11,10 @@
     },
     {
       "name": "Embedded crypto key/IV -> value",
+      "link": "argument",
       "severity": "HIGH",
       "anchor": "CryptoJS\\.|crypto\\.subtle\\.|(?:new\\s{1,5})?JSEncrypt\\s{0,5}\\(|forge\\.(?:cipher|aes|rsa|des)|sjcl\\.(?:encrypt|decrypt)",
-      "target": "[\"']([A-Za-z0-9+/=_-]{16,64})[\"']",
+      "target": "[\"'](?!(?:RSA|AES|SHA|HMAC|PKCS|ECDSA|ECDH|PBKDF|HKDF|DES|RC4|X25519|Ed25519)[A-Za-z0-9_-]{0,60}[\"'])([A-Za-z0-9+/=_-]{16,64})[\"']",
       "note": "a key/IV/secret is embedded next to client-side crypto -- extract it and decrypt or forge offline (e.g. CyberChef); client-side crypto is not a control"
     }
   ]

@@ -322,6 +322,17 @@ public final class JsAssetsPanel extends AbstractTablePanel<JsAsset> {
             }
         }
 
+        // 0.58.0: matches the structural pass could not prove (unlinked source/sink, anchor/target, flat
+        // locator rules) -- reference for manual review, deliberately not Findings.
+        List<String> notes = a.getNotes();
+        if (!notes.isEmpty()) {
+            sb.append("\nNotes -- not Leads, for manual review (").append(notes.size()).append("):\n");
+            for (String n : notes) {
+                sb.append("  - ").append(n).append('\n');
+            }
+        }
+        sb.append('\n');
+
         // hasOrigin (0.43.9), not getOrigins().contains(...) -- this runs over every endpoint in the
         // store on every row selection/arrow-key move, and hasOrigin is an O(1) lookup against the raw
         // set instead of materializing each endpoint's sorted TreeSet snapshot just to test membership.

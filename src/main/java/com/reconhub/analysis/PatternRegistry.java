@@ -26,16 +26,24 @@ public final class PatternRegistry {
         /** Optional "how to use/test this" hint appended to the finding's evidence (0.53.0). Null for
          * rules that don't carry one (secrets/signatures/response-authz). */
         public final String note;
+        /** JS deep-analysis rules only (0.58.0): true when a match names a concrete target (a key, a host,
+         * a bucket) and so is a Lead recorded as a Finding; false = a per-file note on the JS asset. */
+        public final boolean lead;
 
         SecretRule(String name, Finding.Severity severity, Pattern pattern) {
             this(name, severity, pattern, null);
         }
 
         SecretRule(String name, Finding.Severity severity, Pattern pattern, String note) {
+            this(name, severity, pattern, note, false);
+        }
+
+        SecretRule(String name, Finding.Severity severity, Pattern pattern, String note, boolean lead) {
             this.name = name;
             this.severity = severity;
             this.pattern = pattern;
             this.note = note;
+            this.lead = lead;
         }
     }
 
@@ -49,7 +57,7 @@ public final class PatternRegistry {
         }
     }
 
-    /** A DOM-XSS-style source (attacker-controllable input) for {@code JsFlowAnalyzer} (0.52.0). */
+    /** A DOM-XSS-style source (attacker-controllable input) for {@code JsStructuralAnalyzer} (0.52.0). */
     public static final class JsSource {
         public final String name;
         public final Pattern pattern;
@@ -71,26 +79,42 @@ public final class PatternRegistry {
         }
     }
 
-    /** An anchor→target proximity pairing for {@code JsPairAnalyzer} (0.53.0): find {@code anchor}
-     * (a piece of logic), extract the nearest {@code target} (a concrete value, group 1 if present). */
+    /** An anchor→target pairing for {@code JsStructuralAnalyzer} (0.53.0, structural since 0.58.0): find
+     * {@code anchor} (a piece of logic) and the {@code target} (a concrete value, group 1 if present) it is
+     * structurally linked to -- see {@link Link}. */
     public static final class JsPair {
+        /** How a target must relate to the anchor to count. */
+        public enum Link {
+            /** The target is used inside the code the anchor guards (if-branch, && / ?: operand, the call
+             * it wraps or is an argument of, or the object literal it sits in). */
+            GUARD,
+            /** The target literal is passed into the anchor's call, directly or via a same-scope variable. */
+            ARGUMENT
+        }
+
         public final String name;
         public final Finding.Severity severity;
         public final Pattern anchor;
         public final Pattern target;
         public final String note;
+        public final Link link;
 
         JsPair(String name, Finding.Severity severity, Pattern anchor, Pattern target, String note) {
+            this(name, severity, anchor, target, note, Link.GUARD);
+        }
+
+        JsPair(String name, Finding.Severity severity, Pattern anchor, Pattern target, String note, Link link) {
             this.name = name;
             this.severity = severity;
             this.anchor = anchor;
             this.target = target;
             this.note = note;
+            this.link = link == null ? Link.GUARD : link;
         }
     }
 
-    /** A dangerous sink for {@code JsFlowAnalyzer}; {@code always} sinks (eval, ...) are reported even
-     * with no nearby source. */
+    /** A dangerous sink for {@code JsStructuralAnalyzer}; since 0.58.0 even {@code always} sinks (eval, ...)
+     * need a provable source to be a Lead -- without one they become a per-file note. */
     public static final class JsSink {
         public final String name;
         public final Pattern pattern;
@@ -147,6 +171,10 @@ public final class PatternRegistry {
     public List<SecretRule> signatureRules() { return signatureRules; }
     public List<SecretRule> authzRules() { return authzRules; }
     public List<SecretRule> jsFindingRules() { return jsFindingRules; }
+    /** The JS deep-analysis rules whose matches are Leads (recorded as Findings). */
+    public List<SecretRule> jsLeadRules() { return jsFindingRules.stream().filter(r -> r.lead).toList(); }
+    /** The JS deep-analysis rules whose matches are per-file notes only. */
+    public List<SecretRule> jsNoteRules() { return jsFindingRules.stream().filter(r -> !r.lead).toList(); }
     public List<JsSource> jsSources() { return jsSources; }
     public List<JsSink> jsSinks() { return jsSinks; }
     public List<JsPair> jsPairs() { return jsPairs; }
@@ -211,7 +239,7 @@ public final class PatternRegistry {
 
     private static final class SecretsFile {
         List<Raw> patterns;
-        static final class Raw { String name; String severity; String regex; String note; }
+        static final class Raw { String name; String severity; String regex; String note; boolean lead; }
     }
 
     private static final class JsFile {
@@ -248,7 +276,7 @@ public final class PatternRegistry {
 
     private static final class PairsFile {
         List<Raw> pairs;
-        static final class Raw { String name; String severity; String anchor; String target; String note; }
+        static final class Raw { String name; String severity; String anchor; String target; String note; String link; }
     }
 
     // ---- Loading --------------------------------------------------------
@@ -309,7 +337,7 @@ public final class PatternRegistry {
             for (SecretsFile.Raw raw : f.patterns) {
                 try {
                     jsFindingRules.add(new SecretRule(raw.name, parseSeverity(raw.severity),
-                            Pattern.compile(raw.regex), raw.note));
+                            Pattern.compile(raw.regex), raw.note, raw.lead));
                 } catch (PatternSyntaxException e) {
                     loadErrors.add(path + "[" + raw.name + "]: " + e.getMessage());
                 }
@@ -351,8 +379,9 @@ public final class PatternRegistry {
         }
         for (PairsFile.Raw raw : f.pairs) {
             try {
+                JsPair.Link link = "argument".equalsIgnoreCase(raw.link) ? JsPair.Link.ARGUMENT : JsPair.Link.GUARD;
                 jsPairs.add(new JsPair(raw.name, parseSeverity(raw.severity),
-                        Pattern.compile(raw.anchor), Pattern.compile(raw.target), raw.note));
+                        Pattern.compile(raw.anchor), Pattern.compile(raw.target), raw.note, link));
             } catch (PatternSyntaxException e) {
                 loadErrors.add("js-pairs[" + raw.name + "]: " + e.getMessage());
             }

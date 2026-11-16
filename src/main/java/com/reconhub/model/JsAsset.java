@@ -3,6 +3,7 @@ package com.reconhub.model;
 import burp.api.montoya.http.message.HttpRequestResponse;
 
 import java.net.URI;
+import java.util.List;
 
 /**
  * A JavaScript file collected from traffic. Deduplicated by SHA-256 of its body, so the same
@@ -20,6 +21,9 @@ public final class JsAsset {
     // Library / vendor-chunk / third-party label from JsLibraryClassifier (0.55.0); "" = app code.
     private volatile String kind = "";
     private volatile HttpRequestResponse messages;   // null for a manually-imported local file
+    // Per-file notes from JsStructuralAnalyzer (0.58.0): rule matches that are not Leads. Shown in the
+    // JS Assets detail only; never serialized (recomputed from stored JS on state import).
+    private volatile List<String> notes = List.of();
     private volatile String host;      // derived lazily from url -- see getHost()
 
     public JsAsset(String url, String sha256, int sizeBytes) {
@@ -68,6 +72,7 @@ public final class JsAsset {
     public String getKind() { return kind; }
     public boolean isLibrary() { return !kind.isEmpty(); }
     public HttpRequestResponse getMessages() { return messages; }
+    public List<String> getNotes() { return notes; }
 
     public void setExtractedEndpoints(int n) { this.extractedEndpoints = n; }
     public void setExtractedSecrets(int n) { this.extractedSecrets = n; }
@@ -75,4 +80,5 @@ public final class JsAsset {
     public void setPreview(String p) { this.preview = p == null ? "" : p; }
     public void setKind(String k) { this.kind = k == null ? "" : k; }
     public void setMessages(HttpRequestResponse m) { this.messages = m; }
+    public void setNotes(List<String> n) { this.notes = n == null ? List.of() : List.copyOf(n); }
 }
