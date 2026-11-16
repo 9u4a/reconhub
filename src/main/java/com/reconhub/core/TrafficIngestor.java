@@ -220,6 +220,38 @@ public final class TrafficIngestor implements HttpHandler {
     }
 
     /**
+     * After a state import (0.58.0): rebuilds per-file notes and structural Leads for every JS asset that
+     * has none yet, reading each body from its saved file. Runs on the ingest executor (off the EDT);
+     * assets without a readable saved file are skipped. {@code onDone(rebuilt)} runs on that thread.
+     */
+    public void rebuildJsNotesAsync(Consumer<Integer> onDone) {
+        executor.submit(() -> {
+            int rebuilt = 0;
+            for (com.reconhub.model.JsAsset a : store.snapshotJsAssets()) {
+                String path = a.getSavedPath();
+                if (!a.getNotes().isEmpty() || path == null || path.isBlank()) {
+                    continue;
+                }
+                try {
+                    String body = java.nio.file.Files.readString(java.nio.file.Path.of(path),
+                            java.nio.charset.StandardCharsets.UTF_8);
+                    if (!a.getSha256().equals(HashUtil.sha256(body))) {
+                        continue;   // file changed on disk since it was saved -- not the same bundle
+                    }
+                    jsAnalyzer.rebuildFromStored(a, body);
+                    rebuilt++;
+                } catch (java.io.IOException | RuntimeException e) {
+                    // missing / unreadable saved file: notes simply stay empty for this asset
+                }
+            }
+            store.fireChanged();
+            if (onDone != null) {
+                onDone.accept(rebuilt);
+            }
+        });
+    }
+
+    /**
      * Analyzes a locally-imported JS file's text through the same pipeline as JS seen in traffic
      * (endpoint/secret extraction, optional save-to-disk) — no request is sent. {@code syntheticUrl}
      * is a display/join key (e.g. {@code "import://app.js"}), not a real URL. Content-hash dedup means

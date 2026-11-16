@@ -636,6 +636,15 @@ public final class SettingsPanel extends JPanel {
                         // fall through
                     }
                     setStatus(summary != null ? summary : "Import complete.");
+                    // 0.58.0: per-file JS notes / structural Leads aren't in the state file -- rebuild
+                    // them from the saved JS bodies in the background.
+                    final String base = summary != null ? summary : "Import complete.";
+                    ingestor.rebuildJsNotesAsync(n -> {
+                        if (n > 0) {
+                            javax.swing.SwingUtilities.invokeLater(() ->
+                                    setStatus(base + "  (JS notes rebuilt for " + n + " file(s))"));
+                        }
+                    });
                 }
             }
         }.execute();

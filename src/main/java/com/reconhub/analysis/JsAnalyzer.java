@@ -128,14 +128,34 @@ public final class JsAnalyzer {
     }
 
     /** Runs {@link JsStructuralAnalyzer} and records its output: Leads as Findings, the rest as notes on
-     * {@code asset}. Also used to rebuild notes/Leads from stored JS after a state import. */
+     * {@code asset}. */
     public void recordStructural(JsAsset asset, String body, String url, HttpRequestResponse messages) {
+        recordStructural(asset, body, url, messages, false);
+    }
+
+    /**
+     * Rebuilds a state-imported asset's notes and Leads from its stored JS (0.58.0 -- notes are never
+     * serialized, so the state format is unchanged). Library JS follows the same gate as live analysis.
+     * Leads already in the store are left alone so a re-import doesn't inflate their seen count.
+     */
+    public void rebuildFromStored(JsAsset asset, String body) {
+        if (body == null || body.isEmpty() || (asset.isLibrary() && !settings.isAnalyzeLibraryJs())) {
+            return;
+        }
+        recordStructural(asset, body, asset.getUrl(), asset.getMessages(), true);
+    }
+
+    private void recordStructural(JsAsset asset, String body, String url, HttpRequestResponse messages,
+                                  boolean onlyNewLeads) {
         if (structuralRules == null) {
             return;
         }
         JsStructuralAnalyzer.Result r = JsStructuralAnalyzer.analyze(body, structuralRules);
         for (JsStructuralAnalyzer.Lead l : r.leads()) {
             Finding f = new Finding(l.type(), l.severity(), l.rawMatch(), url, l.evidence(), false);
+            if (onlyNewLeads && store.hasFinding(f.key())) {
+                continue;
+            }
             f.setMessages(messages);
             store.recordFinding(f);
         }
