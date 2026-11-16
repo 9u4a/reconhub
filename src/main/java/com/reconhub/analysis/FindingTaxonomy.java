@@ -55,6 +55,10 @@ public final class FindingTaxonomy {
     private static Category compute(String type) {
         String t = type.toLowerCase(Locale.ROOT);
 
+        // Client Flows (0.59.0) -- prefix first: the label is a fixed suffix, never a keyword for later branches.
+        if (t.startsWith("client flow")) {
+            return t.contains("idor") || t.contains("no auth") ? Category.AUTH : Category.API;
+        }
         // Access-control leads (0.56.0) -- prefix match first: the label after the colon is a route family
         // or a parameter name ("redirect", "debug", ...) that later keyword branches would otherwise claim.
         if (t.startsWith("unauthenticated access:") || t.startsWith("hidden parameter in js:")) {

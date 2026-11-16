@@ -229,6 +229,80 @@ final class JsStructure {
         return true;
     }
 
+    /** Function scopes containing sig {@code i}, innermost first (excluding the top level). */
+    List<Scope> enclosing(int i) {
+        List<Scope> out = new ArrayList<>();
+        for (int k = 1; k < scopes.size(); k++) {
+            Scope s = scopes.get(k);
+            if (s.head <= i && i <= s.bodyEnd) out.add(s);
+        }
+        out.sort((x, y) -> Integer.compare(x.bodyEnd - x.head, y.bodyEnd - y.head));
+        return out;
+    }
+
+    /** Argument expressions of the call whose '(' is at {@code open}: sig ranges [from, to], depth-0 commas. */
+    List<int[]> args(int open) {
+        List<int[]> out = new ArrayList<>();
+        int close = open >= 0 && open < n ? match[open] : -1;
+        if (close <= open) return out;
+        int start = open + 1;
+        int i = start;
+        while (i < close) {
+            char c = ch(i);
+            if ((c == '(' || c == '[' || c == '{') && match[i] > i) {
+                i = match[i] + 1;
+                continue;
+            }
+            if (c == ',') {
+                if (i > start) out.add(new int[]{start, i - 1});
+                start = i + 1;
+            }
+            i++;
+        }
+        if (close > start) out.add(new int[]{start, close - 1});
+        return out;
+    }
+
+    /** For an object literal whose '{' is at {@code brace}: depth-1 key → value sig range [from, to]
+     * (shorthand {@code {a}} maps a to its own token). Insertion-ordered. */
+    Map<String, int[]> objectEntries(int brace) {
+        Map<String, int[]> out = new java.util.LinkedHashMap<>();
+        if (ch(brace) != '{' || match[brace] <= brace) return out;
+        int close = match[brace];
+        int i = brace + 1;
+        while (i < close) {
+            if (ch(i) == '.' && ch(i + 1) == '.' && ch(i + 2) == '.') {   // spread: skip to next comma
+                i = skipToComma(i, close);
+                continue;
+            }
+            byte k = kind(i);
+            if ((k == JsLexer.IDENT || k == JsLexer.STRING || k == JsLexer.NUMBER) && ch(i + 1) == ':') {
+                int end = exprEnd(i + 2);
+                out.putIfAbsent(keyText(i), new int[]{i + 2, Math.min(end, close - 1)});
+                i = skipToComma(i + 2, close);
+            } else if (k == JsLexer.IDENT && (ch(i + 1) == ',' || i + 1 == close)) {
+                out.putIfAbsent(text(i), new int[]{i, i});
+                i += 2;
+            } else {
+                i = skipToComma(i, close);   // method shorthand, computed key, ...
+            }
+        }
+        return out;
+    }
+
+    private int skipToComma(int i, int close) {
+        while (i < close) {
+            char c = ch(i);
+            if ((c == '(' || c == '[' || c == '{') && match[i] > i) {
+                i = match[i] + 1;
+                continue;
+            }
+            i++;
+            if (c == ',') break;
+        }
+        return i;
+    }
+
     // ---- assignments ---------------------------------------------------------
 
     /** Assignments to {@code name} made in scope {@code scopeId} (never null). */
@@ -321,7 +395,7 @@ final class JsStructure {
 
     /** Parameter names bound in sig range [from, to]: identifiers not used as a key, default value, or property. */
     private Set<String> params(int from, int to) {
-        Set<String> out = new HashSet<>();
+        Set<String> out = new java.util.LinkedHashSet<>();   // ordered: wrappers map args by position
         for (int k = from; k <= to && k < n; k++) {
             if (ident(k) && ch(k + 1) != ':' && ch(k - 1) != '=' && ch(k - 1) != '.'
                     && !KEYWORDS.contains(text(k))) {

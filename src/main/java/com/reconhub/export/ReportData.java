@@ -1,6 +1,7 @@
 package com.reconhub.export;
 
 import com.reconhub.core.DataStore;
+import com.reconhub.model.ClientFlow;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
 import com.reconhub.model.JsAsset;
@@ -22,7 +23,10 @@ import java.util.function.Function;
  * model's own {@code key()}.
  */
 record ReportData(List<Endpoint> endpoints, List<ParameterInfo> parameters, List<Finding> findings,
-                  List<JsAsset> jsAssets, List<TechInfo> tech) {
+                  List<JsAsset> jsAssets, List<TechInfo> tech, List<ClientFlow> clientFlows) {
+
+    /** Bookmark key prefix the Client Flows tab uses (keeps flow keys apart from endpoint keys). */
+    static final String CLIENT_FLOW_KEY_PREFIX = "cf:";
 
     static ReportData of(DataStore store, ReportOptions opts) {
         return new ReportData(
@@ -30,7 +34,8 @@ record ReportData(List<Endpoint> endpoints, List<ParameterInfo> parameters, List
                 filter(store.snapshotParameters(), opts, ParameterInfo::key),
                 filterFindings(store.snapshotFindings(), opts),
                 filter(store.snapshotJsAssets(), opts, JsAsset::key),
-                filter(store.snapshotTech(), opts, TechInfo::key));
+                filter(store.snapshotTech(), opts, TechInfo::key),
+                filter(store.snapshotClientFlows(), opts, f -> CLIENT_FLOW_KEY_PREFIX + f.key()));
     }
 
     private static <T> List<T> filter(List<T> rows, ReportOptions opts, Function<T, String> keyOf) {

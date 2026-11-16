@@ -54,8 +54,13 @@ public final class JsStructuralAnalyzer {
     /** One Lead, recorded by the adapter as a {@link Finding}. Same shape the old analyzers emitted. */
     public record Lead(String type, Finding.Severity severity, String rawMatch, String evidence) {}
 
-    /** Analysis output: Leads (Findings), notes (JS file detail only), and whether the size cap hit. */
-    public record Result(List<Lead> leads, List<String> notes, boolean tooLarge) {}
+    /** Analysis output: Leads (Findings), notes (JS file detail only), Client Flows (0.59.0), and whether
+     * the size cap hit. */
+    public record Result(List<Lead> leads, List<String> notes, boolean tooLarge, List<JsClientFlows.Hit> flows) {
+        public Result(List<Lead> leads, List<String> notes, boolean tooLarge) {
+            this(leads, notes, tooLarge, List.of());
+        }
+    }
 
     /** The JS rule set the pass consumes. */
     public record Rules(List<PatternRegistry.JsSource> sources, List<PatternRegistry.JsSink> sinks,
@@ -72,19 +77,22 @@ public final class JsStructuralAnalyzer {
         List<Lead> leads = new ArrayList<>();
         Set<String> notes = new LinkedHashSet<>();
         boolean tooLarge = body.length() > MAX_INPUT;
+        List<JsClientFlows.Hit> clientFlows = List.of();
         if (tooLarge) {
             notes.add(TOO_LARGE_NOTE);
         } else {
             JsStructure st = JsStructure.of(body);
             flows(st, rules.sources(), rules.sinks(), leads, notes);
             pairs(st, rules.pairs(), leads, notes);
+            clientFlows = JsClientFlows.extract(st);
         }
         flatNotes(body, rules.noteRules(), notes);
         List<String> noteList = new ArrayList<>(notes);
         if (noteList.size() > MAX_NOTES) {
             noteList = new ArrayList<>(noteList.subList(0, MAX_NOTES));
         }
-        return new Result(Collections.unmodifiableList(leads), Collections.unmodifiableList(noteList), tooLarge);
+        return new Result(Collections.unmodifiableList(leads), Collections.unmodifiableList(noteList), tooLarge,
+                Collections.unmodifiableList(clientFlows));
     }
 
     // ---- DOM XSS flows ------------------------------------------------------------

@@ -39,10 +39,11 @@ public final class SarifExporter {
         JsonArray results = new JsonArray();
         Map<String, JsonObject> rules = new LinkedHashMap<>();   // ruleId(type) -> rule object
 
-        // SARIF only reports findings, so ReportData's other four collections go unused here -- still
+        // SARIF reports findings (+ Client Flows since 0.59.0); the other collections go unused here -- still
         // goes through it (rather than a hand-rolled opt.includes(f) loop) so the bookmark filter
         // (0.41.0) is applied the same way as in every other exporter.
-        List<Finding> findings = ReportData.of(store, opt).findings();
+        ReportData data = ReportData.of(store, opt);
+        List<Finding> findings = data.findings();
         for (Finding f : findings) {
             String ruleId = f.getType();
             rules.computeIfAbsent(ruleId, id -> {
@@ -61,6 +62,48 @@ public final class SarifExporter {
                 return rule;
             });
             results.add(result(f, ruleId));
+        }
+        // Client Flows (0.59.0): one note-level result per flow, rule = its type (IDOR / no-auth / plain).
+        for (com.reconhub.model.ClientFlow cf : data.clientFlows()) {
+            String ruleId = com.reconhub.analysis.ClientFlowLeads.type(cf);
+            rules.computeIfAbsent(ruleId, id -> {
+                JsonObject rule = new JsonObject();
+                rule.addProperty("id", id);
+                rule.addProperty("name", id);
+                JsonObject sd = new JsonObject();
+                sd.addProperty("text", id + " (" + FindingTaxonomy.labelOf(id) + ")");
+                rule.add("shortDescription", sd);
+                String hint = FindingHints.forType(id);
+                if (!hint.isEmpty()) {
+                    JsonObject help = new JsonObject();
+                    help.addProperty("text", "Try: " + hint);
+                    rule.add("help", help);
+                }
+                return rule;
+            });
+            JsonObject r = new JsonObject();
+            r.addProperty("ruleId", ruleId);
+            r.addProperty("level", ruleId.equals(com.reconhub.analysis.ClientFlowLeads.TYPE) ? "note" : "warning");
+            JsonObject msg = new JsonObject();
+            msg.addProperty("text", cf.getMethod() + " " + cf.getPath()
+                    + (cf.getBodyKeys().isEmpty() ? "" : " body{" + String.join(",", cf.getBodyKeys()) + "}")
+                    + " -- Try: " + com.reconhub.analysis.ClientFlowLeads.hint(cf));
+            r.add("message", msg);
+            if (!cf.getJsUrl().isEmpty()) {
+                JsonObject artifact = new JsonObject();
+                artifact.addProperty("uri", cf.getJsUrl());
+                JsonObject phys = new JsonObject();
+                phys.add("artifactLocation", artifact);
+                JsonObject loc = new JsonObject();
+                loc.add("physicalLocation", phys);
+                JsonArray locs = new JsonArray();
+                locs.add(loc);
+                r.add("locations", locs);
+            }
+            JsonObject fp = new JsonObject();
+            fp.addProperty("reconhub/v1", HashUtil.sha256("cf:" + cf.key()));
+            r.add("partialFingerprints", fp);
+            results.add(r);
         }
 
         JsonObject driver = new JsonObject();

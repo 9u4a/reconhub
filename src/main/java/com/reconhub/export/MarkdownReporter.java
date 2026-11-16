@@ -8,6 +8,8 @@ import com.reconhub.core.Hosts;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
 import com.reconhub.model.JsAsset;
+import com.reconhub.model.ClientFlow;
+import com.reconhub.analysis.ClientFlowLeads;
 import com.reconhub.model.ParameterInfo;
 import com.reconhub.model.TechInfo;
 
@@ -50,6 +52,7 @@ public final class MarkdownReporter {
         endpoints(b, data);
         parameters(b, data);
         jsFiles(b, data);
+        clientFlows(b, data);
         tech(b, data);
 
         Files.createDirectories(file.toAbsolutePath().getParent());
@@ -64,6 +67,7 @@ public final class MarkdownReporter {
         row(b, "Parameters", data.parameters().size());
         row(b, "Findings", data.findings().size());
         row(b, "JS files", data.jsAssets().size());
+        row(b, "Client flows", data.clientFlows().size());
         row(b, "Hosts", data.tech().size());
 
         List<Finding> shown = data.findings();
@@ -197,6 +201,29 @@ public final class MarkdownReporter {
                     .append(" | ").append(a.getExtractedEndpoints())
                     .append(" | ").append(a.getExtractedSecrets())
                     .append(" | ").append(code(a.getSavedPath()))
+                    .append(" |\n");
+        }
+        b.append('\n');
+    }
+
+    private static void clientFlows(StringBuilder b, ReportData data) {
+        b.append("## Client Flows\n\n");
+        List<ClientFlow> flows = data.clientFlows();
+        if (flows.isEmpty()) {
+            b.append("_No client flows extracted from JS._\n\n");
+            return;
+        }
+        b.append("| Method | Path | Body keys | Query keys | Auth | Type | Trigger | Hint |\n"
+                + "| --- | --- | --- | --- | --- | --- | --- | --- |\n");
+        for (ClientFlow f : flows) {
+            b.append("| ").append(f.getMethod())
+                    .append(" | ").append(code(f.getPath()))
+                    .append(" | ").append(md(String.join(", ", f.getBodyKeys())))
+                    .append(" | ").append(md(String.join(", ", f.getQueryKeys())))
+                    .append(" | ").append(md(f.getAuth().isEmpty() ? "(none)" : f.getAuth()))
+                    .append(" | ").append(md(ClientFlowLeads.type(f)))
+                    .append(" | ").append(md(f.getTrigger()))
+                    .append(" | ").append(md(ClientFlowLeads.hint(f)))
                     .append(" |\n");
         }
         b.append('\n');

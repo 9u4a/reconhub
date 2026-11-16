@@ -3,6 +3,7 @@ package com.reconhub.core;
 import burp.api.montoya.http.message.HttpRequestResponse;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
+import com.reconhub.model.ClientFlow;
 import com.reconhub.model.JsAsset;
 import com.reconhub.model.ParameterInfo;
 import com.reconhub.model.TechInfo;
@@ -42,6 +43,9 @@ public final class DataStore {
     private final Map<String, Finding> findings = new ConcurrentHashMap<>();
     private final Map<String, JsAsset> jsAssets = new ConcurrentHashMap<>();
     private final Map<String, TechInfo> techByHost = new ConcurrentHashMap<>();
+    // Client Flows (0.59.0): derived from JS, never persisted (rebuilt from stored JS on state import).
+    static final int MAX_CLIENT_FLOWS = 20_000;
+    private final Map<String, ClientFlow> clientFlows = new ConcurrentHashMap<>();
     // Parameter names referenced in app JS (0.56.0): name -> first JS URL. Feeds the param-name wordlist
     // and state backups only (no table), so it carries no mod counter / snapshot cache.
     static final int MAX_JS_PARAM_NAMES = 20_000;
@@ -67,12 +71,14 @@ public final class DataStore {
     private final AtomicInteger findingsMod = new AtomicInteger();
     private final AtomicInteger jsAssetsMod = new AtomicInteger();
     private final AtomicInteger techMod = new AtomicInteger();
+    private final AtomicInteger clientFlowsMod = new AtomicInteger();
 
     private volatile Snap<Endpoint> endpointsSnap = new Snap<>(-1, List.of());
     private volatile Snap<ParameterInfo> parametersSnap = new Snap<>(-1, List.of());
     private volatile Snap<Finding> findingsSnap = new Snap<>(-1, List.of());
     private volatile Snap<JsAsset> jsAssetsSnap = new Snap<>(-1, List.of());
     private volatile Snap<TechInfo> techSnap = new Snap<>(-1, List.of());
+    private volatile Snap<ClientFlow> clientFlowsSnap = new Snap<>(-1, List.of());
 
     // Dashboard counters.
     private final AtomicInteger requestsProcessed = new AtomicInteger();
@@ -331,6 +337,36 @@ public final class DataStore {
         return Collections.unmodifiableList(snap.list);
     }
 
+    /** Returns the stored flow for {@code f.key()} (existing one if already present, else {@code f}), or
+     * null when the cap is reached. Callers merge their sighting into the returned instance. */
+    public ClientFlow recordClientFlow(ClientFlow f) {
+        ClientFlow existing = clientFlows.get(f.key());
+        if (existing != null) {
+            return existing;
+        }
+        if (clientFlows.size() >= MAX_CLIENT_FLOWS) {
+            return null;
+        }
+        existing = clientFlows.putIfAbsent(f.key(), f);
+        if (existing != null) {
+            return existing;
+        }
+        clientFlowsMod.incrementAndGet();
+        return f;
+    }
+
+    public List<ClientFlow> snapshotClientFlows() {
+        int mod = clientFlowsMod.get();
+        Snap<ClientFlow> snap = clientFlowsSnap;
+        if (snap.mod != mod) {
+            List<ClientFlow> l = new ArrayList<>(clientFlows.values());
+            l.sort(Comparator.comparing(ClientFlow::getPath).thenComparing(ClientFlow::getMethod));
+            snap = new Snap<>(mod, l);
+            clientFlowsSnap = snap;
+        }
+        return Collections.unmodifiableList(snap.list);
+    }
+
     public List<TechInfo> snapshotTech() {
         int mod = techMod.get();
         Snap<TechInfo> snap = techSnap;
@@ -407,6 +443,10 @@ public final class DataStore {
         int pm = removeIf(parameters, p -> hosts.contains(p.getHost()));
         int fd = removeIf(findings, f -> hosts.contains(f.getHost()));   // cached on Finding (0.43.9)
         int js = removeIf(jsAssets, a -> hosts.contains(a.getHost()));   // cached on JsAsset (0.43.9)
+        int cf = removeIf(clientFlows, f -> hosts.contains(f.getHost()));
+        if (cf > 0) {
+            clientFlowsMod.incrementAndGet();
+        }
         boolean tech = false;
         for (String host : hosts) {
             if (techByHost.remove(host) != null) {
@@ -490,6 +530,8 @@ public final class DataStore {
         parameters.clear();
         findings.clear();
         jsAssets.clear();
+        clientFlows.clear();
+        clientFlowsMod.incrementAndGet();
         techByHost.clear();
         jsParamNames.clear();
         endpointOrder.clear();

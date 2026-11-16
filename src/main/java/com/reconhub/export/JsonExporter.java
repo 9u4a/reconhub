@@ -8,6 +8,8 @@ import com.reconhub.core.DataStore;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
 import com.reconhub.model.JsAsset;
+import com.reconhub.model.ClientFlow;
+import com.reconhub.analysis.ClientFlowLeads;
 import com.reconhub.model.ParameterInfo;
 import com.reconhub.model.TechInfo;
 
@@ -45,6 +47,7 @@ public final class JsonExporter {
         root.put("parameters", parameters(data));
         root.put("findings", findings(data));
         root.put("jsAssets", jsAssets(data));
+        root.put("clientFlows", clientFlows(data));
         root.put("technologies", technologies(data));
 
         Files.createDirectories(file.toAbsolutePath().getParent());
@@ -58,6 +61,7 @@ public final class JsonExporter {
         m.put("parameterCount", data.parameters().size());
         m.put("findingCount", data.findings().size());
         m.put("jsAssetCount", data.jsAssets().size());
+        m.put("clientFlowCount", data.clientFlows().size());
         m.put("hostCount", data.tech().size());
         m.put("statusCodeCounts", store.statusCodeCounts());
         m.put("hostCounts", store.hostCounts());
@@ -129,6 +133,27 @@ public final class JsonExporter {
             m.put("extractedEndpoints", a.getExtractedEndpoints());
             m.put("extractedSecrets", a.getExtractedSecrets());
             m.put("savedPath", a.getSavedPath());
+            out.add(m);
+        }
+        return out;
+    }
+
+    private static List<Map<String, Object>> clientFlows(ReportData data) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (ClientFlow f : data.clientFlows()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("method", f.getMethod());
+            m.put("path", f.getPath());
+            m.put("host", f.getHost());
+            m.put("bodyKeys", f.getBodyKeys());
+            m.put("queryKeys", f.getQueryKeys());
+            m.put("auth", f.getAuth());
+            m.put("type", ClientFlowLeads.type(f));
+            m.put("hint", ClientFlowLeads.hint(f));
+            m.put("function", f.getFunction());
+            m.put("trigger", f.getTrigger());
+            m.put("via", f.getVia());
+            m.put("jsUrls", f.getJsUrls());
             out.add(m);
         }
         return out;

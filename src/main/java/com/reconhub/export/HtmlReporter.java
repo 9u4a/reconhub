@@ -8,6 +8,8 @@ import com.reconhub.core.Hosts;
 import com.reconhub.model.Endpoint;
 import com.reconhub.model.Finding;
 import com.reconhub.model.JsAsset;
+import com.reconhub.model.ClientFlow;
+import com.reconhub.analysis.ClientFlowLeads;
 import com.reconhub.model.ParameterInfo;
 import com.reconhub.model.TechInfo;
 
@@ -63,6 +65,7 @@ public final class HtmlReporter {
         endpointsSection(b, data);
         parametersSection(b, data);
         jsSection(b, data);
+        clientFlowSection(b, data);
         techSection(b, data);
         return b.toString();
     }
@@ -74,6 +77,7 @@ public final class HtmlReporter {
         card(b, data.parameters().size(), "Parameters");
         card(b, data.findings().size(), "Findings");
         card(b, data.jsAssets().size(), "JS files");
+        card(b, data.clientFlows().size(), "Client flows");
         card(b, data.tech().size(), "Hosts");
         b.append("</div>");
 
@@ -247,6 +251,28 @@ public final class HtmlReporter {
                     .append(a.getExtractedEndpoints()).append("</td><td>")
                     .append(a.getExtractedSecrets()).append("</td><td class=\"muted\"><code>")
                     .append(esc(a.getSavedPath())).append("</code></td></tr>");
+        }
+        b.append("</tbody></table></section>");
+    }
+
+    private static void clientFlowSection(StringBuilder b, ReportData data) {
+        b.append("<section id=\"client-flows\"><h2>Client Flows</h2>");
+        var flows = data.clientFlows();
+        if (flows.isEmpty()) {
+            b.append("<p class=\"muted\">No client flows extracted from JS.</p></section>");
+            return;
+        }
+        b.append("<table><thead><tr><th>Method</th><th>Path</th><th>Body keys</th><th>Query keys</th>"
+                + "<th>Auth</th><th>Type</th><th>Trigger</th><th>Hint</th></tr></thead><tbody>");
+        for (ClientFlow f : flows) {
+            b.append("<tr><td>").append(esc(f.getMethod())).append("</td><td><code>")
+                    .append(esc(f.getPath())).append("</code></td><td>")
+                    .append(esc(String.join(", ", f.getBodyKeys()))).append("</td><td>")
+                    .append(esc(String.join(", ", f.getQueryKeys()))).append("</td><td>")
+                    .append(esc(f.getAuth().isEmpty() ? "(none)" : f.getAuth())).append("</td><td>")
+                    .append(esc(ClientFlowLeads.type(f))).append("</td><td>")
+                    .append(esc(f.getTrigger())).append("</td><td class=\"muted\">")
+                    .append(esc(ClientFlowLeads.hint(f))).append("</td></tr>");
         }
         b.append("</tbody></table></section>");
     }

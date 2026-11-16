@@ -85,6 +85,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         FindingsPanel findings = new FindingsPanel(store, settings, api, cheatsheet, bookmarks);
         JsAssetsPanel jsAssets = new JsAssetsPanel(store, api, ingestor, bookmarks);
         JsAnalysisPanel jsAnalysis = new JsAnalysisPanel(store, api, bookmarks);
+        ClientFlowsPanel clientFlows = new ClientFlowsPanel(store, api, bookmarks);
         TechPanel tech = new TechPanel(store, api, bookmarks);
         SettingsPanel settingsPanel = new SettingsPanel(api, store, settings, ingestor, bookmarks);
         MatchReplacePanel matchReplacePanel = new MatchReplacePanel(api, matchReplace);
@@ -103,6 +104,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         addRefreshableTab("Findings", findings);
         addRefreshableTab("JS Assets", jsAssets);
         addRefreshableTab("JS Analysis", jsAnalysis);
+        addRefreshableTab("Client Flows", clientFlows);
         addRefreshableTab("Tech", tech);
         addRefreshableTab("Match & Replace", matchReplacePanel);
         addRefreshableTab("Snapshot Diff", snapshotDiff);
@@ -150,6 +152,7 @@ public final class MainTab extends JPanel implements DataStore.ChangeListener {
         findings.setNavigator(navigator);
         jsAssets.setNavigator(navigator);
         jsAnalysis.setNavigator(navigator);
+        clientFlows.setNavigator(navigator);
 
         // Global cross-tab search (0.43.0) -- Ctrl+Shift+F, distinct from the existing Ctrl+F ("focus
         // the current tab's own search field"). Bound here (not in installKeyboardShortcuts(), which

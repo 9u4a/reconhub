@@ -7,6 +7,7 @@ import com.reconhub.core.HashUtil;
 import com.reconhub.core.Hosts;
 import com.reconhub.core.Settings;
 import com.reconhub.export.JsFileWriter;
+import com.reconhub.model.ClientFlow;
 import com.reconhub.model.Finding;
 import com.reconhub.model.JsAsset;
 
@@ -160,6 +161,25 @@ public final class JsAnalyzer {
             store.recordFinding(f);
         }
         asset.setNotes(r.notes());
+        recordClientFlows(r.flows(), url, messages);
+    }
+
+    /** Client Flows (0.59.0): one row per method + path template; repeats from other bundles merge in. */
+    private void recordClientFlows(List<JsClientFlows.Hit> hits, String jsUrl, HttpRequestResponse messages) {
+        if (hits.isEmpty()) {
+            return;
+        }
+        String jsHost = Hosts.of(jsUrl);
+        boolean secure = jsUrl == null || !jsUrl.startsWith("http://");
+        for (JsClientFlows.Hit h : hits) {
+            String host = ClientFlow.hostOf(h.path());
+            ClientFlow f = store.recordClientFlow(new ClientFlow(h.method(), h.path(), host != null ? host : jsHost));
+            if (f == null) {
+                return;   // cap reached
+            }
+            f.merge(h.bodyKeys(), h.queryKeys(), h.auth(), h.function(), h.trigger(), h.via(), h.callSite(),
+                    jsUrl, secure, messages);
+        }
     }
 
     /** Logs a "Save JS to disk" failure, rate-limited: an unwritable directory fails for *every* JS
