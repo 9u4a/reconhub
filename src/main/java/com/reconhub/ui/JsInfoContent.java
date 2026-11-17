@@ -45,9 +45,7 @@ final class JsInfoContent {
         List<Finding> sorted = new ArrayList<>(in.findings());
         sorted.sort(Comparator.comparing(Finding::getSeverity).thenComparing(Finding::getType));
         for (Finding f : sorted) {
-            String v = f.getMasked() == null ? "" : f.getMasked();
-            if (f.getType().endsWith(v)) v = "";   // "Hidden parameter in JS: debug" already names it
-            findings.add(new FindingRow(f.getSeverity(), f.getType(), v, FindingHints.of(f)));
+            findings.add(new FindingRow(f.getSeverity(), f.getType(), valueOf(f), FindingHints.of(f)));
         }
 
         List<FlowRow> flows = new ArrayList<>();
@@ -71,6 +69,23 @@ final class JsInfoContent {
                 ? "Library / third-party code -- deep analysis is skipped unless enabled in Settings › JavaScript" : "";
         return new Content(fileName(a.getUrl()), a.getUrl(), badges, libNote, findings, flows,
                 notes(a.getNotes()), endpoints, file);
+    }
+
+    /**
+     * Value column: the masked match for a sensitive finding; otherwise the evidence text without its
+     * "Try:" part (a JS / HTML comment's text lives only there -- its rawMatch is a dedup hash).
+     * Empty when the type already names the value ("Hidden parameter in JS: debug").
+     */
+    static String valueOf(Finding f) {
+        String raw = f.getRawMatch() == null ? "" : f.getRawMatch();
+        if (!raw.isEmpty() && f.getType().endsWith(raw)) return "";
+        String v = f.getMasked() == null ? "" : f.getMasked();
+        if (v.isEmpty() && !f.isSensitive() && f.getEvidence() != null) {
+            v = f.getEvidence();
+            int tryAt = v.indexOf("  |  Try: ");
+            if (tryAt >= 0) v = v.substring(0, tryAt);
+        }
+        return v.replaceAll("\\s+", " ").trim();
     }
 
     /** Splits the analyzer's note strings into kind / detail / hint. */

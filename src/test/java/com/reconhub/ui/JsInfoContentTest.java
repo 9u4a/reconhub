@@ -38,6 +38,16 @@ class JsInfoContentTest {
     }
 
     @Test
+    void commentFindingShowsItsTextAsValue() {
+        Finding comment = new Finding("JS Comment", Finding.Severity.INFO, "3fa9c0d1e2", URL,
+                "TODO: remove\n   /api/internal/debug before release", false);
+        assertEquals("TODO: remove /api/internal/debug before release", JsInfoContent.valueOf(comment));
+        Finding flow = new Finding("DOM XSS: hash -> innerHTML", Finding.Severity.HIGH, "el.innerHTML=", URL,
+                "source reaches sink  |  Try: inject via the fragment", false);
+        assertEquals("source reaches sink", JsInfoContent.valueOf(flow), "Try part stays in the Hint column");
+    }
+
+    @Test
     void headerAndRowsPerTab() {
         JsInfoContent.Content c = content();
         assertEquals("main.3f2a.js", c.title());
